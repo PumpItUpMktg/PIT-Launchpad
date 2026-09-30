@@ -35,12 +35,10 @@ final class TownVisibility
 
     private const CACHE_SECONDS = 1800;
 
-    public function __construct(private readonly TownRankReport $report) {}
-
     /**
-     * Score one report row-set for a mode: the latest scan's population-weighted score and its page-1 /
-     * top-3 town counts. Null score = no finalized scan (or no populated towns) to score. Movement comes
-     * from {@see forKeyword()}, which measures against the two-scan baseline.
+     * Score one report row-set for a mode — the population-weighted score and page-1 / top-3 counts of the
+     * rows as rendered. Kept for callers that already hold report rows; the board and the portal use
+     * {@see forKeyword()}, which never touches the report.
      *
      * @param  list<array<string, mixed>>  $rows  {@see TownRankReport::forKeyword()} rows
      * @param  'town'|'local'  $prefix
@@ -93,45 +91,51 @@ final class TownVisibility
     }
 
     /**
-     * Per keyword: both modes scored from the report — the latest scan's score, the baseline (the mean of
-     * the previous {@see BASELINE_SCANS} finished scans, scored from their stored points), the delta, and
-     * how many scans the baseline rests on (0 = first measurement, no movement claimed).
+     * Per keyword and mode: the latest FINISHED scan's score, the baseline (the mean of the previous
+     * {@see BASELINE_SCANS} finished scans), the delta, and how many scans the baseline rests on (0 = first
+     * measurement, no movement claimed). Every scan is scored by one aggregate query — the report is never
+     * built here, so the board (which builds it once per keyword already) pays nothing twice. Cached per
+     * keyword, mode and latest scan id, so a finished scan refreshes it and nothing recomputes otherwise.
      *
      * @return array<string, array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, towns: int, page1_towns: int, top3_towns: int}>
      */
     public function forKeyword(Site $site, Keyword $keyword): array
     {
-        $data = $this->report->forKeyword($site, $keyword);
-        // Keyed on the latest scan per mode: a finished scan changes the key, so the cache is never stale and
-        // never recomputed for the same scans (the board asks for every keyword on every page view).
-        $key = 'town-visibility:kw:'.$keyword->id.':'.implode(',', array_map(fn (?array $s): string => $s['id'] ?? '-', $data['scans']));
+        $out = [];
+        foreach (TownRankScan::MODES as $mode) {
+            $latestId = TownRankScan::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->where('mode', $mode)
+                ->whereIn('status', ['complete', 'partial'])
+                ->orderByDesc('scanned_at')->value('id');
+            if ($latestId === null) {
+                $out[$mode] = ['score' => null, 'previous' => null, 'delta' => null, 'baseline_scans' => 0, 'towns' => 0, 'page1_towns' => 0, 'top3_towns' => 0];
 
-        return Cache::remember($key, self::CACHE_SECONDS, function () use ($site, $keyword, $data): array {
-            $out = [];
-            foreach (TownRankScan::MODES as $mode) {
-                $scan = $data['scans'][$mode];
-                if ($scan === null) {
-                    $out[$mode] = ['score' => null, 'previous' => null, 'delta' => null, 'baseline_scans' => 0, 'towns' => 0, 'page1_towns' => 0, 'top3_towns' => 0];
-
-                    continue;
-                }
-                $latest = $this->scoreRows($data['rows'], $mode === TownRankScan::MODE_LOCAL ? 'local' : 'town');
-                $baseline = array_slice(array_values($this->history($site, $keyword, $mode, excludeScanId: (string) $scan['id'])), -self::BASELINE_SCANS);
-                $previous = $baseline === [] ? null : (int) round(array_sum($baseline) / count($baseline));
-
-                $out[$mode] = [
-                    'score' => $latest['score'],
-                    'previous' => $previous,
-                    'delta' => $latest['score'] !== null && $previous !== null ? $latest['score'] - $previous : null,
-                    'baseline_scans' => count($baseline),
-                    'towns' => $latest['towns'],
-                    'page1_towns' => $latest['page1_towns'],
-                    'top3_towns' => $latest['top3_towns'],
-                ];
+                continue;
             }
+            $out[$mode] = Cache::remember(
+                'town-visibility:kw:'.$keyword->id.':'.$mode.':'.$latestId,
+                self::CACHE_SECONDS,
+                function () use ($site, $keyword, $mode): array {
+                    $scans = $this->scanScores($site, $keyword, $mode);   // newest first
+                    $latest = $scans[0] ?? null;
+                    $baseline = array_slice(array_column(array_slice($scans, 1), 'score'), 0, self::BASELINE_SCANS);
+                    $previous = $baseline === [] ? null : (int) round(array_sum($baseline) / count($baseline));
+                    $score = $latest['score'] ?? null;
 
-            return $out;
-        });
+                    return [
+                        'score' => $score,
+                        'previous' => $previous,
+                        'delta' => $score !== null && $previous !== null ? $score - $previous : null,
+                        'baseline_scans' => count($baseline),
+                        'towns' => $latest['towns'] ?? 0,
+                        'page1_towns' => $latest['page1_towns'] ?? 0,
+                        'top3_towns' => $latest['top3_towns'] ?? 0,
+                    ];
+                },
+            );
+        }
+
+        return $out;
     }
 
     /**
@@ -201,19 +205,18 @@ final class TownVisibility
     }
 
     /**
-     * One keyword's score per finalized scan date (newest {@see HISTORY_SCANS}), as ONE aggregate query:
-     * every point's rank band credit × its town's population (joined on the durable GEOID, falling back to
-     * the coverage-area id), summed per scan. Nothing is loaded row by row — the board asks this for every
-     * keyword on every page view.
+     * Every finished scan of a keyword and mode (newest {@see HISTORY_SCANS}), each scored by ONE aggregate
+     * query: rank-band credit × the town's population (joined on the durable GEOID, falling back to the
+     * coverage-area id) summed per scan, plus the page-1 / top-3 / populated-town counts. No point rows are
+     * loaded. Newest first; a scan with no populated, collected towns is left out.
      *
-     * @return array<string, int> Y-m-d => score, oldest first
+     * @return list<array{id: string, date: string, score: int, towns: int, page1_towns: int, top3_towns: int}>
      */
-    private function history(Site $site, Keyword $keyword, string $mode, ?string $excludeScanId = null): array
+    private function scanScores(Site $site, Keyword $keyword, string $mode): array
     {
         $scans = TownRankScan::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->where('mode', $mode)
             ->whereIn('status', ['complete', 'partial'])
-            ->when($excludeScanId !== null, fn ($q) => $q->whereKeyNot($excludeScanId))
             ->orderByDesc('scanned_at')->limit(self::HISTORY_SCANS)
             ->get(['id', 'scanned_at']);
         if ($scans->isEmpty()) {
@@ -224,13 +227,19 @@ final class TownVisibility
             'CASE WHEN p.rank IS NULL OR p.rank < 1 THEN 0 WHEN p.rank <= 3 THEN %s WHEN p.rank <= 10 THEN %s WHEN p.rank <= 20 THEN %s ELSE 0 END',
             self::CREDIT['top3'], self::CREDIT['page1'], self::CREDIT['page2'],
         );
+        $pop = 'COALESCE(g.population, c.population, 0)';
         $totals = DB::table('town_rank_points as p')
             ->leftJoin('coverage_areas as g', fn ($j) => $j->on('g.site_id', '=', 'p.site_id')->on('g.geo_id', '=', 'p.geo_id'))
             ->leftJoin('coverage_areas as c', 'c.id', '=', 'p.coverage_area_id')
             ->whereIn('p.scan_id', $scans->pluck('id')->all())
             ->whereNotNull('p.collected_at')
             ->groupBy('p.scan_id')
-            ->selectRaw('p.scan_id, SUM(('.$credit.') * COALESCE(g.population, c.population, 0)) as credit, SUM(COALESCE(g.population, c.population, 0)) as weight')
+            ->selectRaw(
+                'p.scan_id, SUM(('.$credit.') * '.$pop.') as credit, SUM('.$pop.') as weight, '
+                .'SUM(CASE WHEN '.$pop.' > 0 THEN 1 ELSE 0 END) as towns, '
+                .'SUM(CASE WHEN '.$pop.' > 0 AND p.rank BETWEEN 1 AND 10 THEN 1 ELSE 0 END) as page1, '
+                .'SUM(CASE WHEN '.$pop.' > 0 AND p.rank BETWEEN 1 AND 3 THEN 1 ELSE 0 END) as top3'
+            )
             ->get()
             ->keyBy('scan_id');
 
@@ -238,9 +247,32 @@ final class TownVisibility
         foreach ($scans as $scan) {
             $t = $totals->get((string) $scan->id);
             $weight = $t === null ? 0.0 : (float) $t->weight;
-            if ($weight > 0 && $scan->scanned_at !== null) {
-                $out[$scan->scanned_at->toDateString()] = (int) round(100 * (float) $t->credit / $weight);
+            if ($weight <= 0 || $scan->scanned_at === null) {
+                continue;
             }
+            $out[] = [
+                'id' => (string) $scan->id,
+                'date' => $scan->scanned_at->toDateString(),
+                'score' => (int) round(100 * (float) $t->credit / $weight),
+                'towns' => (int) $t->towns,
+                'page1_towns' => (int) $t->page1,
+                'top3_towns' => (int) $t->top3,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * One keyword's score per finished scan date, oldest first — the trend.
+     *
+     * @return array<string, int> Y-m-d => score
+     */
+    private function history(Site $site, Keyword $keyword, string $mode): array
+    {
+        $out = [];
+        foreach ($this->scanScores($site, $keyword, $mode) as $scan) {
+            $out[$scan['date']] = $scan['score'];
         }
         ksort($out);
 
