@@ -61,7 +61,7 @@ it('lists the service areas, opens one to a card per keyword with both maps, and
         ->assertSee('sump pump service')
         ->assertSee('mold remediation')
         ->assertSee('Google Business Profile')
-        ->assertSee('Area score')
+        ->assertSee('Town Visibility')
         ->assertSee('No GBP coverage scan for this keyword here yet')          // mold remediation's GBP column
         ->assertSee('No Town Rank scan for this keyword yet')                  // mold remediation's website column
         ->assertSeeHtml('aria-label="GBP map-pack rank by town"')              // sump pump service has both maps
