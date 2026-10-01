@@ -153,7 +153,7 @@ class ServiceAreasPage extends Page
         DraftPrioritySections::enqueue($page, repush: true);
         Notification::make()->success()
             ->title("Drafting {$page->title}")
-            ->body(sprintf('%d priority section(s) + FAQs draft on the worker, then the page pushes. It reads "queued" on the map until then.', $status['expected']))
+            ->body(sprintf('%d lagging keyword(s) draft on the worker%s, then the page pushes. It reads "queued" on the map until then.', $status['draft'], $status['keep'] !== [] ? sprintf('; %d ranking keyword(s) kept as they are', count($status['keep'])) : ''))
             ->send();
     }
 
@@ -187,7 +187,7 @@ class ServiceAreasPage extends Page
         }
         Notification::make()->success()
             ->title("Queued {$queued} town(s) for “{$card['query']}”")
-            ->body('Each drafts all its priority sections on the worker, then pushes. Give them two scans before reading the cards.')
+            ->body('Each drafts only the keywords it lags for (what already ranks page 1 is kept), then pushes. Give them two scans before reading the cards.')
             ->send();
     }
 

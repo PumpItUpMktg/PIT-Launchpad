@@ -279,12 +279,12 @@ it('drafts and pushes ONE town from its panel, and the panel reads queued until 
         ->call('openArea', $f['loc']->id)
         ->call('selectTown', $f['priority']->id, $hack['area']->id)
         ->assertSee('Priority sections')
-        ->assertSee('None yet · carries 1')
-        ->assertSee('Draft & push this town')
+        ->assertSee('None yet · 1 to draft')
+        ->assertSee('Draft & push 1 lagging keyword(s)')
         ->call('draftTownSections')
         ->assertSee('Queued')
         ->assertSee('Drafting on the worker')
-        ->assertDontSee('Draft & push this town');
+        ->assertDontSee('Draft & push 1 lagging keyword(s)');
 
     Queue::assertPushed(DraftPrioritySections::class, fn ($job) => $job->contentId === $hack['page']->id && $job->repush === true);
     expect($hack['page']->fresh()->meta['priority_sections_queued_at'] ?? null)->not->toBeNull();
@@ -293,7 +293,7 @@ it('drafts and pushes ONE town from its panel, and the panel reads queued until 
     $test->call('selectTown', $f['priority']->id, $f['towns']['Allamuchy']['area']->id)
         ->assertSee('Not eligible')
         ->assertSee('Below the 3,000-person tier')
-        ->assertDontSee('Draft & push this town');
+        ->assertDontSee('lagging keyword(s)');
 });
 
 it('pushes the lagging towns of a priority card — only those off page 1 with a page that can take sections', function () {

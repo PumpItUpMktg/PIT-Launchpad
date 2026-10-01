@@ -14,7 +14,8 @@ use App\Models\Site;
 /**
  * The report behind `launchpad:priority-sections`: every published town page of a site with its population
  * tier, the priority keywords it should carry, and whether its stored sections already match (current),
- * need drafting (missing / stale — the keyword set changed) or carry none by tier, LARGEST TOWN FIRST so
+ * need drafting (missing / stale — the keyword set changed) or carry none by tier (or already rank page 1 for
+ * every priority keyword — never rewritten), LARGEST TOWN FIRST so
  * the command's `--limit` takes a wave of the biggest towns. Read-only; the command dispatches
  * {@see DraftPrioritySections} for the pages that need work.
  */
@@ -32,7 +33,7 @@ final class PrioritySectionPlan
 
     public function __construct(
         private readonly PriorityKeywords $priority,
-        private readonly PrioritySections $sections,
+        private readonly TownSectionPlan $plan,
     ) {}
 
     /**
@@ -40,7 +41,7 @@ final class PrioritySectionPlan
      *     keywords: list<array{keyword_id: string, query: string, rank: int, service: string|null}>,
      *     tiers: array{full: int, partial: int, none: int},
      *     counts: array{current: int, missing: int, stale: int, none: int, queued: int},
-     *     pages: list<array{content_id: string, title: string, slug: string|null, population: int, tier: string, expected: list<string>, state: string, error: string|null}>
+     *     pages: list<array{content_id: string, title: string, slug: string|null, population: int, tier: string, expected: list<string>, keep: int, state: string, error: string|null}>
      * }
      */
     public function for(Site $site): array
@@ -64,22 +65,29 @@ final class PrioritySectionPlan
             }
         }
 
+        $entries = [];
+        foreach ($pages as $page) {
+            $entries[] = ['page' => $page, 'population' => $population[(string) $page->geo_id] ?? 0];
+        }
+        $decisions = $this->plan->forMany($site, $entries);
+
         $rows = [];
         $tiers = ['full' => 0, 'partial' => 0, 'none' => 0];
         $counts = ['current' => 0, 'missing' => 0, 'stale' => 0, 'none' => 0, 'queued' => 0];
         foreach ($pages as $page) {
             $pop = $population[(string) $page->geo_id] ?? 0;
             $tier = PriorityKeywords::tier($pop);
-            $expected = PrioritySections::ids($this->priority->forPopulation($site, $pop));
-            $stored = $this->sections->storedKeywordIds($page);
-            sort($expected);
-            sort($stored);
+            $d = $decisions[(string) $page->id];
+            // A keyword the town already ranks page 1 for is never drafted: `expected` is what the page
+            // should carry (the lagging ones + the ranking ones' existing sections), `need` what is missing.
+            $expected = PrioritySections::ids($d['expected']);
             $state = match (true) {
-                $expected === [] => self::NONE,
+                $d['tier'] === [] => self::NONE,
                 is_array($page->meta) && isset($page->meta[PrioritySectionStatus::QUEUED_KEY]) => self::QUEUED,
-                $stored === [] => self::MISSING,
-                $stored !== $expected => self::STALE,
-                default => self::CURRENT,
+                $d['draft'] === [] && $d['extra'] === [] => self::NONE,
+                $d['need'] === [] && $d['extra'] === [] => self::CURRENT,
+                $d['stored'] === [] => self::MISSING,
+                default => self::STALE,
             };
             $tiers[$tier]++;
             $counts[$state]++;
@@ -90,6 +98,7 @@ final class PrioritySectionPlan
                 'population' => $pop,
                 'tier' => $tier,
                 'expected' => $expected,
+                'keep' => count($d['keep']),
                 'state' => $state,
                 'error' => is_array($page->meta) && isset($page->meta['priority_sections_error']) ? (string) $page->meta['priority_sections_error'] : null,
             ];

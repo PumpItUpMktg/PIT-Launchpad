@@ -88,6 +88,11 @@
     .sva .s-lag { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:11.5px; color:var(--s-muted); flex-wrap:wrap; }
     .sva .s-lag button { font-size:12px; border:1px solid #b45309; color:#b45309; background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; font-weight:600; }
     .sva .s-lag button:disabled { opacity:.55; cursor:default; }
+    .sva .s-eval { list-style:none; margin:6px 0 0; padding:0; font-size:12px; }
+    .sva .s-eval li { display:flex; gap:8px; align-items:baseline; padding:2px 0; }
+    .sva .s-eval li span { flex:1; color:inherit; }
+    .sva .s-eval li b { font-variant-numeric:tabular-nums; }
+    .sva .s-eval li small { color:var(--s-faint); }
     .sva .s-actbtn { display:inline-block; margin-top:6px; padding:5px 11px; font-size:12px; font-weight:600; border-radius:7px; border:1px solid var(--s-line); background:var(--s-surface2); color:inherit; cursor:pointer; }
     .sva .s-actbtn:hover { border-color:#2563eb; color:#2563eb; }
     .sva .s-actbtn[disabled] { opacity:.6; cursor:progress; }
@@ -270,10 +275,10 @@
                                     @if ($card['lagging'] !== null)
                                         @php($lag = $card['lagging'])
                                         <div class="s-lag">
-                                            <span><b>{{ $lag['off_page1'] }}</b> town(s) with a page off page 1 · <b>{{ $lag['eligible'] }}</b> can take sections now</span>
+                                            <span><b>{{ $lag['off_page1'] }}</b> town(s) with a page off page 1 · <b>{{ $lag['eligible'] }}</b> can take sections now{{ $lag['ranking_elsewhere'] > 0 ? ' · '.$lag['ranking_elsewhere'].' rank page 1 for another priority keyword (kept)' : '' }}</span>
                                             @if ($lag['eligible'] > 0)
                                                 <button type="button" wire:click="pushLaggingTowns('{{ $card['keyword_id'] }}')" wire:loading.attr="disabled" wire:target="pushLaggingTowns"
-                                                        wire:confirm="Draft priority sections for {{ $lag['eligible'] }} town(s) off page 1 for “{{ $card['query'] }}” and push each page? Each town drafts ALL its priority keywords (one drafting call per town), largest first.">
+                                                        wire:confirm="Draft priority sections for {{ $lag['eligible'] }} town(s) off page 1 for “{{ $card['query'] }}” and push each page? Each town drafts only the priority keywords it lags for (one drafting call per town), largest first.{{ $lag['ranking_elsewhere'] > 0 ? ' WARNING — '.$lag['ranking_elsewhere'].' of them already rank page 1 for another priority keyword: those sections are kept as they are, but the page is re-pushed and those rankings can move.' : '' }}">
                                                     Draft & push {{ $lag['eligible'] }} lagging town(s)
                                                 </button>
                                             @endif
@@ -407,10 +412,24 @@
                                             <div class="s-act" style="border-color:{{ $ps['state'] === 'current' ? '#15803d' : ($ps['state'] === 'queued' ? '#2563eb' : ($ps['state'] === 'failed' ? '#c0392b' : 'var(--s-line)')) }}">
                                                 <b>{{ ['current' => 'Live', 'queued' => 'Queued', 'failed' => 'Failed', 'none' => 'None yet', 'ineligible' => 'Not eligible', 'no_page' => 'No page'][$ps['state']] ?? ucfirst($ps['state']) }}</b>
                                                 <span>{{ ucfirst($ps['label']) }}{{ $ps['population'] > 0 ? ' · pop '.number_format($ps['population']) : '' }}</span>
+                                                {{-- The evaluation: where this town stands for each priority keyword, and what a push would do.
+                                                     A keyword it already ranks page 1 for is KEPT — a push never rewrites a ranking the page holds. --}}
+                                                @if ($ps['evaluation'] !== [])
+                                                    <ul class="s-eval">
+                                                        @foreach ($ps['evaluation'] as $ev)
+                                                            <li>
+                                                                <span>{{ $ev['query'] }}</span>
+                                                                <b style="color:{{ $ev['action'] === 'keep' ? '#15803d' : ($ev['rank'] === null ? '#9ca3af' : '#c0392b') }}">{{ $ev['rank'] !== null ? '#'.$ev['rank'] : ($ev['scanned'] ? 'not found' : 'not scanned') }}</b>
+                                                                <small>{{ $ev['action'] === 'keep' ? 'ranking · kept as is' : 'lagging · drafts' }}</small>
+                                                            </li>
+                                                        @endforeach
+                                                    </ul>
+                                                @endif
                                                 @if ($ps['eligible'] && $ps['content_id'] !== null)
+                                                    @php($keepList = implode(', ', array_map(fn ($k) => '#'.$k['rank'].' for “'.$k['query'].'”', $ps['keep'])))
                                                     <button type="button" class="s-actbtn" wire:click="draftTownSections" wire:loading.attr="disabled" wire:target="draftTownSections"
-                                                            wire:confirm="Draft {{ $ps['expected'] }} priority section(s) + FAQs for {{ $town['label'] }} and push the page? This drafts the WHOLE town — every priority keyword its size carries — in one call{{ $ps['sections'] > 0 ? ', replacing its current sections' : '' }}.">
-                                                        <span wire:loading.remove wire:target="draftTownSections">{{ $ps['sections'] > 0 ? 'Redraft & push this town' : 'Draft & push this town' }}</span>
+                                                            wire:confirm="{{ $ps['keep'] !== [] ? 'WARNING — '.$town['label'].' already ranks '.$keepList.'. Those are left exactly as they are; only the '.$ps['draft'].' lagging keyword(s) draft. But the page IS re-pushed and Google re-evaluates the whole page, so those rankings can move. ' : '' }}Draft {{ $ps['draft'] }} priority section(s) + FAQs for {{ $town['label'] }} and push the page?">
+                                                        <span wire:loading.remove wire:target="draftTownSections">{{ 'Draft & push '.$ps['draft'].' lagging keyword(s)' }}</span>
                                                         <span wire:loading wire:target="draftTownSections">Queuing…</span>
                                                     </button>
                                                 @endif

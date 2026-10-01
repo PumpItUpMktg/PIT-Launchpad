@@ -6,10 +6,10 @@ use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
-use App\TownPages\PriorityKeywords;
 use App\TownPages\PrioritySectionDrafter;
 use App\TownPages\PrioritySectionStatus;
 use App\TownPages\PrioritySectionWriter;
+use App\TownPages\TownSectionPlan;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -54,7 +54,7 @@ class DraftPrioritySections implements ShouldBeUnique, ShouldQueue
         self::dispatch((string) $page->id, $repush);
     }
 
-    public function handle(PriorityKeywords $priority, PrioritySectionDrafter $drafter, PrioritySectionWriter $writer): void
+    public function handle(TownSectionPlan $planner, PrioritySectionDrafter $drafter, PrioritySectionWriter $writer): void
     {
         $page = Content::withoutGlobalScope(SiteScope::class)->find($this->contentId);
         $site = $page === null ? null : Site::withoutGlobalScope(SiteScope::class)->find($page->site_id);
@@ -64,12 +64,14 @@ class DraftPrioritySections implements ShouldBeUnique, ShouldQueue
 
         $population = (int) (CoverageArea::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)->where('geo_id', (string) $page->geo_id)->value('population') ?? 0);
-        $expected = $priority->forPopulation($site, $population);
+        // Draft only what lags; a keyword the town already ranks page 1 for keeps the section it has (or
+        // gets none) — a push never rewrites a ranking the page already holds.
+        $plan = $planner->for($site, $page, $population);
+        $draft = $plan['draft'];
+        $expected = $plan['expected'];
 
         try {
-            // A town below the tier (or a site with no priorities left) drafts nothing: the writer drops
-            // whatever it carried and the page re-pushes without the sections.
-            $drafted = $expected === [] ? [] : $drafter->parse($drafter->attempt($page, $expected), $expected);
+            $drafted = $draft === [] ? [] : $drafter->parse($drafter->attempt($page, $draft), $draft);
             $result = $writer->write($page, $drafted, $expected);
         } catch (Throwable $e) {
             $writer->fail($page, $e::class.': '.$e->getMessage());
@@ -78,7 +80,7 @@ class DraftPrioritySections implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        if ($expected !== [] && $result['stored'] === [] && $result['refused'] === []) {
+        if ($draft !== [] && $result['stored'] === [] && $result['refused'] === []) {
             $writer->fail($page, 'The draft came back without a usable section.');
 
             return;
@@ -86,7 +88,10 @@ class DraftPrioritySections implements ShouldBeUnique, ShouldQueue
         if ($result['refused'] !== []) {
             Log::info('Priority sections: templated section refused', ['content_id' => $page->id, 'refused' => $result['refused']]);
         }
-        if ($this->repush && $page->wp_post_id !== null) {
+        // Push only when the page changed: a town that ranks for everything (nothing drafted, nothing
+        // dropped) is left exactly as it is.
+        $changed = $result['stored'] !== [] || $result['dropped'] !== [];
+        if ($this->repush && $changed && $page->wp_post_id !== null) {
             PublishContent::dispatch((string) $page->id);
         }
     }

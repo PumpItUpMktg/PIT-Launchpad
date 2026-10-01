@@ -294,13 +294,14 @@ final class ServiceAreas
      * with their content ids largest town first — what "Draft & push" on the card queues.
      *
      * @param  list<array{id: string, rank: int|null, page: bool, population: int, unreadable: bool}>  $markers
-     * @param  array<string, array{content_id: string|null, state: string, eligible: bool}|null>  $statusByTown
-     * @return array{off_page1: int, eligible: int, content_ids: list<string>}
+     * @param  array<string, array{content_id: string|null, state: string, eligible: bool, keep: list<array{query: string, rank: int}>}|null>  $statusByTown
+     * @return array{off_page1: int, eligible: int, ranking_elsewhere: int, content_ids: list<string>}
      */
     private static function lagging(array $markers, array $statusByTown): array
     {
         $off = 0;
         $eligible = [];
+        $ranking = 0;
         foreach ($markers as $m) {
             if (! $m['page'] || $m['unreadable'] || ($m['rank'] !== null && $m['rank'] <= 10)) {
                 continue;
@@ -309,11 +310,15 @@ final class ServiceAreas
             $st = $statusByTown[$m['id']] ?? null;
             if ($st !== null && $st['eligible'] && $st['content_id'] !== null) {
                 $eligible[] = ['id' => $st['content_id'], 'population' => (int) $m['population']];
+                // Off page 1 for THIS keyword, but page 1 for another priority keyword: that section is kept.
+                if ($st['keep'] !== []) {
+                    $ranking++;
+                }
             }
         }
         usort($eligible, fn (array $a, array $b): int => $b['population'] <=> $a['population']);
 
-        return ['off_page1' => $off, 'eligible' => count($eligible), 'content_ids' => array_column($eligible, 'id')];
+        return ['off_page1' => $off, 'eligible' => count($eligible), 'ranking_elsewhere' => $ranking, 'content_ids' => array_column($eligible, 'id')];
     }
 
     /**
