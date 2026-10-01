@@ -2,6 +2,7 @@
 
 namespace App\Publishing;
 
+use App\Activity\ActivityRecorder;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Integrations\SearchConsole\SitemapSubmitter;
@@ -57,6 +58,16 @@ class RepushPublished
                 PublishContent::dispatch((string) $id)->delay(Carbon::now()->addSeconds($wave * $intervalSeconds));
             }
             $sitemapSubmitted = $this->maybeSubmitSitemap($site, $count, $waves, $intervalSeconds);
+            if ($count > 0) {
+                // The activity log: a re-push leaves no other trace (published_at is the first publish).
+                app(ActivityRecorder::class)->record(
+                    (string) $site->id,
+                    ActivityRecorder::REPUSH,
+                    sprintf('Re-published %s %s to the website', number_format($count), $count === 1 ? 'page' : 'pages'),
+                    ['pages' => $count],
+                    clientVisible: true,
+                );
+            }
         }
 
         return [

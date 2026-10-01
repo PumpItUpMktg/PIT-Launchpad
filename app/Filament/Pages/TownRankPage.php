@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Activity\ActivityRecorder;
 use App\Filament\Pages\Concerns\BuildsTownPage;
 use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
@@ -135,6 +136,7 @@ class TownRankPage extends Page
 
             return;
         }
+        app(ActivityRecorder::class)->record((string) $site->id, ActivityRecorder::PRIORITY_KEYWORD, $on ? "“{$keyword->query}” made town-page priority #{$keyword->town_priority_rank}" : "“{$keyword->query}” taken off the town-page priorities", [], (string) $keyword->query, Auth::id());
         Notification::make()->success()
             ->title($on ? "★ “{$keyword->query}” is priority #{$keyword->town_priority_rank}" : "“{$keyword->query}” is no longer a priority")
             ->body($on

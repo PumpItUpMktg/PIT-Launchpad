@@ -2,6 +2,7 @@
 
 namespace App\ContentEngine\Review;
 
+use App\Activity\ActivityRecorder;
 use App\Enums\ContentStatus;
 use App\Enums\EditReason;
 use App\Enums\ReviewFlag;
@@ -153,6 +154,13 @@ class ReviewActions
             'status' => ContentStatus::Rejected,
             'reject_reason' => $reason,
         ])->save();
+        app(ActivityRecorder::class)->record(
+            (string) $content->site_id,
+            ActivityRecorder::CONTENT_REJECTED,
+            'Rejected “'.mb_substr(trim((string) $content->title), 0, 80).'”'.(trim($reason) !== '' ? ' — '.mb_substr(trim($reason), 0, 120) : ''),
+            [],
+            (string) $content->title,
+        );
 
         return $content;
     }
