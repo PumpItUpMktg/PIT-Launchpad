@@ -5,6 +5,7 @@ use App\Enums\UserRole;
 use App\Filament\Pages\ServiceAreasPage;
 use App\Integrations\Census\MockMunicipalityGazetteer;
 use App\Integrations\Census\MunicipalityGazetteer;
+use App\Jobs\DraftPrioritySections;
 use App\Jobs\RunCoverageScan;
 use App\Models\Content;
 use App\Models\CoverageArea;
@@ -17,6 +18,8 @@ use App\Models\Site;
 use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
 use App\Models\User;
+use App\TownPages\PriorityKeywords;
+use App\TownPages\PrioritySectionWriter;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -199,4 +202,113 @@ it('dates each lane in the town detail from that town own reading', function () 
         ->assertSee('1 hour ago')       // the map-pack reading, from the point rather than the scan
         // The lane nobody scanned says so, rather than showing a blank that reads as current.
         ->assertSee('never measured');
+});
+
+/**
+ * Priority keywords on the area page: their cards sit together at the top with the ★ badge, the map rings
+ * the towns whose sections are live, a priority card counts the towns off page 1 it could push, and the
+ * town panel drafts and pushes ONE town (the whole town, every priority keyword its size carries).
+ */
+function priorityAreaFixture(): array
+{
+    app()->instance(MunicipalityGazetteer::class, new MockMunicipalityGazetteer(polygons: [
+        '34041' => [[['lat' => 40.95, 'lng' => -74.95], ['lat' => 40.95, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.75], ['lat' => 40.75, 'lng' => -74.95]]],
+    ]));
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com', 'brand_name' => 'SPG']);
+    JobCounty::factory()->create(['county_geoid' => '34041', 'name' => 'Warren', 'state' => 'NJ']);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown office', 'lat' => 40.85, 'lng' => -74.83, 'home_county_geoid' => '34041', 'county_geoids' => []]);
+    $towns = [];
+    foreach ([['Hackettstown', '3404128590', 10000, 40.85, -74.83, 15], ['Washington', '3404177000', 12000, 40.78, -74.80, 2], ['Allamuchy', '3404100700', 2000, 40.90, -74.88, null]] as [$name, $geo, $pop, $lat, $lng, $rank]) {
+        $area = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => $name, 'state' => 'NJ', 'geo_id' => $geo, 'population' => $pop, 'lat' => $lat, 'lng' => $lng, 'source_location_ids' => [$loc->id]]);
+        $page = Content::factory()->page()->published()->create([
+            'site_id' => $site->id, 'page_type' => PageType::Location, 'location_id' => null, 'parent_location_id' => $loc->id,
+            'geo_id' => $geo, 'slug' => strtolower($name).'-nj', 'title' => "{$name}, NJ", 'wp_post_id' => $pop,
+        ]);
+        $towns[$name] = ['area' => $area, 'page' => $page, 'rank' => $rank, 'lat' => $lat, 'lng' => $lng];
+    }
+    $priority = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'backup sump pump installation', 'track_town_rank' => true]);
+    $other = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'a mold remediation', 'track_town_rank' => true]);
+    app(PriorityKeywords::class)->set($site, $priority, true);
+    foreach ([$other, $priority] as $kw) {   // the non-priority keyword is scanned LAST (most recent), so the wall would list it first
+        $scan = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'town_query', 'status' => 'complete', 'points_count' => 3, 'found_count' => 2, 'scanned_at' => now()->subMinutes($kw->id === $priority->id ? 10 : 0)]);
+        foreach ($towns as $name => $t) {
+            TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'coverage_area_id' => $t['area']->id, 'label' => $name, 'state' => 'NJ', 'lat' => $t['lat'], 'lng' => $t['lng'], 'query' => 'q', 'rank' => $t['rank'], 'collected_at' => now()]);
+        }
+    }
+    // Washington already carries a live section for the priority keyword.
+    app(PrioritySectionWriter::class)->write($towns['Washington']['page'], [[
+        'keyword_id' => $priority->id, 'keyword' => $priority->query, 'service_id' => null,
+        'heading' => 'Backup sump pump installation in Washington', 'body' => 'Washington sits on a ridge; backups matter when the power drops.', 'faqs' => [],
+    ]], [$priority]);
+
+    return ['site' => $site, 'loc' => $loc, 'towns' => $towns, 'priority' => $priority, 'other' => $other];
+}
+
+it('groups the priority keywords at the top with their badge, rings the towns with live sections, and counts the lagging towns a card can push', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $f = priorityAreaFixture();
+
+    $html = Livewire::test(ServiceAreasPage::class)
+        ->set('siteId', $f['site']->id)
+        ->call('openArea', $f['loc']->id)
+        ->assertOk()
+        ->assertSee('Priority keywords · 1')
+        ->assertSee('★ Priority #1')
+        ->assertSee('Other tracked keywords')
+        ->assertSee('sections live')
+        ->assertSeeHtml('wire:click="pushLaggingTowns(\''.$f['priority']->id.'\')"')
+        ->html();
+
+    // The priority card renders before the (more recently scanned) other keyword's card.
+    expect(strpos($html, 'kw-'.$f['priority']->id))->toBeLessThan(strpos($html, 'kw-'.$f['other']->id))
+        // One town (Washington) is ringed: its sections are live.
+        ->and(substr_count($html, 'class="s-sections"'))->toBe(1)
+        // Off page 1 with a page: Hackettstown (#15) and Allamuchy (not found) — only Hackettstown is big enough to take sections.
+        ->and($html)->toContain('<b>2</b> town(s) with a page off page 1 · <b>1</b> can take sections now')
+        ->toContain('Draft & push 1 lagging town(s)');
+});
+
+it('drafts and pushes ONE town from its panel, and the panel reads queued until the worker is done', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $f = priorityAreaFixture();
+    $hack = $f['towns']['Hackettstown'];
+
+    $test = Livewire::test(ServiceAreasPage::class)
+        ->set('siteId', $f['site']->id)
+        ->call('openArea', $f['loc']->id)
+        ->call('selectTown', $f['priority']->id, $hack['area']->id)
+        ->assertSee('Priority sections')
+        ->assertSee('None yet · carries 1')
+        ->assertSee('Draft & push this town')
+        ->call('draftTownSections')
+        ->assertSee('Queued')
+        ->assertSee('Drafting on the worker')
+        ->assertDontSee('Draft & push this town');
+
+    Queue::assertPushed(DraftPrioritySections::class, fn ($job) => $job->contentId === $hack['page']->id && $job->repush === true);
+    expect($hack['page']->fresh()->meta['priority_sections_queued_at'] ?? null)->not->toBeNull();
+
+    // A town below the tier has nothing to draft, and says so instead of a button.
+    $test->call('selectTown', $f['priority']->id, $f['towns']['Allamuchy']['area']->id)
+        ->assertSee('Not eligible')
+        ->assertSee('Below the 3,000-person tier')
+        ->assertDontSee('Draft & push this town');
+});
+
+it('pushes the lagging towns of a priority card — only those off page 1 with a page that can take sections', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $f = priorityAreaFixture();
+
+    Livewire::test(ServiceAreasPage::class)
+        ->set('siteId', $f['site']->id)
+        ->call('openArea', $f['loc']->id)
+        ->call('pushLaggingTowns', $f['priority']->id)
+        ->assertOk();
+
+    Queue::assertPushed(DraftPrioritySections::class, 1);
+    Queue::assertPushed(DraftPrioritySections::class, fn ($job) => $job->contentId === $f['towns']['Hackettstown']['page']->id);
+    expect($f['towns']['Washington']['page']->fresh()->meta['priority_sections_queued_at'] ?? null)->toBeNull()   // ranks #2 — not lagging
+        ->and($f['towns']['Allamuchy']['page']->fresh()->meta['priority_sections_queued_at'] ?? null)->toBeNull();  // below the tier
 });

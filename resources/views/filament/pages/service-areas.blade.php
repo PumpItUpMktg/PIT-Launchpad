@@ -80,6 +80,14 @@
     .sva .s-act b { display:block; }
     .sva .s-act span { color:var(--s-muted); }
     .sva .s-silo { font-size:11px; color:var(--s-faint); margin:-4px 0 8px; }
+    .sva .s-group { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--s-muted); font-weight:700; margin:16px 0 -6px; }
+    .sva .s-star { display:inline-block; font-size:11px; font-weight:700; color:#b45309; border:1px solid #b45309; border-radius:999px; padding:1px 8px; margin-left:8px; vertical-align:middle; }
+    /* A town whose priority sections are live: a ring inside its boundary (or around its dot), over the rank fill. */
+    .sva .s-sections { fill:none; stroke:#b45309; stroke-width:.7; stroke-dasharray:1.2 .8; pointer-events:none; }
+    .sva .s-key i.ring { background:none; border:1.5px dashed #b45309; }
+    .sva .s-lag { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:11.5px; color:var(--s-muted); flex-wrap:wrap; }
+    .sva .s-lag button { font-size:12px; border:1px solid #b45309; color:#b45309; background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; font-weight:600; }
+    .sva .s-lag button:disabled { opacity:.55; cursor:default; }
     .sva .s-actbtn { display:inline-block; margin-top:6px; padding:5px 11px; font-size:12px; font-weight:600; border-radius:7px; border:1px solid var(--s-line); background:var(--s-surface2); color:inherit; cursor:pointer; }
     .sva .s-actbtn:hover { border-color:#2563eb; color:#2563eb; }
     .sva .s-actbtn[disabled] { opacity:.6; cursor:progress; }
@@ -189,9 +197,17 @@
             <div class="s-empty">No keywords tracked for Town Rank yet — add them on the Town Rank page.</div>
         @else
             <div class="s-cards">
+                @php($priorityCount = count(array_filter($area['cards'], fn ($c) => $c['priority'] !== null)))
                 @foreach ($area['cards'] as $card)
+                    {{-- The priority keywords sit together at the top, out of their silos, so the operator weighs
+                         them as one decision for this area; the rest keep the wall's silo grouping beneath. --}}
+                    @if ($priorityCount > 0 && $loop->first)
+                        <div class="s-group">Priority keywords · {{ $priorityCount }} — their own section on the towns big enough to search for them</div>
+                    @elseif ($priorityCount > 0 && $loop->index === $priorityCount)
+                        <div class="s-group">Other tracked keywords</div>
+                    @endif
                     <div class="s-card" wire:key="kw-{{ $card['keyword_id'] }}">
-                        <h3>{{ $card['query'] }}</h3>
+                        <h3>{{ $card['query'] }}@if ($card['priority'] !== null)<span class="s-star" title="Town-page priority keyword #{{ $card['priority'] }}">★ Priority #{{ $card['priority'] }}</span>@endif</h3>
                         {{-- Which silo this keyword belongs to — the cards arrive grouped by it from the wall. --}}
                         <div class="s-silo">{{ $card['silo'] ?? 'No silo' }}</div>
                         <div class="s-cols">
@@ -221,8 +237,16 @@
                                                             <path class="s-haspage" d="{{ $d }}" fill="url(#hp-web-{{ $card['keyword_id'] }})" />
                                                         @endforeach
                                                     @endif
+                                                    @if ($m['sections'] ?? false)
+                                                        @foreach ($area['town_paths'][$m['id']] as $d)
+                                                            <path class="s-sections" d="{{ $d }}" />
+                                                        @endforeach
+                                                    @endif
                                                 @else
                                                     <circle class="s-dot {{ $m['page'] ? '' : 'nopage' }} {{ $sel ? 'sel' : '' }}" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) }}" fill="{{ $m['color'] }}" wire:click="selectTown('{{ $card['keyword_id'] }}', '{{ $m['id'] }}')"><title>{{ $m['label'] }} — {{ $m['rank'] !== null ? '#'.$m['rank'] : 'not found' }}{{ $m['page'] ? '' : ' · no page' }}</title></circle>
+                                                    @if ($m['sections'] ?? false)
+                                                        <circle class="s-sections" cx="{{ $m['x'] }}" cy="{{ $m['y'] }}" r="{{ $r($m['population']) + 1 }}" />
+                                                    @endif
                                                 @endif
                                             @endforeach
                                             @foreach ($area['outlines'] as $o)
@@ -241,7 +265,20 @@
                                         @if (($s['unreadable'] ?? 0) > 0)<span>no data <b style="color:#7c3aed">{{ $s['unreadable'] }}</b></span>@endif
                                         @if ($s['pending'] > 0)<span style="color:#2563eb">collecting {{ $s['pending'] }}</span>@endif
                                         <span class="s-key"><i></i>has a page</span>
+                                        @if ($card['priority'] !== null)<span class="s-key"><i class="ring"></i>sections live</span>@endif
                                     </div>
+                                    @if ($card['lagging'] !== null)
+                                        @php($lag = $card['lagging'])
+                                        <div class="s-lag">
+                                            <span><b>{{ $lag['off_page1'] }}</b> town(s) with a page off page 1 · <b>{{ $lag['eligible'] }}</b> can take sections now</span>
+                                            @if ($lag['eligible'] > 0)
+                                                <button type="button" wire:click="pushLaggingTowns('{{ $card['keyword_id'] }}')" wire:loading.attr="disabled" wire:target="pushLaggingTowns"
+                                                        wire:confirm="Draft priority sections for {{ $lag['eligible'] }} town(s) off page 1 for “{{ $card['query'] }}” and push each page? Each town drafts ALL its priority keywords (one drafting call per town), largest first.">
+                                                    Draft & push {{ $lag['eligible'] }} lagging town(s)
+                                                </button>
+                                            @endif
+                                        </div>
+                                    @endif
                                     <div class="s-when">
                                         {{ $card['web']['status'] }} · {{ $when($card['web']['scanned_at']) }}
                                         @if (($card['web']['progress'] ?? null) !== null && $card['web']['progress']['eta'] !== null)
@@ -364,7 +401,22 @@
                                         @endif
                                     </div>
                                     <div>
-                                        <h6 class="s-h" style="margin-top:0">What to do</h6>
+                                        @if (($town['sections'] ?? null) !== null)
+                                            @php($ps = $town['sections'])
+                                            <h6 class="s-h" style="margin-top:0">Priority sections</h6>
+                                            <div class="s-act" style="border-color:{{ $ps['state'] === 'current' ? '#15803d' : ($ps['state'] === 'queued' ? '#2563eb' : ($ps['state'] === 'failed' ? '#c0392b' : 'var(--s-line)')) }}">
+                                                <b>{{ ['current' => 'Live', 'queued' => 'Queued', 'failed' => 'Failed', 'none' => 'None yet', 'ineligible' => 'Not eligible', 'no_page' => 'No page'][$ps['state']] ?? ucfirst($ps['state']) }}</b>
+                                                <span>{{ ucfirst($ps['label']) }}{{ $ps['population'] > 0 ? ' · pop '.number_format($ps['population']) : '' }}</span>
+                                                @if ($ps['eligible'] && $ps['content_id'] !== null)
+                                                    <button type="button" class="s-actbtn" wire:click="draftTownSections" wire:loading.attr="disabled" wire:target="draftTownSections"
+                                                            wire:confirm="Draft {{ $ps['expected'] }} priority section(s) + FAQs for {{ $town['label'] }} and push the page? This drafts the WHOLE town — every priority keyword its size carries — in one call{{ $ps['sections'] > 0 ? ', replacing its current sections' : '' }}.">
+                                                        <span wire:loading.remove wire:target="draftTownSections">{{ $ps['sections'] > 0 ? 'Redraft & push this town' : 'Draft & push this town' }}</span>
+                                                        <span wire:loading wire:target="draftTownSections">Queuing…</span>
+                                                    </button>
+                                                @endif
+                                            </div>
+                                        @endif
+                                        <h6 class="s-h" style="{{ ($town['sections'] ?? null) !== null ? '' : 'margin-top:0' }}">What to do</h6>
                                         @foreach ($town['actions'] as $a)
                                             <div class="s-act" style="border-color:{{ $levelColor($a['level']) }}">
                                                 <b>{{ $a['title'] }}</b><span>{{ $a['why'] }}</span>

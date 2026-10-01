@@ -3,6 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Jobs\DraftPrioritySections;
+use App\Models\Content;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\TownPages\PriorityKeywords;
 use App\TownPages\PrioritySectionPlan;
@@ -49,7 +51,7 @@ class PrioritySectionsCommand extends Command
             $report['tiers']['none'],
         ));
         $c = $report['counts'];
-        $this->line("Pages: {$c['current']} current · {$c['missing']} missing · {$c['stale']} stale · {$c['none']} none by tier");
+        $this->line("Pages: {$c['current']} current · {$c['missing']} missing · {$c['stale']} stale · {$c['queued']} queued · {$c['none']} none by tier");
 
         $rows = [];
         foreach ($report['pages'] as $p) {
@@ -75,8 +77,12 @@ class PrioritySectionsCommand extends Command
         if (is_numeric($limit) && (int) $limit > 0) {
             $todo = array_slice($todo, 0, (int) $limit);
         }
+        $pages = Content::withoutGlobalScope(SiteScope::class)->whereKey(array_column($todo, 'content_id'))->get()->keyBy('id');
         foreach ($todo as $p) {
-            DraftPrioritySections::dispatch($p['content_id'], (bool) $this->option('repush'));
+            $page = $pages->get($p['content_id']);
+            if ($page instanceof Content) {
+                DraftPrioritySections::enqueue($page, (bool) $this->option('repush'));
+            }
         }
         $this->info(sprintf('Queued %d draft job(s)%s. Re-run without --execute to watch the states change.', count($todo), $this->option('repush') ? ' with re-push' : ''));
         if ($todo !== []) {

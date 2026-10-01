@@ -28,6 +28,8 @@ final class PrioritySectionPlan
 
     public const NONE = 'none';
 
+    public const QUEUED = 'queued';
+
     public function __construct(
         private readonly PriorityKeywords $priority,
         private readonly PrioritySections $sections,
@@ -37,7 +39,7 @@ final class PrioritySectionPlan
      * @return array{
      *     keywords: list<array{keyword_id: string, query: string, rank: int, service: string|null}>,
      *     tiers: array{full: int, partial: int, none: int},
-     *     counts: array{current: int, missing: int, stale: int, none: int},
+     *     counts: array{current: int, missing: int, stale: int, none: int, queued: int},
      *     pages: list<array{content_id: string, title: string, slug: string|null, population: int, tier: string, expected: list<string>, state: string, error: string|null}>
      * }
      */
@@ -64,7 +66,7 @@ final class PrioritySectionPlan
 
         $rows = [];
         $tiers = ['full' => 0, 'partial' => 0, 'none' => 0];
-        $counts = ['current' => 0, 'missing' => 0, 'stale' => 0, 'none' => 0];
+        $counts = ['current' => 0, 'missing' => 0, 'stale' => 0, 'none' => 0, 'queued' => 0];
         foreach ($pages as $page) {
             $pop = $population[(string) $page->geo_id] ?? 0;
             $tier = PriorityKeywords::tier($pop);
@@ -74,6 +76,7 @@ final class PrioritySectionPlan
             sort($stored);
             $state = match (true) {
                 $expected === [] => self::NONE,
+                is_array($page->meta) && isset($page->meta[PrioritySectionStatus::QUEUED_KEY]) => self::QUEUED,
                 $stored === [] => self::MISSING,
                 $stored !== $expected => self::STALE,
                 default => self::CURRENT,

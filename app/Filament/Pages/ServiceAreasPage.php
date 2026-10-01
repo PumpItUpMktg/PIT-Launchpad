@@ -4,13 +4,16 @@ namespace App\Filament\Pages;
 
 use App\Filament\Pages\Concerns\BuildsTownPage;
 use App\GeoGrid\CoverageRunAll;
+use App\Jobs\DraftPrioritySections;
 use App\Jobs\RunCoverageScan;
+use App\Models\Content;
 use App\Models\GeoGridScan;
 use App\Models\Keyword;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operator\ActiveTenant;
+use App\TownPages\PrioritySectionStatus;
 use App\TownRank\ServiceAreas;
 use App\TownRank\TownRankBoard;
 use BackedEnum;
@@ -116,7 +119,76 @@ class ServiceAreasPage extends Page
             return null;
         }
 
-        return app(TownRankBoard::class)->town($site, $this->keywordId, $this->townId);
+        $town = app(TownRankBoard::class)->town($site, $this->keywordId, $this->townId);
+        if ($town === null) {
+            return null;
+        }
+        // Where this town stands on its priority sections — the panel's row and its "Draft & push" button.
+        $town['sections'] = app(PrioritySectionStatus::class)->forTown($site, $this->townId);
+
+        return $town;
+    }
+
+    /**
+     * "Draft & push this town" on the town panel: queue the town page's priority sections — the WHOLE town,
+     * every priority keyword its tier allows, one drafting call — and push the page when they land. The
+     * operator decides per town; the page reads "queued" until the worker is done.
+     */
+    public function draftTownSections(): void
+    {
+        $site = $this->site();
+        $status = $site === null || $this->townId === null ? null : app(PrioritySectionStatus::class)->forTown($site, $this->townId);
+        if ($site === null || $status === null) {
+            return;
+        }
+        if ($status['content_id'] === null || ! $status['eligible']) {
+            Notification::make()->warning()->title('Nothing to draft here')->body(ucfirst($status['label']).'.')->send();
+
+            return;
+        }
+        $page = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($status['content_id'])->first();
+        if ($page === null) {
+            return;
+        }
+        DraftPrioritySections::enqueue($page, repush: true);
+        Notification::make()->success()
+            ->title("Drafting {$page->title}")
+            ->body(sprintf('%d priority section(s) + FAQs draft on the worker, then the page pushes. It reads "queued" on the map until then.', $status['expected']))
+            ->send();
+    }
+
+    /**
+     * "Draft & push the lagging towns" on a priority card: queue every town on this card's map that is off
+     * page 1, has a page, and can carry sections — largest first. Each town drafts ALL its priority
+     * keywords (one call per town), not only this card's.
+     */
+    public function pushLaggingTowns(string $keywordId): void
+    {
+        $site = $this->site();
+        $area = $site === null ? null : $this->area;
+        if ($site === null || $area === null) {
+            return;
+        }
+        $card = collect($area['cards'])->firstWhere('keyword_id', $keywordId);
+        $lagging = is_array($card) ? ($card['lagging'] ?? null) : null;
+        if (! is_array($lagging) || $lagging['content_ids'] === []) {
+            Notification::make()->warning()->title('No towns to push')->body('Every town off page 1 here is already queued, below the tier, or has no page.')->send();
+
+            return;
+        }
+        $pages = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($lagging['content_ids'])->get()->keyBy('id');
+        $queued = 0;
+        foreach ($lagging['content_ids'] as $id) {
+            $page = $pages->get($id);
+            if ($page instanceof Content) {
+                DraftPrioritySections::enqueue($page, repush: true);
+                $queued++;
+            }
+        }
+        Notification::make()->success()
+            ->title("Queued {$queued} town(s) for “{$card['query']}”")
+            ->body('Each drafts all its priority sections on the worker, then pushes. Give them two scans before reading the cards.')
+            ->send();
     }
 
     /**
