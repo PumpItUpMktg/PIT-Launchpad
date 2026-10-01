@@ -259,10 +259,15 @@ it('reports every town by tier and state, and --execute queues one draft job per
         ->assertSuccessful();
     Queue::assertNothingPushed();
 
+    // Largest town first, so a --limit wave is the biggest towns: Hackettstown (12,000) before Independence (5,000).
+    expect(array_column($plan['pages'], 'title'))->toBe(['Hackettstown, NJ', 'Independence, NJ', 'Allamuchy, NJ']);
+    $hack = Content::withoutGlobalScope(SiteScope::class)->where('title', 'Hackettstown, NJ')->firstOrFail();
+
     $this->artisan('launchpad:priority-sections', ['--site' => 'Sump Pump Gurus', '--execute' => true, '--repush' => true, '--limit' => 1])
         ->expectsOutputToContain('Queued 1 draft job(s) with re-push')
+        ->expectsOutputToContain('This wave: Hackettstown, NJ (12,000)')
         ->assertSuccessful();
-    Queue::assertPushed(DraftPrioritySections::class, fn (DraftPrioritySections $job) => $job->repush === true);
+    Queue::assertPushed(DraftPrioritySections::class, fn (DraftPrioritySections $job) => $job->repush === true && $job->contentId === $hack->id);
 });
 
 it('the job drafts, stores, and re-pushes a town page; a town below the tier drafts nothing', function () {
