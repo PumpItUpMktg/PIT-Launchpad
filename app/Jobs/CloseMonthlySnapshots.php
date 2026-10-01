@@ -17,7 +17,7 @@ class CloseMonthlySnapshots implements ShouldQueue
 {
     use Queueable;
 
-    public int $timeout = 1800;
+    public int $timeout = 900;
 
     public function handle(MonthlySnapshots $snapshots): void
     {
