@@ -51,17 +51,17 @@ class PrioritySectionsCommand extends Command
             $report['tiers']['none'],
         ));
         $c = $report['counts'];
-        $this->line("Pages: {$c['current']} current · {$c['missing']} missing · {$c['stale']} stale · {$c['queued']} queued · {$c['none']} none by tier");
+        $this->line("Pages: {$c['current']} current · {$c['missing']} missing · {$c['stale']} stale · {$c['queued']} queued · {$c['none']} none (by tier, or already ranking page 1 for every priority keyword)");
 
         $rows = [];
         foreach ($report['pages'] as $p) {
             if ($p['state'] === PrioritySectionPlan::NONE && $p['error'] === null) {
                 continue;
             }
-            $rows[] = [$p['title'], number_format($p['population']), $p['tier'], count($p['expected']), $p['state'], $p['error'] !== null ? mb_substr($p['error'], 0, 60) : ''];
+            $rows[] = [$p['title'], number_format($p['population']), $p['tier'], count($p['expected']), $p['keep'], $p['state'], $p['error'] !== null ? mb_substr($p['error'], 0, 60) : ''];
         }
         if ($rows !== []) {
-            $this->table(['Town', 'Population', 'Tier', 'Keywords', 'State', 'Last error'], $rows);
+            $this->table(['Town', 'Population', 'Tier', 'Keywords', 'Ranking (kept)', 'State', 'Last error'], $rows);
         }
 
         if (! $this->option('execute')) {

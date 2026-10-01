@@ -17,6 +17,8 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
+use App\Models\TownRankPoint;
+use App\Models\TownRankScan;
 use App\Models\User;
 use App\Models\WireframeKit;
 use App\Publishing\Blocks\BlockContentAssembler;
@@ -26,6 +28,7 @@ use App\TownPages\PrioritySectionPlan;
 use App\TownPages\PrioritySections;
 use App\TownPages\PrioritySectionWriter;
 use App\TownPages\SectionUniqueness;
+use App\TownPages\TownSectionPlan;
 use Database\Seeders\WireframeKitSeeder;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -255,7 +258,7 @@ it('reports every town by tier and state, and --execute queues one draft job per
 
     $this->artisan('launchpad:priority-sections', ['--site' => 'Sump Pump Gurus'])
         ->expectsOutputToContain('1. backup sump pump installation → Backup Sump Pumps')
-        ->expectsOutputToContain('0 current · 2 missing · 0 stale · 0 queued · 1 none by tier')
+        ->expectsOutputToContain('0 current · 2 missing · 0 stale · 0 queued · 1 none (by tier')
         ->assertSuccessful();
     Queue::assertNothingPushed();
 
@@ -287,8 +290,62 @@ it('the job drafts, stores, and re-pushes a town page; a town below the tier dra
         ->and($fake->prompts)->toHaveCount(1)
         ->and(app(PrioritySections::class)->stored($hamlet->fresh()))->toBe([])
         ->and(app(PrioritySectionPlan::class)->for($f['site'])['counts'])->toBe(['current' => 1, 'missing' => 0, 'stale' => 0, 'none' => 1, 'queued' => 0]);
-    Queue::assertPushed(PublishContent::class, 2);
+    // Only the page that changed pushes: the hamlet drafted nothing and dropped nothing, so it stays as it is.
+    Queue::assertPushed(PublishContent::class, 1);
     expect(Content::withoutGlobalScope(SiteScope::class)->find($hack->id)->meta['priority_sections_error'] ?? null)->toBeNull();
+});
+
+it('never rewrites a keyword the town already ranks page 1 for: its section is kept, only the lagging keyword drafts', function () {
+    Queue::fake();
+    $f = prioritySite();
+    $site = $f['site'];
+    $ranking = $f['keyword'];   // ranks #3 in Hackettstown
+    $lagging = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sewage ejector pump', 'track_town_rank' => true]);
+    $svc = app(PriorityKeywords::class);
+    $svc->set($site, $ranking, true);
+    $svc->set($site, $lagging, true);
+    $hack = priorityTown($f, 'Hackettstown', '3404128590', 12000);
+    $area = CoverageArea::withoutGlobalScope(SiteScope::class)->where('geo_id', '3404128590')->firstOrFail();
+    foreach ([[$ranking, 3], [$lagging, 18]] as [$kw, $rank]) {
+        $scan = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'town_query', 'status' => 'complete', 'points_count' => 1, 'found_count' => 1, 'scanned_at' => now()]);
+        TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'coverage_area_id' => $area->id, 'geo_id' => '3404128590', 'label' => 'Hackettstown', 'state' => 'NJ', 'lat' => 40.85, 'lng' => -74.83, 'query' => 'q', 'rank' => $rank, 'collected_at' => now()]);
+    }
+    // The ranking keyword already has a section from an earlier draft.
+    app(PrioritySectionWriter::class)->write($hack, [[
+        'keyword_id' => $ranking->id, 'keyword' => $ranking->query, 'service_id' => null,
+        'heading' => 'Backup sump pump installation in Hackettstown', 'body' => 'ORIGINAL section that must survive the push.', 'faqs' => [],
+    ]], [$ranking]);
+
+    $plan = app(TownSectionPlan::class)->for($site, $hack->fresh(), 12000);
+    expect(array_map(fn (Keyword $k) => $k->query, $plan['draft']))->toBe(['sewage ejector pump'])
+        ->and($plan['keep'][0]['rank'])->toBe(3)
+        ->and(array_map(fn (Keyword $k) => $k->query, $plan['expected']))->toBe(['backup sump pump installation', 'sewage ejector pump']);
+
+    $fake = new FakeClaudeClient(priorityDraft($lagging, 'Hackettstown', 'Hackettstown homes on the river flats back up through the ejector pit first, so a sized ejector pump matters more here than almost anywhere in the county.'));
+    app()->instance(DraftCall::class, new DraftCall($fake));
+    app()->call([new DraftPrioritySections($hack->id, true), 'handle']);
+
+    $live = app(PrioritySections::class)->live($hack->fresh());
+    expect($fake->prompts[0])->toContain('KEYWORD '.$lagging->id)->not->toContain('KEYWORD '.$ranking->id)
+        ->and(array_column($live, 'keyword_id'))->toBe([$ranking->id, $lagging->id])
+        ->and($live[0]['body'])->toBe('ORIGINAL section that must survive the push.');
+    Queue::assertPushed(PublishContent::class, 1);
+
+    // The lagging keyword comes off the list: the next run drops its now-stale section (the page changed, so
+    // it pushes once) — and after that a town ranking page 1 for EVERY priority keyword drafts nothing and
+    // is not pushed again.
+    $svc->set($site, $lagging, false);
+    $fake2 = new FakeClaudeClient('');
+    app()->instance(DraftCall::class, new DraftCall($fake2));
+    Queue::fake();
+    app()->call([new DraftPrioritySections($hack->id, true), 'handle']);
+    expect(array_column(app(PrioritySections::class)->stored($hack->fresh()), 'keyword_id'))->toBe([$ranking->id]);
+    Queue::assertPushed(PublishContent::class, 1);
+
+    Queue::fake();
+    app()->call([new DraftPrioritySections($hack->id, true), 'handle']);
+    expect($fake2->prompts)->toBe([]);
+    Queue::assertNothingPushed();
 });
 
 it('the Town Rank wall stars a keyword as priority and un-stars it, with the rank on the card', function () {
