@@ -1037,6 +1037,7 @@ final class BlockPageComposer
         bool $hasMap = false,
         bool $areasMapAvailable = false,
         bool $preview = false,
+        array $prioritySections = [],
     ): string {
         $place = trim($city) !== '' ? (trim($state) !== '' ? trim($city).', '.trim($state) : trim($city)) : '';
 
@@ -1076,6 +1077,21 @@ final class BlockPageComposer
             cards: $serviceCards,
             intro: $servicesIntro,
         );
+
+        // The priority keyword sections (town pages only): one short H2 per keyword the operator is pushing
+        // in this town, drafted from the town's own facts, each linking to its service page. They follow the
+        // services grid — the grid lists what we do here, these say what the few that matter mean HERE.
+        $keywordBlocks = [];
+        foreach ($prioritySections as $section) {
+            $keywordBlocks[] = $this->sections->keywordSection(
+                eyebrow: trim((string) ($section['eyebrow'] ?? '')) !== '' ? (string) $section['eyebrow'] : 'In '.$city,
+                heading: (string) ($section['heading'] ?? ''),
+                paragraphs: is_array($section['paragraphs'] ?? null) ? $section['paragraphs'] : [],
+                linkText: (string) ($section['link_text'] ?? ''),
+                linkUrl: (string) ($section['link_url'] ?? ''),
+            );
+        }
+        $keywordSections = $this->join($keywordBlocks);
 
         // The location's own NAP — address (storefront only), click-to-call, email, hours. A GBP
         // location hub leads with its real contact truths; per-field data-gated (empty → the block
@@ -1188,7 +1204,7 @@ final class BlockPageComposer
         // Rhythm: hero + closing CTA are the colored bands; the NAP leads the body (contact truths
         // first), the areas-served link grid follows the coverage prose (prose intro → the real
         // linked towns). Gated reviews/jobs dropping out never puts two colored bands adjacent.
-        return $this->join([$hero, $nap, $map, $introBlock, $conditions, $services, $coverageBlock, $areas, $reviewsBlock, $jobsBlock, $localBlock, $faq, $cta]);
+        return $this->join([$hero, $nap, $map, $introBlock, $conditions, $services, $keywordSections, $coverageBlock, $areas, $reviewsBlock, $jobsBlock, $localBlock, $faq, $cta]);
     }
 
     /** @param list<string> $blocks */

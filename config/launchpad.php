@@ -1021,4 +1021,25 @@ return [
     */
     'deploy_lag_stale_hours' => (int) env('LAUNCHPAD_DEPLOY_LAG_STALE_HOURS', 6),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Town pages — priority keyword sections
+    |--------------------------------------------------------------------------
+    | Up to `max_keywords` tracked keywords per site get their own drafted H2
+    | section (+ two FAQ items) on town pages. How many a town carries follows
+    | its population: at or above `full_population` all of them; at or above
+    | `partial_population` only the first; below that none (nobody searches
+    | "{keyword} {hamlet}", and the sections would only template the page).
+    */
+    'town_pages' => [
+        'priority' => [
+            'max_keywords' => (int) env('LAUNCHPAD_TOWN_PRIORITY_MAX_KEYWORDS', 3),
+            'full_population' => (int) env('LAUNCHPAD_TOWN_PRIORITY_FULL_POPULATION', 10000),
+            'partial_population' => (int) env('LAUNCHPAD_TOWN_PRIORITY_PARTIAL_POPULATION', 3000),
+            // Two drafted sections for the same keyword on different towns must differ by more than the
+            // town's name: above this word-trigram overlap the new section is refused as templated.
+            'max_similarity' => (float) env('LAUNCHPAD_TOWN_PRIORITY_MAX_SIMILARITY', 0.5),
+        ],
+    ],
+
 ];

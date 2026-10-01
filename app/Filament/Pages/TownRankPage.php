@@ -8,6 +8,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\TownRankScan;
 use App\Operator\ActiveTenant;
+use App\TownPages\PriorityKeywords;
 use App\TownRank\TownRankBoard;
 use App\TownRank\TownRankKeywords;
 use App\TownRank\TownRankRunAll;
@@ -112,6 +113,34 @@ class TownRankPage extends Page
         $this->newKeyword = '';
         Notification::make()->success()->title("Tracking “{$keyword->query}”")
             ->body('Run its ranking report from the card, or wait for the Monday sweep.')->send();
+    }
+
+    /**
+     * Make a keyword a town-page PRIORITY (★) or take it off the list. A priority keyword gets its own
+     * drafted section + two FAQ items on the town pages that have the demand for it
+     * ({@see PriorityKeywords}); the sections draft and push via `launchpad:priority-sections`.
+     */
+    public function togglePriority(string $id): void
+    {
+        $site = $this->site();
+        $keyword = $site === null ? null : Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($id)->first();
+        if ($site === null || $keyword === null) {
+            return;
+        }
+        $on = $keyword->town_priority_rank === null;
+        try {
+            $keyword = app(PriorityKeywords::class)->set($site, $keyword, $on);
+        } catch (InvalidArgumentException $e) {
+            Notification::make()->warning()->title($e->getMessage())->send();
+
+            return;
+        }
+        Notification::make()->success()
+            ->title($on ? "★ “{$keyword->query}” is priority #{$keyword->town_priority_rank}" : "“{$keyword->query}” is no longer a priority")
+            ->body($on
+                ? sprintf('Town pages ≥ %s people get its own section + 2 FAQs (≥ %s: the #1 keyword only). Draft them: launchpad:priority-sections --site="%s" --execute --repush', number_format(PriorityKeywords::fullPopulation()), number_format(PriorityKeywords::partialPopulation()), $site->brand_name)
+                : 'Its sections drop from every town page on their next push.')
+            ->send();
     }
 
     /** Remove a keyword from the wall. Its collected scans are kept — adding it back restores the history. */

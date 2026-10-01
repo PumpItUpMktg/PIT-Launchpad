@@ -36,6 +36,8 @@ use App\Publishing\MetaBlobAssembler;
 use App\Publishing\PhoneNumber;
 use App\Publishing\SiteContact;
 use App\Support\BusinessHours;
+use App\TownPages\PriorityKeywords;
+use App\TownPages\PrioritySections;
 use Illuminate\Support\Collection;
 
 /**
@@ -61,6 +63,8 @@ final class BlockContentAssembler
         private readonly ServiceJobProvider $serviceJobs,
         private readonly LocationSubject $locationSubject,
         private readonly BlogFeeds $feeds,
+        private readonly PrioritySections $prioritySections,
+        private readonly PriorityKeywords $priorityKeywords,
     ) {}
 
     /**
@@ -880,6 +884,12 @@ final class BlockContentAssembler
             }
         }
 
+        // The priority keyword sections this town carries (town pages only; a keyword taken off the list
+        // drops here on the next push). Each links to its service's LIVE page and replaces that service's
+        // generic card below, so the page gains a section, not a repeat.
+        $prioritySections = $isTown ? $this->prioritySections($content) : [];
+        $sectionServiceIds = array_values(array_filter(array_column($prioritySections, 'service_id')));
+
         return $this->composer->composeLocation(
             slots: $slots,
             images: $images,
@@ -889,7 +899,8 @@ final class BlockContentAssembler
             trade: $this->trade($content),
             intro: $this->storyParagraphs($this->slotString($slots, 'loc_intro')),
             servicesIntro: $this->slotString($slots, 'loc_services_intro'),
-            serviceCards: $this->locationServiceCards($content),
+            serviceCards: $this->locationServiceCards($content, $sectionServiceIds),
+            prioritySections: $prioritySections,
             coverage: $coverage,
             reviews: $this->locationReviews($location),
             jobs: $this->locationJobs($content, $location, $isTown),
@@ -1068,9 +1079,14 @@ final class BlockContentAssembler
      * service page exists for it (materialized + actually pushed to WordPress, `wp_post_id` set);
      * otherwise it renders as text. A location page must never link a visitor to a 404.
      *
+     * The PRIORITY keywords' services lead the grid and never fall off its six-card cap (a priority service
+     * missing from a town page was the gap the sections close); a service a town page already carries as a
+     * priority SECTION is dropped from the grid, so it reads once.
+     *
+     * @param  list<string>  $exceptServiceIds  services rendered as a priority section on this page
      * @return list<array{title: string, blurb: string, url: string}>
      */
-    private function locationServiceCards(Content $content): array
+    private function locationServiceCards(Content $content, array $exceptServiceIds = []): array
     {
         $site = $this->site($content);
         $home = is_string($site?->domain_url) && trim((string) $site->domain_url) !== ''
@@ -1102,16 +1118,22 @@ final class BlockContentAssembler
             $pageByTitle[$title] = $page;
         }
 
+        $priorityIds = $this->priorityServiceIds($content);
         $services = Service::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $content->site_id)
             ->orderBy('created_at')
-            ->limit(6)
-            ->get();
+            ->get()
+            ->sortBy(fn (Service $s): int => array_search((string) $s->id, $priorityIds, true) === false ? PHP_INT_MAX : (int) array_search((string) $s->id, $priorityIds, true))
+            ->values();
+        $except = array_fill_keys($exceptServiceIds, true);
 
         $cards = [];
         foreach ($services as $service) {
             $name = trim((string) $service->name);
-            if ($name === '') {
+            if ($name === '' || isset($except[(string) $service->id])) {
+                continue;
+            }
+            if (count($cards) >= 6 && ! in_array((string) $service->id, $priorityIds, true)) {
                 continue;
             }
             // A location card used to take the service description RAW, so a service with none shipped a
@@ -1131,6 +1153,79 @@ final class BlockContentAssembler
         }
 
         return $cards;
+    }
+
+    /**
+     * The services of the site's priority keywords, rank order (ids as strings).
+     *
+     * @return list<string>
+     */
+    private function priorityServiceIds(Content $content): array
+    {
+        $site = $this->site($content);
+        if ($site === null) {
+            return [];
+        }
+        $ids = [];
+        foreach ($this->priorityKeywords->for($site) as $keyword) {
+            $service = $this->priorityKeywords->serviceFor($keyword);
+            if ($service !== null) {
+                $ids[] = (string) $service->id;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * A town page's live priority sections in the composer's shape — heading, the drafted paragraph(s),
+     * and the link to the keyword's service page WHEN that page is live (the same link rule as the cards:
+     * never a 404).
+     *
+     * @return list<array{keyword_id: string, service_id: string|null, eyebrow: string, heading: string, paragraphs: list<string>, link_text: string, link_url: string}>
+     */
+    private function prioritySections(Content $content): array
+    {
+        $live = $this->prioritySections->live($content);
+        if ($live === []) {
+            return [];
+        }
+        $site = $this->site($content);
+        $home = is_string($site?->domain_url) && trim((string) $site->domain_url) !== '' ? rtrim((string) $site->domain_url, '/').'/' : '/';
+        $pages = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Service->value)
+            ->whereNotNull('slug')
+            ->whereNotNull('wp_post_id')
+            ->whereNotNull('primary_service_id')
+            ->get(['slug', 'primary_service_id']);
+        $urlByService = [];
+        foreach ($pages as $page) {
+            $urlByService[(string) $page->primary_service_id] = $home.Permalinks::slugPath((string) $page->slug);
+        }
+        $serviceNames = Service::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->whereIn('id', array_values(array_filter(array_column($live, 'service_id'))))
+            ->pluck('name', 'id');
+
+        $out = [];
+        foreach ($live as $section) {
+            $serviceId = $section['service_id'];
+            $url = $serviceId !== null ? ($urlByService[$serviceId] ?? '') : '';
+            $serviceName = $serviceId !== null ? trim((string) ($serviceNames[$serviceId] ?? '')) : '';
+            $out[] = [
+                'keyword_id' => $section['keyword_id'],
+                'service_id' => $serviceId,
+                'eyebrow' => ucfirst($section['keyword']),
+                'heading' => $section['heading'],
+                'paragraphs' => $this->storyParagraphs($section['body']),
+                'link_text' => $url !== '' ? ($serviceName !== '' ? 'More about '.$serviceName : 'Learn more') : '',
+                'link_url' => $url,
+            ];
+        }
+
+        return $out;
     }
 
     /**
