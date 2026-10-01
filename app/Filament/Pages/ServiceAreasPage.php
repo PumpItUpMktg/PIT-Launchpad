@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Activity\ActivityRecorder;
 use App\Filament\Pages\Concerns\BuildsTownPage;
 use App\GeoGrid\CoverageRunAll;
 use App\Jobs\DraftPrioritySections;
@@ -151,6 +152,7 @@ class ServiceAreasPage extends Page
             return;
         }
         DraftPrioritySections::enqueue($page, repush: true);
+        app(ActivityRecorder::class)->record((string) $site->id, ActivityRecorder::PRIORITY_PUSH, "Priority sections queued for {$page->title} ({$status['draft']} keyword(s))", ['towns' => 1], (string) $page->title, Auth::id(), clientVisible: true);
         Notification::make()->success()
             ->title("Drafting {$page->title}")
             ->body(sprintf('%d lagging keyword(s) draft on the worker%s, then the page pushes. It reads "queued" on the map until then.', $status['draft'], $status['keep'] !== [] ? sprintf('; %d ranking keyword(s) kept as they are', count($status['keep'])) : ''))
@@ -184,6 +186,9 @@ class ServiceAreasPage extends Page
                 DraftPrioritySections::enqueue($page, repush: true);
                 $queued++;
             }
+        }
+        if ($queued > 0) {
+            app(ActivityRecorder::class)->record((string) $site->id, ActivityRecorder::PRIORITY_PUSH, sprintf('Priority sections queued for %d lagging town(s) for “%s” in %s', $queued, $card['query'], $area['location']['name']), ['towns' => $queued], (string) $card['query'], Auth::id(), clientVisible: true);
         }
         Notification::make()->success()
             ->title("Queued {$queued} town(s) for “{$card['query']}”")

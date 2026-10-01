@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Activity\ActivityRecorder;
 use App\Jobs\DraftPrioritySections;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
@@ -83,6 +84,9 @@ class PrioritySectionsCommand extends Command
             if ($page instanceof Content) {
                 DraftPrioritySections::enqueue($page, (bool) $this->option('repush'));
             }
+        }
+        if ($todo !== []) {
+            app(ActivityRecorder::class)->record((string) $site->id, ActivityRecorder::PRIORITY_PUSH, sprintf('Priority sections queued for %d town(s)%s', count($todo), $this->option('repush') ? ' with re-push' : ''), ['towns' => count($todo)], clientVisible: true);
         }
         $this->info(sprintf('Queued %d draft job(s)%s. Re-run without --execute to watch the states change.', count($todo), $this->option('repush') ? ' with re-push' : ''));
         if ($todo !== []) {

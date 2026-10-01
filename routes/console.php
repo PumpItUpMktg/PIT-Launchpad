@@ -2,6 +2,7 @@
 
 use App\Integrations\Conversions\IngestConversions;
 use App\Integrations\DataForSeo\IngestSerpTasks;
+use App\Jobs\CloseMonthlySnapshots;
 use App\Jobs\IngestCoverageScans;
 use App\Jobs\IngestTownRankScans;
 use App\Jobs\WarmTownOutlines;
@@ -34,6 +35,10 @@ Schedule::command('launchpad:check-stale-chrome')->weeklyOn(6, '04:00')->without
 // Bulk query updates and hard-delete prunes bypass model events, so a scheduled recompute-from-source
 // keeps the /admin/sites counters honest. Idempotent; daily is cheap (a handful of COUNTs per site).
 Schedule::command('launchpad:reconcile-site-counters')->daily()->withoutOverlapping()->onOneServer();
+
+// Activity log: freeze the month just ended for every site (and any earlier month still missing) — the
+// long-term progress record the Activity page reads; a closed month is never recomputed.
+Schedule::job(new CloseMonthlySnapshots)->monthlyOn(1, '03:30')->withoutOverlapping()->onOneServer();
 
 // §5 standard-mode DataForSEO ingest sweep — polls tasks_ready and collects
 // finished SERP/maps tasks into the cache the providers read (first-cut polling;
