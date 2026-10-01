@@ -250,12 +250,12 @@ it('reports every town by tier and state, and --execute queues one draft job per
 
     $plan = app(PrioritySectionPlan::class)->for($f['site']);
     expect($plan['tiers'])->toBe(['full' => 1, 'partial' => 1, 'none' => 1])
-        ->and($plan['counts'])->toBe(['current' => 0, 'missing' => 2, 'stale' => 0, 'none' => 1])
+        ->and($plan['counts'])->toBe(['current' => 0, 'missing' => 2, 'stale' => 0, 'none' => 1, 'queued' => 0])
         ->and($plan['keywords'][0]['service'])->toBe('Backup Sump Pumps');
 
     $this->artisan('launchpad:priority-sections', ['--site' => 'Sump Pump Gurus'])
         ->expectsOutputToContain('1. backup sump pump installation → Backup Sump Pumps')
-        ->expectsOutputToContain('0 current · 2 missing · 0 stale · 1 none by tier')
+        ->expectsOutputToContain('0 current · 2 missing · 0 stale · 0 queued · 1 none by tier')
         ->assertSuccessful();
     Queue::assertNothingPushed();
 
@@ -286,7 +286,7 @@ it('the job drafts, stores, and re-pushes a town page; a town below the tier dra
     expect(app(PrioritySections::class)->live($hack->fresh()))->toHaveCount(1)
         ->and($fake->prompts)->toHaveCount(1)
         ->and(app(PrioritySections::class)->stored($hamlet->fresh()))->toBe([])
-        ->and(app(PrioritySectionPlan::class)->for($f['site'])['counts'])->toBe(['current' => 1, 'missing' => 0, 'stale' => 0, 'none' => 1]);
+        ->and(app(PrioritySectionPlan::class)->for($f['site'])['counts'])->toBe(['current' => 1, 'missing' => 0, 'stale' => 0, 'none' => 1, 'queued' => 0]);
     Queue::assertPushed(PublishContent::class, 2);
     expect(Content::withoutGlobalScope(SiteScope::class)->find($hack->id)->meta['priority_sections_error'] ?? null)->toBeNull();
 });

@@ -8,6 +8,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\TownPages\PriorityKeywords;
 use App\TownPages\PrioritySectionDrafter;
+use App\TownPages\PrioritySectionStatus;
 use App\TownPages\PrioritySectionWriter;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -39,6 +40,18 @@ class DraftPrioritySections implements ShouldBeUnique, ShouldQueue
     public function uniqueId(): string
     {
         return $this->contentId;
+    }
+
+    /**
+     * Stamp the page "queued" (the Service Areas town panel reads it) and dispatch. The writer clears the
+     * stamp when the sections land or the draft fails, so a page never reads queued after the worker is done.
+     */
+    public static function enqueue(Content $page, bool $repush = false): void
+    {
+        $meta = is_array($page->meta) ? $page->meta : [];
+        $meta[PrioritySectionStatus::QUEUED_KEY] = now()->toIso8601String();
+        $page->forceFill(['meta' => $meta])->save();
+        self::dispatch((string) $page->id, $repush);
     }
 
     public function handle(PriorityKeywords $priority, PrioritySectionDrafter $drafter, PrioritySectionWriter $writer): void

@@ -65,7 +65,7 @@ final class PrioritySectionWriter
         $meta = is_array($page->meta) ? $page->meta : [];
         $meta[PrioritySections::META_KEY] = $keep;
         $meta['priority_sections_at'] = now()->toIso8601String();
-        unset($meta['priority_sections_error']);
+        unset($meta['priority_sections_error'], $meta[PrioritySectionStatus::QUEUED_KEY]);
         $page->forceFill(['meta' => $meta])->save();
 
         return ['stored' => $stored, 'refused' => $refused, 'dropped' => $dropped];
@@ -76,6 +76,7 @@ final class PrioritySectionWriter
     {
         $meta = is_array($page->meta) ? $page->meta : [];
         $meta['priority_sections_error'] = mb_substr($reason, 0, 500);
+        unset($meta[PrioritySectionStatus::QUEUED_KEY]);
         $page->forceFill(['meta' => $meta])->save();
     }
 

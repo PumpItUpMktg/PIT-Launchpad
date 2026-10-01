@@ -11,6 +11,7 @@ use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\TownRankScan;
+use App\TownPages\PrioritySectionStatus;
 
 /**
  * The per-service-area read-model (§ Town Rank): one "area" per physical location, defined by the counties
@@ -32,6 +33,7 @@ final class ServiceAreas
         private readonly TownRankReport $report,
         private readonly TownAreaMap $map,
         private readonly TownVisibility $visibility,
+        private readonly PrioritySectionStatus $sectionStatus,
     ) {}
 
     /**
@@ -161,8 +163,8 @@ final class ServiceAreas
      *     town_paths: array<string, list<string>>,
      *     cards: list<array{
      *         keyword_id: string, query: string, silo: string|null,
-     *         web: array{mode: string, status: string|null, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null,
-     *         gbp: array{scan_id: string, status: string, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null,
+     *         web: array{mode: string, status: string|null, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, unreadable: bool, sections: bool, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null,
+     *         gbp: array{scan_id: string, status: string, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, unreadable: bool, sections: bool, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null,
      *         gbp_run: array{requests: int, cost: float, pending: bool},
      *         metrics: list<array{key: string, label: string, value: string|null, note: string}>
      *     }>
@@ -190,6 +192,22 @@ final class ServiceAreas
         $project = $frame['project'];
         $townPaths = $frame['town_paths'];
         $keywordModels = $this->keywordModels($site);
+
+        // Where each town stands on its priority sections (one read for the area): the map rings the towns
+        // whose sections are live, a priority card counts the towns off page 1 it could push, and the
+        // panel's "Draft & push" knows the page to queue.
+        $populationByGeo = [];
+        foreach ($areaTowns as $t) {
+            if (trim($t['geo_id']) !== '') {
+                $populationByGeo[$t['geo_id']] = (int) $t['population'];
+            }
+        }
+        $statusByGeo = $this->sectionStatus->forGeoIds($site, $populationByGeo);
+        $statusByTown = [];
+        foreach ($areaTowns as $t) {
+            $statusByTown[$t['coverage_area_id']] = $statusByGeo[$t['geo_id']] ?? null;
+        }
+        $sectionsLive = array_keys(array_filter($statusByTown, fn (?array $st): bool => $st !== null && $st['state'] === PrioritySectionStatus::CURRENT));
 
         // Town Visibility (town search) for the area and each of its counties from ONE point query; every
         // keyword card reads its own number from the area set. A card whose only scan is searched-from-town
@@ -222,7 +240,9 @@ final class ServiceAreas
             if ($keyword === null) {
                 continue;
             }
-            $web = $this->webMap($site, $keyword, $areaIds, $coords, $project);
+            $priority = $keyword->town_priority_rank !== null ? (int) $keyword->town_priority_rank : null;
+            // The "sections live" ring belongs to the priority cards — the sections are those keywords' own.
+            $web = $this->webMap($site, $keyword, $areaIds, $coords, $project, $priority !== null ? array_fill_keys($sectionsLive, true) : []);
             $gbp = $this->gbpMap($location, $keyword, $siteTowns, $coords, $project);
             $score = match (true) {
                 $web === null => null,
@@ -234,6 +254,10 @@ final class ServiceAreas
                 'query' => (string) $keyword->query,
                 // The §4 silo, carried from the wall's own grouping so both surfaces read in the same terms.
                 'silo' => $entry['silo'],
+                'priority' => $priority,
+                // A priority keyword's towns OFF page 1 here that have a page and can carry sections — the
+                // ones "Draft & push" on this card would queue (largest first).
+                'lagging' => $priority === null || $web === null ? null : self::lagging($web['markers'], $statusByTown),
                 'web' => $web,
                 'gbp' => $gbp,
                 // The GBP report is one Maps search per town from the town's own coordinates (a coverage scan).
@@ -245,6 +269,10 @@ final class ServiceAreas
                 'metrics' => $this->metrics(count($areaTowns), $web, $gbp, $score),
             ];
         }
+
+        // Priority keywords first, in rank order, so the operator weighs them together; the rest keep the
+        // wall's silo grouping beneath.
+        usort($cards, fn (array $a, array $b): int => ($a['priority'] ?? PHP_INT_MAX) <=> ($b['priority'] ?? PHP_INT_MAX));
 
         $cityState = $location->cityState();
 
@@ -261,15 +289,43 @@ final class ServiceAreas
     }
 
     /**
+     * The towns on a priority card's map that are OFF page 1 (page 2, beyond, or not found) and have a page:
+     * `eligible` are the ones whose page can carry sections now (at or above the tier, not already queued),
+     * with their content ids largest town first — what "Draft & push" on the card queues.
+     *
+     * @param  list<array{id: string, rank: int|null, page: bool, population: int, unreadable: bool}>  $markers
+     * @param  array<string, array{content_id: string|null, state: string, eligible: bool}|null>  $statusByTown
+     * @return array{off_page1: int, eligible: int, content_ids: list<string>}
+     */
+    private static function lagging(array $markers, array $statusByTown): array
+    {
+        $off = 0;
+        $eligible = [];
+        foreach ($markers as $m) {
+            if (! $m['page'] || $m['unreadable'] || ($m['rank'] !== null && $m['rank'] <= 10)) {
+                continue;
+            }
+            $off++;
+            $st = $statusByTown[$m['id']] ?? null;
+            if ($st !== null && $st['eligible'] && $st['content_id'] !== null) {
+                $eligible[] = ['id' => $st['content_id'], 'population' => (int) $m['population']];
+            }
+        }
+        usort($eligible, fn (array $a, array $b): int => $b['population'] <=> $a['population']);
+
+        return ['off_page1' => $off, 'eligible' => count($eligible), 'content_ids' => array_column($eligible, 'id')];
+    }
+
+    /**
      * The website's town-rank map for this keyword, sliced to the area: town-search mode when it has been
      * scanned, else searched-from-town, else null (no Town Rank scan at all).
      *
      * @param  array<string, true>  $areaIds
      * @param  array<string, array{lat: float, lng: float}>  $coords
      * @param  callable(float, float): array{float, float}  $project
-     * @return array{mode: string, status: string|null, scanned_at: string|null, progress: array<string, mixed>|null, uncollected: int|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null
+     * @return array{mode: string, status: string|null, scanned_at: string|null, progress: array<string, mixed>|null, uncollected: int|null, summary: array<string, int>, markers: list<array{id: string, unreadable: bool, sections: bool, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null
      */
-    private function webMap(Site $site, Keyword $keyword, array $areaIds, array $coords, callable $project): ?array
+    private function webMap(Site $site, Keyword $keyword, array $areaIds, array $coords, callable $project, array $sectionsLive = []): ?array
     {
         $data = $this->report->forKeyword($site, $keyword);
         $mode = $data['scans'][TownRankScan::MODE_TOWN_QUERY] !== null ? TownRankScan::MODE_TOWN_QUERY : TownRankScan::MODE_LOCAL;
@@ -291,7 +347,7 @@ final class ServiceAreas
                 $summary[$state]++;
             }
             $rank = $row["{$prefix}_rank"] !== null ? (int) $row["{$prefix}_rank"] : null;
-            $markers[] = self::marker($id, $coords[$id], $project, $rank, (string) $row['label'], $row['state'], (int) $row['population'], $row['page_url'] !== null, $state === 'unreadable');
+            $markers[] = self::marker($id, $coords[$id], $project, $rank, (string) $row['label'], $row['state'], (int) $row['population'], $row['page_url'] !== null, $state === 'unreadable', isset($sectionsLive[$id]));
         }
 
         return [
@@ -317,7 +373,7 @@ final class ServiceAreas
      * @param  array<string, array<string, mixed>>  $siteTowns
      * @param  array<string, array{lat: float, lng: float}>  $coords
      * @param  callable(float, float): array{float, float}  $project
-     * @return array{scan_id: string, status: string, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null
+     * @return array{scan_id: string, status: string, scanned_at: string|null, summary: array<string, int>, markers: list<array{id: string, unreadable: bool, sections: bool, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}>}|null
      */
     private function gbpMap(Location $location, Keyword $keyword, array $siteTowns, array $coords, callable $project): ?array
     {
@@ -410,15 +466,16 @@ final class ServiceAreas
     /**
      * @param  array{lat: float, lng: float}  $c
      * @param  callable(float, float): array{float, float}  $project
-     * @return array{id: string, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}
+     * @return array{id: string, unreadable: bool, sections: bool, x: float, y: float, rank: int|null, color: string, label: string, population: int, page: bool}
      */
-    private static function marker(string $id, array $c, callable $project, ?int $rank, string $name, ?string $state, int $population, bool $page, bool $unreadable = false): array
+    private static function marker(string $id, array $c, callable $project, ?int $rank, string $name, ?string $state, int $population, bool $page, bool $unreadable = false, bool $sections = false): array
     {
         [$x, $y] = $project($c['lat'], $c['lng']);
 
         return [
             'id' => $id,
             'unreadable' => $unreadable,
+            'sections' => $sections,
             'x' => $x,
             'y' => $y,
             'rank' => $rank,
