@@ -5,6 +5,8 @@ use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\MunicipalityType;
 use App\Enums\PageType;
+use App\Enums\UserRole;
+use App\Filament\Pages\TownRankPage;
 use App\Jobs\DraftPrioritySections;
 use App\Jobs\PublishContent;
 use App\Models\Content;
@@ -15,6 +17,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\SiloBlueprint;
 use App\Models\Site;
+use App\Models\User;
 use App\Models\WireframeKit;
 use App\Publishing\Blocks\BlockContentAssembler;
 use App\TownPages\PriorityKeywords;
@@ -25,6 +28,7 @@ use App\TownPages\PrioritySectionWriter;
 use App\TownPages\SectionUniqueness;
 use Database\Seeders\WireframeKitSeeder;
 use Illuminate\Support\Facades\Queue;
+use Livewire\Livewire;
 use Tests\Support\FakeClaudeClient;
 
 /**
@@ -280,4 +284,21 @@ it('the job drafts, stores, and re-pushes a town page; a town below the tier dra
         ->and(app(PrioritySectionPlan::class)->for($f['site'])['counts'])->toBe(['current' => 1, 'missing' => 0, 'stale' => 0, 'none' => 1]);
     Queue::assertPushed(PublishContent::class, 2);
     expect(Content::withoutGlobalScope(SiteScope::class)->find($hack->id)->meta['priority_sections_error'] ?? null)->toBeNull();
+});
+
+it('the Town Rank wall stars a keyword as priority and un-stars it, with the rank on the card', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $f = prioritySite();
+
+    Livewire::test(TownRankPage::class)
+        ->set('siteId', $f['site']->id)
+        ->assertOk()
+        ->assertSee('☆ Priority')
+        ->call('togglePriority', $f['keyword']->id)
+        ->assertSee('★ Priority #1')
+        ->call('togglePriority', $f['keyword']->id)
+        ->assertSee('☆ Priority')
+        ->assertDontSee('★ Priority #1');
+
+    expect($f['keyword']->fresh()->town_priority_rank)->toBeNull();
 });
