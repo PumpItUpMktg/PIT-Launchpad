@@ -14,8 +14,9 @@ use App\Models\Site;
 /**
  * The report behind `launchpad:priority-sections`: every published town page of a site with its population
  * tier, the priority keywords it should carry, and whether its stored sections already match (current),
- * need drafting (missing / stale — the keyword set changed) or carry none by tier. Read-only; the command
- * dispatches {@see DraftPrioritySections} for the pages that need work.
+ * need drafting (missing / stale — the keyword set changed) or carry none by tier, LARGEST TOWN FIRST so
+ * the command's `--limit` takes a wave of the biggest towns. Read-only; the command dispatches
+ * {@see DraftPrioritySections} for the pages that need work.
  */
 final class PrioritySectionPlan
 {
@@ -90,6 +91,9 @@ final class PrioritySectionPlan
                 'error' => is_array($page->meta) && isset($page->meta['priority_sections_error']) ? (string) $page->meta['priority_sections_error'] : null,
             ];
         }
+
+        // Largest town first: a `--limit` wave is the biggest towns, where the searches are, and ties read A→Z.
+        usort($rows, fn (array $a, array $b): int => [$b['population'], $a['title']] <=> [$a['population'], $b['title']]);
 
         return [
             'keywords' => array_map(fn ($k): array => [

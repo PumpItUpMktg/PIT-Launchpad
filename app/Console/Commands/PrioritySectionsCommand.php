@@ -21,7 +21,7 @@ class PrioritySectionsCommand extends Command
         {--execute : queue a draft job per page that needs sections}
         {--repush : each job pushes its page to WordPress once drafted}
         {--all : with --execute, redraft pages whose sections are current too}
-        {--limit= : with --execute, queue at most this many pages}';
+        {--limit= : with --execute, queue at most this many pages — the largest towns first, so each run is one wave}';
 
     protected $description = 'Report (and with --execute, draft) the priority keyword sections on a site\'s town pages';
 
@@ -79,6 +79,14 @@ class PrioritySectionsCommand extends Command
             DraftPrioritySections::dispatch($p['content_id'], (bool) $this->option('repush'));
         }
         $this->info(sprintf('Queued %d draft job(s)%s. Re-run without --execute to watch the states change.', count($todo), $this->option('repush') ? ' with re-push' : ''));
+        if ($todo !== []) {
+            $last = $todo[count($todo) - 1];
+            $this->line(sprintf(
+                '  This wave: %s%s.',
+                implode(', ', array_map(fn (array $p): string => $p['title'].' ('.number_format($p['population']).')', array_slice($todo, 0, 5))),
+                count($todo) > 5 ? ', … down to '.$last['title'].' ('.number_format($last['population']).')' : '',
+            ));
+        }
 
         return self::SUCCESS;
     }
