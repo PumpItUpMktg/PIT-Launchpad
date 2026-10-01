@@ -81,6 +81,9 @@
     .trk .t-run:disabled { opacity:.55; cursor:default; }
     .trk .t-rm { font-size:12px; border:1px solid var(--t-line); color:var(--t-muted); background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; margin-left:auto; }
     .trk .t-rm:hover { border-color:#c0392b; color:#c0392b; }
+    .trk .t-star { font-size:12px; border:1px solid var(--t-line); color:var(--t-muted); background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; }
+    .trk .t-star.on { border-color:#b45309; color:#b45309; font-weight:600; }
+    .trk .t-star:hover { border-color:#b45309; color:#b45309; }
     .trk .t-silo { display:flex; align-items:baseline; gap:8px; margin:22px 0 10px; }
     .trk .t-silo:first-of-type { margin-top:4px; }
     .trk .t-silo h3 { font-size:13px; font-weight:800; margin:0; }
@@ -102,7 +105,7 @@
         <div class="t-add">
             <input type="text" wire:model="newKeyword" wire:keydown.enter="addKeyword" placeholder="Add a keyword to track, e.g. sump pump repair" aria-label="Add keyword">
             <button type="button" wire:click="addKeyword" wire:loading.attr="disabled" wire:target="addKeyword">Add keyword</button>
-            <span class="t-note" style="margin:0">A tracked keyword gets a card, a Run button, and joins the Monday sweep.</span>
+            <span class="t-note" style="margin:0">A tracked keyword gets a card, a Run button, and joins the Monday sweep. ★ marks up to {{ \App\TownPages\PriorityKeywords::max() }} priority keywords: each gets its own section on the town pages big enough to search for it.</span>
         </div>
         {{-- Sitewide run: every keyword DUE for a re-scan, priced before it spends. The count and cost come
              from the same plan the run itself uses, so what is agreed to is what is posted. --}}
@@ -212,6 +215,10 @@
                                 {{ $card['pending'] ? 'Collecting…' : 'Run ranking report' }}
                             </button>
                             <span>{{ $card['pending'] ? 'a report is collecting — the card updates as results land' : number_format($runRequests).' requests · ~$'.number_format($runCost, 2) }}</span>
+                            <button type="button" class="t-star {{ $card['priority'] !== null ? 'on' : '' }}" wire:click="togglePriority('{{ $card['keyword_id'] }}')" wire:loading.attr="disabled" wire:target="togglePriority"
+                                    title="{{ $card['priority'] !== null ? 'Priority #'.$card['priority'].' — its own section on town pages. Click to take it off the list.' : 'Make this a town-page priority keyword (its own drafted section on the towns big enough to search for it)' }}">
+                                {{ $card['priority'] !== null ? '★ Priority #'.$card['priority'] : '☆ Priority' }}
+                            </button>
                             <button type="button" class="t-rm" wire:click="removeKeyword('{{ $card['keyword_id'] }}')" wire:loading.attr="disabled" wire:target="removeKeyword"
                                     wire:confirm="Remove “{{ $card['query'] }}” from the wall and the weekly sweep?{{ $card['scanned_at'] !== null ? ' Its collected scans are kept — add the keyword back and the history returns.' : '' }}">Remove</button>
                         </div>

@@ -38,7 +38,7 @@ final class TownRankBoard
      * set). Scanned keywords first, most recent first; unscanned after, by query. `pending` = a scan is
      * still collecting. A removed keyword keeps its scans — re-add it and its history comes back.
      *
-     * @return list<array{keyword_id: string, query: string, silo_id: string|null, silo: string|null, scanned_at: string|null, pending: bool}>
+     * @return list<array{keyword_id: string, query: string, silo_id: string|null, silo: string|null, scanned_at: string|null, pending: bool, priority: int|null}>
      */
     public function keywords(Site $site): array
     {
@@ -55,7 +55,7 @@ final class TownRankBoard
             // `track_town_rank`, so removing it from the wall is a flag change, not a data deletion.
             ->where(fn ($q) => $q->where('track_town_rank', true)->orWhere('is_grid_keyword', true))
             ->orderBy('query')
-            ->get(['id', 'query', 'silo_id'])
+            ->get(['id', 'query', 'silo_id', 'town_priority_rank'])
             ->keyBy('id');
 
         // The silo each keyword belongs to — the wall's grouping. §4 named these; the wall borrows the name
@@ -84,6 +84,7 @@ final class TownRankBoard
                 'silo' => $siloName($keyword->silo_id !== null ? (string) $keyword->silo_id : null),
                 'scanned_at' => $scan->scanned_at?->toDateTimeString(),
                 'pending' => $pendingIds->has($scan->keyword_id),
+                'priority' => $keyword->town_priority_rank !== null ? (int) $keyword->town_priority_rank : null,
             ];
         }
         $scannedIds = array_flip(array_column($out, 'keyword_id'));
@@ -98,6 +99,7 @@ final class TownRankBoard
                 'silo' => $siloName($keyword->silo_id !== null ? (string) $keyword->silo_id : null),
                 'scanned_at' => null,
                 'pending' => false,
+                'priority' => $keyword->town_priority_rank !== null ? (int) $keyword->town_priority_rank : null,
             ];
         }
 
@@ -168,7 +170,7 @@ final class TownRankBoard
      * one). Click-through opens {@see for()} for the keyword.
      *
      * @return list<array{
-     *     keyword_id: string, query: string, silo_id: string|null, silo: string|null, scanned_at: string|null, pending: bool, towns: int, thumbnail_mode: string, has_previous: bool,
+     *     keyword_id: string, query: string, priority: int|null, silo_id: string|null, silo: string|null, scanned_at: string|null, pending: bool, towns: int, thumbnail_mode: string, has_previous: bool,
      *     modes: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}|null>,
      *     progress: array<string, array{collected: int, points: int, remaining: int, eta_seconds: int|null, eta: string|null}|null>,
      *     uncollected: array<string, int|null>,
@@ -216,6 +218,7 @@ final class TownRankBoard
             $cards[] = [
                 'keyword_id' => (string) $keyword->id,
                 'query' => $data['keyword'],
+                'priority' => $entry['priority'],
                 'silo_id' => $entry['silo_id'],
                 'silo' => $entry['silo'],
                 'scanned_at' => $entry['scanned_at'],

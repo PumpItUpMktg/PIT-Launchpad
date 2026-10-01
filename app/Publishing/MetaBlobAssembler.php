@@ -37,6 +37,7 @@ use App\Publishing\Seo\LocationTitle;
 use App\Support\PublicUrl;
 use App\Support\SeoTitle;
 use App\Support\ServiceAreaTitle;
+use App\TownPages\PrioritySections;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -76,6 +77,7 @@ class MetaBlobAssembler
         private readonly SiloIndexResolver $siloIndex,
         private readonly LocationTitle $locationTitle,
         private readonly BlogFeeds $feeds,
+        private readonly PrioritySections $prioritySections,
     ) {}
 
     /**
@@ -453,6 +455,16 @@ class MetaBlobAssembler
                 // Resolve the derived conversion slots AFTER the scrub so the GHL
                 // form-embed HTML is never token-stripped.
                 $slots = $this->resolveConversionSlots($content, $slots, $schema);
+            }
+
+            // A town page's priority-keyword Q&As join its FAQ slot HERE, the one list the rendered
+            // accordion and the plugin's FAQPage schema both read — the stored slot stays the drafter's.
+            if ($content->page_type === PageType::Location && $content->location_id === null && $content->parent_location_id !== null) {
+                $faqs = is_array($slots['faq'] ?? null) ? array_values($slots['faq']) : [];
+                $merged = $this->prioritySections->withFaqs($content, $faqs);
+                if ($merged !== $faqs) {
+                    $slots['faq'] = $merged;
+                }
             }
         }
 

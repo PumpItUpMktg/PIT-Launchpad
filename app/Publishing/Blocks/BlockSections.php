@@ -808,6 +808,30 @@ final class BlockSections
     }
 
     /**
+     * A town page's PRIORITY KEYWORD section: an H2 that names the keyword and the town, the drafted
+     * paragraph, and ONE link to the keyword's service page (text only when no live page exists). Same
+     * bones as {@see prose}; the link is the one thing the prose block never carries.
+     *
+     * @param  list<string>  $paragraphs
+     */
+    public function keywordSection(string $eyebrow, string $heading, array $paragraphs, string $linkText = '', string $linkUrl = ''): string
+    {
+        $paragraphs = array_values(array_filter(array_map('trim', $paragraphs), fn (string $p): bool => $p !== ''));
+        if (trim($heading) === '' || $paragraphs === []) {
+            return '';
+        }
+        $children = [$this->sectionHead($eyebrow, $heading)];
+        foreach ($paragraphs as $p) {
+            $children[] = $this->b->paragraph($this->text($p), ['className' => 'lp-prose-p']);
+        }
+        if (trim($linkText) !== '' && trim($linkUrl) !== '') {
+            $children[] = $this->b->paragraph('<a href="'.$this->text($linkUrl).'">'.$this->text($linkText).'</a>', ['className' => 'lp-prose-p lp-prose-link']);
+        }
+
+        return $this->b->group($children, ['align' => 'full', 'className' => $this->sectionClass('lp-prose lp-keyword-section', false)]);
+    }
+
+    /**
      * The service-description row WITH a lead form beside it: a 60/40 two-column — the prose copy on
      * the left (60%), the embedded form in a card on the right (40%, the plugin's `[lp_form]`
      * shortcode). Used in place of {@see prose} on the service page's "What this service covers" block
