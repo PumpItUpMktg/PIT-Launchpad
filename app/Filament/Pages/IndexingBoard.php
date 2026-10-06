@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Enums\ContentKind;
 use App\Jobs\ComputeStuckPages;
+use App\Jobs\PublishContent;
 use App\Jobs\SyncSiteMetrics;
 use App\Metrics\Providers\IndexMetricProvider;
 use App\Models\Content;
@@ -208,6 +209,21 @@ class IndexingBoard extends Page
      * offers: §2's delete by ULID, then the row goes back to Candidates. Only a post, only in the locked
      * tenant; a page is never dropped from here.
      */
+    /** Re-push a page whose push never landed / drifted / fell out of the sitemap (the reachability REPUSH lever). */
+    public function repushPage(string $contentId): void
+    {
+        $content = $this->siteId === null ? null : Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $this->siteId)->whereKey($contentId)->first();
+        if ($content === null) {
+            return;
+        }
+        PublishContent::dispatch((string) $content->id, Auth::id());
+        $this->whyId = null;
+        Cache::forget(ComputeStuckPages::cacheKey((string) $this->siteId));
+        Notification::make()->success()->title("Re-pushing {$content->title}")
+            ->body('The page is composed and pushed again on the same URL; the sitemap picks it up on the next read. Re-check indexing in a day or two.')->send();
+    }
+
     public function takeDownPost(string $contentId): void
     {
         $content = $this->siteId === null ? null : Content::withoutGlobalScope(SiteScope::class)

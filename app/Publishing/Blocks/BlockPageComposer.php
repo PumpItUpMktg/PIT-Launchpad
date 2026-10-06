@@ -820,9 +820,10 @@ final class BlockPageComposer
      * With nothing published yet it says so instead of rendering an empty page.
      *
      * @param  array<string, mixed>  $slots
-     * @param  list<array{silo: string, posts: list<array{title: string, url: string, date: string}>}>  $groups
+     * @param  list<array{silo: string, pillar?: array{title: string, url: string}|null, posts: list<array{title: string, url: string, date: string, excerpt?: string}>}>  $groups
+     * @param  list<array{title: string, url: string, date: string, image: string, image_alt: string}>  $latest
      */
-    public function composeBlogIndex(array $slots, PageContext $ctx, array $groups, bool $preview = false): string
+    public function composeBlogIndex(array $slots, PageContext $ctx, array $groups, bool $preview = false, array $latest = []): string
     {
         $hero = $this->sections->hero(
             eyebrow: 'From the blog',
@@ -836,6 +837,15 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
+        // The hub opens on real articles — the newest six as cards — then the complete topic map beneath:
+        // each silo led by its pillar guide, every post with its one-line excerpt. A page of bare titles
+        // is the thin hub Google crawls and declines; this one carries what each article is about.
+        $latestBlock = $latest === [] ? '' : $this->sections->localPosts(
+            eyebrow: 'Latest',
+            heading: 'New on the blog',
+            posts: $latest,
+        );
+
         $index = $this->sections->postIndex('Every article', 'Browse by topic', $groups, $preview);
 
         $cta = $this->sections->cta(
@@ -846,7 +856,7 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $index, $cta]);
+        return $this->join([$hero, $latestBlock, $index, $cta]);
     }
 
     /**

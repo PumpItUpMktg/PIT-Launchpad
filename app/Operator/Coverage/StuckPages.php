@@ -44,12 +44,16 @@ class StuckPages
 
     public const WAIT = 'wait';
 
+    /** The page's push never landed, drifted, or fell out of the sitemap: re-push it. */
+    public const REPUSH = 'repush';
+
     public const REWORK = 'rework';
 
     public function __construct(
         private readonly IndexWatchlist $watchlist,
         private readonly InternalLinkGraph $graph,
         private readonly PageImpressions $impressions,
+        private readonly Reachability $reachability,
     ) {}
 
     /**
@@ -69,6 +73,16 @@ class StuckPages
         $everSeen = $this->impressions->ever($site, $pages);
         $kinds = $pages->mapWithKeys(fn (Content $c): array => [(string) $c->id => $c->kind])->all();
 
+        // A page UNKNOWN to Google is never a content question: the reachability check says whether the
+        // push landed, the URL agrees, the sitemap lists it, Search Console has read the sitemap, and an
+        // indexed page links to it — one read for all of them.
+        $reach = [];
+        if (array_filter($stuck, fn (array $r): bool => $r['verdict'] === IndexCoverageState::Unknown->value) !== []) {
+            foreach ($this->reachability->for($site)['pages'] as $p) {
+                $reach[$p['content_id']] = $p;
+            }
+        }
+
         $rows = [];
         $byLever = [];
         $markets = [];
@@ -76,7 +90,9 @@ class StuckPages
             $inbound = count($graph->inbound($row['content_id']));
             $isPost = ($kinds[$row['content_id']] ?? null) === ContentKind::Post;
             $seen = isset($everSeen[$row['content_id']]);
-            [$lever, $action] = $this->lever($row['verdict'], $inbound, $isPost, $seen);
+            [$lever, $action] = isset($reach[$row['content_id']])
+                ? self::reachabilityLever($reach[$row['content_id']])
+                : $this->lever($row['verdict'], $inbound, $isPost, $seen);
             $rows[] = [
                 'content_id' => $row['content_id'],
                 'title' => $row['title'],
@@ -97,6 +113,7 @@ class StuckPages
                     default => self::WAIT,
                 },
                 'is_post' => $isPost,
+                'reachability' => $reach[$row['content_id']] ?? null,
             ];
             $byLever[$lever] = ($byLever[$lever] ?? 0) + 1;
             if ($lever === self::LINK && $row['market_id'] !== null) {
@@ -113,6 +130,22 @@ class StuckPages
             'stuck_days' => $stuckDays,
             'markets_needing_links' => array_keys($markets),
         ];
+    }
+
+    /**
+     * The lever for a page unknown to Google, from its reachability verdict.
+     *
+     * @param  array{verdict: string, action: string}  $r
+     * @return array{0: string, 1: string}
+     */
+    private static function reachabilityLever(array $r): array
+    {
+        return match ($r['verdict']) {
+            Reachability::MISSING_ON_SITE, Reachability::URL_MISMATCH, Reachability::NOT_IN_SITEMAP => [self::REPUSH, $r['action']],
+            Reachability::SITEMAP_STALE => [self::PING, $r['action']],
+            Reachability::ORPHAN => [self::LINK, $r['action']],
+            default => [self::PING, $r['action']],
+        };
     }
 
     /** @return array{0: string, 1: string} [lever, the sentence] */

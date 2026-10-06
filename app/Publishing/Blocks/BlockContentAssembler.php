@@ -127,7 +127,7 @@ final class BlockContentAssembler
         }
 
         if ($content->standard_type === StandardPageType::Blog) {
-            return $this->composer->composeBlogIndex($slots, $ctx, $this->blogIndex($content), $preview);
+            return $this->composer->composeBlogIndex($slots, $ctx, $this->blogIndex($content), $preview, $this->latestPosts($content));
         }
 
         if ($content->standard_type === StandardPageType::AreasWeServe) {
@@ -1328,12 +1328,59 @@ final class BlockContentAssembler
     {
         return array_map(fn (array $group): array => [
             'silo' => $group['silo'],
+            'pillar' => $group['pillar'],
             'posts' => $group['posts']->map(fn (Content $p): array => [
                 'title' => (string) $p->title,
                 'url' => '/'.Permalinks::slugPath((string) $p->slug),
                 'date' => $p->published_at?->format('M j, Y') ?? '',
+                'excerpt' => self::excerpt($p),
             ])->all(),
         ], $this->feeds->index((string) $content->site_id));
+    }
+
+    /**
+     * The newest published posts as feed cards (title + link + date + hero image) — the Blog hub's
+     * "Latest" strip, so the page opens on real articles rather than a list of titles.
+     *
+     * @return list<array{title: string, url: string, date: string, image: string, image_alt: string}>
+     */
+    private function latestPosts(Content $content, int $limit = 6): array
+    {
+        $posts = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $content->site_id)
+            ->where('kind', ContentKind::Post->value)
+            ->where('status', ContentStatus::Published->value)
+            ->whereNotNull('slug')
+            ->orderByDesc('published_at')
+            ->limit($limit)
+            ->get();
+
+        return $posts->isEmpty() ? [] : $this->postFeed($posts);
+    }
+
+    /**
+     * A post's one-line excerpt for the index: its drafted meta description, else the first sentence or so
+     * of its body, plain text, ~160 characters. Empty when neither exists.
+     */
+    private static function excerpt(Content $post): string
+    {
+        $meta = is_array($post->meta) ? $post->meta : [];
+        $seo = is_array($meta['seo'] ?? null) ? $meta['seo'] : [];
+        $text = trim((string) ($seo['meta_description'] ?? ''));
+        if ($text === '') {
+            $body = is_string($post->body) ? $post->body : '';
+            $text = trim((string) preg_replace('/\s+/', ' ', html_entity_decode(strip_tags($body))));
+        }
+        if ($text === '') {
+            return '';
+        }
+        if (mb_strlen($text) > 160) {
+            $cut = mb_substr($text, 0, 160);
+            $space = mb_strrpos($cut, ' ');
+            $text = ($space !== false && $space > 100 ? mb_substr($cut, 0, $space) : $cut).'…';
+        }
+
+        return $text;
     }
 
     /**
