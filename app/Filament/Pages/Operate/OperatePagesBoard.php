@@ -27,6 +27,7 @@ use App\Operate\PagesBoard;
 use App\Operate\QueueHealth;
 use App\Operator\ActiveTenant;
 use App\Publishing\DeleteFromWordpress;
+use App\Publishing\Drip\PublishDrip;
 use App\Publishing\Links\HubSpokeGuard;
 use App\Publishing\PostPublisher;
 use App\Security\Audit;
@@ -476,16 +477,88 @@ abstract class OperatePagesBoard extends OperatePage
     }
 
     /** The actual publish, past the ordering guard. */
-    private function doPublish(Content $content): void
+    private function doPublish(Content $content, bool $skipDrip = false): void
     {
-        $result = app(ReviewActions::class)->publish($content, Auth::id());
+        $result = app(ReviewActions::class)->publish($content, Auth::id(), $skipDrip);
         if ($result->isBlocked()) {
             Notification::make()->danger()->title('Cannot publish')->body($result->blockedReason)->send();
 
             return;
         }
+        if ($result->isQueued()) {
+            Notification::make()->success()->title("Queued to publish — #{$result->queuePosition} in line")
+                ->body('The publish drip releases it when the earlier batch is indexed. Release a batch now, or publish this one past the queue, from the drip panel.')->send();
+
+            return;
+        }
 
         Notification::make()->success()->title('Publishing — composing and pushing to WordPress')->send();
+    }
+
+    // ── Publish drip (§ Publish drip) ───────────────────────────────────────
+
+    /** @return array<string, mixed> */
+    public function getDripProperty(): array
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return ['settings' => ['enabled' => false, 'batch' => 10, 'stale_days' => 21], 'in_flight' => [], 'queued' => [], 'slots' => 0, 'positions' => []];
+        }
+        $status = app(PublishDrip::class)->status($site);
+        $positions = [];
+        foreach ($status['queued'] as $i => $row) {
+            $positions[$row['content_id']] = $i + 1;
+        }
+
+        return $status + ['positions' => $positions];
+    }
+
+    public function toggleDrip(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+        $next = app(PublishDrip::class)->configure($site, ['enabled' => ! $site->publishDrip()['enabled']]);
+        Notification::make()->success()->title($next['enabled'] ? 'Publish drip on' : 'Publish drip off')
+            ->body($next['enabled']
+                ? sprintf('First-time publishes queue and go live %d at a time, the next batch once the previous one is indexed.', $next['batch'])
+                : 'Publish pushes straight to WordPress again. Pages already queued stay queued until released.')
+            ->send();
+    }
+
+    public function setDripBatch(int $batch): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+        $next = app(PublishDrip::class)->configure($site, ['batch' => $batch]);
+        Notification::make()->success()->title("Batch size: {$next['batch']}")->send();
+    }
+
+    /** Release the next batch now (as many as there are slots), without waiting for the hourly run. */
+    public function releaseDrip(): void
+    {
+        $site = $this->getSite();
+        if ($site === null) {
+            return;
+        }
+        $released = app(PublishDrip::class)->release($site, actorId: Auth::id());
+        Notification::make()->{$released === [] ? 'warning' : 'success'}()
+            ->title($released === [] ? 'Nothing released' : 'Releasing '.count($released).' page(s)')
+            ->body($released === [] ? 'Either the queue is empty or every slot is taken by a page still waiting for Google.' : 'Composing and pushing to WordPress now.')
+            ->send();
+    }
+
+    /** Publish ONE page past the queue — the operator's explicit choice. */
+    public function publishNow(string $contentId): void
+    {
+        $content = $this->ownedPage($contentId);
+        if ($content === null) {
+            return;
+        }
+        $this->doPublish($content, skipDrip: true);
     }
 
     /** Repush is publish on an already-live card — same idempotent path, same URL. */

@@ -211,7 +211,7 @@ class Grow extends GuidedPage
             return;
         }
 
-        $notification = Notification::make()->success()->title('Publishing — composing and pushing to WordPress');
+        $notification = Notification::make()->success()->title($result->isQueued() ? "Queued to publish — #{$result->queuePosition} in line (the drip releases it as earlier pages are indexed)" : 'Publishing — composing and pushing to WordPress');
         if ($result->warnings !== []) {
             $notification->body(implode(' ', $result->warnings));
         }

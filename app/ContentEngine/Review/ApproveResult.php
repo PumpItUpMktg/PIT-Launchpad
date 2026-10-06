@@ -16,6 +16,7 @@ final class ApproveResult
         public readonly bool $dispatched,
         public readonly ?string $blockedReason,
         public readonly array $warnings,
+        public readonly ?int $queuePosition = null,
     ) {}
 
     /**
@@ -29,6 +30,22 @@ final class ApproveResult
     public static function blocked(string $reason): self
     {
         return new self(false, false, $reason, []);
+    }
+
+    /**
+     * Accepted but NOT pushed: the publish drip queued it (§ Publish drip) — it goes live when the
+     * earlier batch is indexed. `$position` is its place in the site's queue.
+     *
+     * @param  list<string>  $warnings
+     */
+    public static function queued(int $position, array $warnings = []): self
+    {
+        return new self(true, false, null, $warnings, $position);
+    }
+
+    public function isQueued(): bool
+    {
+        return $this->queuePosition !== null;
     }
 
     public function isBlocked(): bool

@@ -176,6 +176,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Publish drip
+    |--------------------------------------------------------------------------
+    | First-time publishes don't all go live at once. With the drip on, "Publish"
+    | queues the page and the drip releases `batch` pages at a time: a new page
+    | goes out only when fewer than `batch` recently published pages are still
+    | waiting for Google to index them. A page waiting longer than `stale_days`
+    | stops counting (the Indexing board owns it), so one stubborn page never
+    | blocks the queue. Re-pushes of live pages are never queued. Per-tenant
+    | overrides live in `sites.publish_drip` (see Site::publishDrip()).
+    */
+    'publish_drip' => [
+        'enabled' => (bool) env('LAUNCHPAD_PUBLISH_DRIP_ENABLED', false),
+        'batch' => (int) env('LAUNCHPAD_PUBLISH_DRIP_BATCH', 10),
+        'stale_days' => (int) env('LAUNCHPAD_PUBLISH_DRIP_STALE_DAYS', 21),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Link plan on tier unlock
     |--------------------------------------------------------------------------
     |
@@ -395,6 +413,11 @@ return [
             'max_targets' => (int) env('LAUNCHPAD_INDEX_BOOST_MAX_TARGETS', 25),  // new pages boosted per run
             'max_sources_per_target' => (int) env('LAUNCHPAD_INDEX_BOOST_MAX_SOURCES', 3),
             'max_links_per_source' => (int) env('LAUNCHPAD_INDEX_BOOST_MAX_LINKS_PER_SOURCE', 3),  // anti-bloat
+            // After a publish-drip release: link the new pages from the highest-ranking relevant indexed pages
+            // (office hub, silo pillar, sibling towns — Search-Console-ranked) and re-push those sources once,
+            // this many minutes after the release so the pushes have landed.
+            'on_release' => (bool) env('LAUNCHPAD_INDEX_BOOST_ON_RELEASE', true),
+            'release_delay_minutes' => (int) env('LAUNCHPAD_INDEX_BOOST_RELEASE_DELAY', 15),
         ],
     ],
 

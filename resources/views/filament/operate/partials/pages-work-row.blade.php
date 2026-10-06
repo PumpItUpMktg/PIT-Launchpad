@@ -35,7 +35,13 @@
             @elseif ($action === 'approve')
                 <button class="lv-btn primary" wire:click="approve('{{ $row['id'] }}')">Approve</button>
             @elseif ($action === 'publish')
-                <button class="lv-btn primary" wire:click="publish('{{ $row['id'] }}')">Publish</button>
+                @php($dripPos = $this->drip['positions'][$row['id']] ?? null)
+                @if ($dripPos !== null)
+                    <span class="pb-tone" title="Queued by the publish drip — releases as earlier pages are indexed">Queued #{{ $dripPos }}</span>
+                    <button class="lv-btn" wire:click="publishNow('{{ $row['id'] }}')" wire:confirm="Publish '{{ $row['title'] }}' now, past the drip queue?">Publish now</button>
+                @else
+                    <button class="lv-btn primary" wire:click="publish('{{ $row['id'] }}')">{{ ($this->drip['settings']['enabled'] ?? false) && empty($row['live_url']) ? 'Queue to publish' : 'Publish' }}</button>
+                @endif
             @elseif ($action === 'review')
                 <a class="lv-btn" href="{{ \App\Filament\Pages\ProofEditor::getUrl(['content' => $row['id']]) }}" wire:navigate>Review</a>
             @elseif ($action === 'view' && $row['live_url'])
