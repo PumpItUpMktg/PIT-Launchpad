@@ -13,6 +13,7 @@ use App\Models\Site;
 use App\Operator\ActiveTenant;
 use App\Operator\Coverage\IndexStandings;
 use App\Operator\Coverage\IndexWatchlist;
+use App\Operator\Coverage\ReworkCandidates;
 use App\Publishing\DeleteFromWordpress;
 use BackedEnum;
 use Carbon\Carbon;
@@ -209,6 +210,57 @@ class IndexingBoard extends Page
      * offers: §2's delete by ULID, then the row goes back to Candidates. Only a post, only in the locked
      * tenant; a page is never dropped from here.
      */
+    /** Rework a crawled-and-declined page: store the index brief and regenerate (page or post flow). Never prunes. */
+    public function reworkPage(string $contentId): void
+    {
+        $site = $this->siteId === null ? null : Site::withoutGlobalScopes()->find($this->siteId);
+        if ($site === null) {
+            return;
+        }
+        $result = app(ReworkCandidates::class)->apply($site, [$contentId], Auth::id());
+        $this->whyId = null;
+        Cache::forget(ComputeStuckPages::cacheKey((string) $this->siteId));
+        if ($result['queued'] === 0) {
+            Notification::make()->warning()->title('Not reworked')->body('This page is not a rework candidate (a duplicate is merged, an off-topic post dropped — from this panel).')->send();
+
+            return;
+        }
+        Notification::make()->success()->title('Rework queued')
+            ->body('It redrafts with the index brief on the worker and returns to the review queue; approve to re-push, then re-check indexing in a few weeks.')->send();
+    }
+
+    /** Merge a duplicate post into the post it duplicates: a 301 plus the take-down. Pages are never merged. */
+    public function mergePost(string $contentId): void
+    {
+        $site = $this->siteId === null ? null : Site::withoutGlobalScopes()->find($this->siteId);
+        $content = $site === null ? null : Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($contentId)->first();
+        if ($site === null || $content === null) {
+            return;
+        }
+        $row = collect(app(ReworkCandidates::class)->for($site)['rows'])->firstWhere('content_id', $contentId);
+        $target = is_array($row) && is_array($row['duplicate_of'] ?? null)
+            ? Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($row['duplicate_of']['content_id'])->first()
+            : null;
+        if ($target === null) {
+            Notification::make()->warning()->title('Nothing to merge into')->body('No live duplicate was found for this post.')->send();
+
+            return;
+        }
+        try {
+            $result = app(ReworkCandidates::class)->merge($content, $target, Auth::id());
+        } catch (\InvalidArgumentException $e) {
+            Notification::make()->warning()->title('Cannot merge')->body($e->getMessage())->send();
+
+            return;
+        }
+        $this->whyId = null;
+        Cache::forget(ComputeStuckPages::cacheKey((string) $this->siteId));
+        ComputeStuckPages::request((string) $this->siteId);
+        Notification::make()->{$result['deleted'] ? 'success' : 'warning'}()
+            ->title($result['deleted'] ? "Merged into “{$target->title}”" : 'Redirect set, take-down failed')
+            ->body(($result['deleted'] ? 'A 301 now points its URL at the stronger post; ' : '').$result['message'])->send();
+    }
+
     /** Re-push a page whose push never landed / drifted / fell out of the sitemap (the reachability REPUSH lever). */
     public function repushPage(string $contentId): void
     {

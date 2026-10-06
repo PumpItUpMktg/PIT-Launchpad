@@ -47,6 +47,9 @@ class StuckPages
     /** The page's push never landed, drifted, or fell out of the sitemap: re-push it. */
     public const REPUSH = 'repush';
 
+    /** A post that duplicates a live post: merge it into the stronger one (redirect + take-down). */
+    public const MERGE = 'merge';
+
     public const REWORK = 'rework';
 
     public function __construct(
@@ -54,6 +57,7 @@ class StuckPages
         private readonly InternalLinkGraph $graph,
         private readonly PageImpressions $impressions,
         private readonly Reachability $reachability,
+        private readonly ReworkCandidates $rework,
     ) {}
 
     /**
@@ -83,6 +87,15 @@ class StuckPages
             }
         }
 
+        // A page Google CRAWLED and declined, past the rework window: the three-way check (merge a duplicate
+        // post, drop an off-topic post, rework everything else — a town page always) replaces the generic lever.
+        $rework = [];
+        if (array_filter($stuck, fn (array $r): bool => $r['verdict'] === IndexCoverageState::CrawledNotIndexed->value && ($r['days_waiting'] ?? 0) >= ReworkCandidates::reworkDays()) !== []) {
+            foreach ($this->rework->for($site)['rows'] as $r) {
+                $rework[$r['content_id']] = $r;
+            }
+        }
+
         $rows = [];
         $byLever = [];
         $markets = [];
@@ -90,9 +103,11 @@ class StuckPages
             $inbound = count($graph->inbound($row['content_id']));
             $isPost = ($kinds[$row['content_id']] ?? null) === ContentKind::Post;
             $seen = isset($everSeen[$row['content_id']]);
-            [$lever, $action] = isset($reach[$row['content_id']])
-                ? self::reachabilityLever($reach[$row['content_id']])
-                : $this->lever($row['verdict'], $inbound, $isPost, $seen);
+            [$lever, $action] = match (true) {
+                isset($reach[$row['content_id']]) => self::reachabilityLever($reach[$row['content_id']]),
+                isset($rework[$row['content_id']]) => self::reworkLever($rework[$row['content_id']]),
+                default => $this->lever($row['verdict'], $inbound, $isPost, $seen),
+            };
             $rows[] = [
                 'content_id' => $row['content_id'],
                 'title' => $row['title'],
@@ -109,11 +124,12 @@ class StuckPages
                 'action' => $action,
                 'recommendation' => match ($lever) {
                     self::DROP => self::DROP,
-                    self::REGENERATE => self::REWORK,
+                    self::REGENERATE, self::MERGE => self::REWORK,
                     default => self::WAIT,
                 },
                 'is_post' => $isPost,
                 'reachability' => $reach[$row['content_id']] ?? null,
+                'rework' => $rework[$row['content_id']] ?? null,
             ];
             $byLever[$lever] = ($byLever[$lever] ?? 0) + 1;
             if ($lever === self::LINK && $row['market_id'] !== null) {
@@ -145,6 +161,21 @@ class StuckPages
             Reachability::SITEMAP_STALE => [self::PING, $r['action']],
             Reachability::ORPHAN => [self::LINK, $r['action']],
             default => [self::PING, $r['action']],
+        };
+    }
+
+    /**
+     * The lever for a crawled-and-declined page past the rework window, from its three-way verdict.
+     *
+     * @param  array{verdict: string, reason: string, is_town: bool}  $r
+     * @return array{0: string, 1: string}
+     */
+    private static function reworkLever(array $r): array
+    {
+        return match ($r['verdict']) {
+            ReworkCandidates::DUPLICATE => [self::MERGE, $r['reason']],
+            ReworkCandidates::OFF_TOPIC => [self::DROP, $r['reason']],
+            default => [self::REGENERATE, $r['reason']],
         };
     }
 

@@ -9,6 +9,7 @@ use App\Enums\RefreshTrigger;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
+use App\Operator\Coverage\IndexRework;
 
 /**
  * The normalized work item handed to the drafting engine. It flattens the three
@@ -75,6 +76,7 @@ final class DraftRequest
             sourceBody: $sourceBody,
             localRelevance: (bool) $candidate->local_relevance,
             marketId: $marketId,
+            brief: ($rework = IndexRework::pending($candidate)) !== null ? ['index_rework' => $rework] : [],
         );
     }
 

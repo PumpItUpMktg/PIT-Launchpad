@@ -121,6 +121,20 @@
                                     @if ($s['lever'] === \App\Operator\Coverage\StuckPages::REGENERATE || $s['lever'] === \App\Operator\Coverage\StuckPages::DROP)
                                         <a href="{{ $s['is_post'] ? \App\Filament\Pages\Operate\OperateBlog::getUrl() : \App\Filament\Pages\Operate\OperatePages::getUrl() }}" wire:navigate>Open in {{ $s['is_post'] ? 'Posts' : 'Pages' }} to regenerate</a>
                                     @endif
+                                    @if (($s['rework'] ?? null) !== null)
+                                        @php($rw = $s['rework'])
+                                        @if ($s['lever'] === \App\Operator\Coverage\StuckPages::REGENERATE)
+                                            <button type="button" wire:click="reworkPage('{{ $row['content_id'] }}')" wire:confirm="Rework '{{ $row['title'] }}'? It redrafts with the index brief and returns to the review queue; approve to re-push.{{ $rw['is_town'] ? ' Town pages are reworked, never pruned — its priority sections are kept.' : '' }}"
+                                                    @disabled($rw['rework'] !== null && $rw['rework']['applied_at'] === null)>
+                                                {{ $rw['rework'] !== null && $rw['rework']['applied_at'] === null ? 'Rework queued…' : ($rw['rework'] !== null ? 'Rework again' : 'Rework this page') }}
+                                            </button>
+                                        @elseif ($s['lever'] === \App\Operator\Coverage\StuckPages::MERGE && $rw['duplicate_of'] !== null)
+                                            <button type="button" class="danger" wire:click="mergePost('{{ $row['content_id'] }}')" wire:confirm="Merge '{{ $row['title'] }}' into '{{ $rw['duplicate_of']['title'] }}'? Its URL gets a 301 to the stronger post and it is taken down from WordPress.">Merge into “{{ \Illuminate\Support\Str::limit($rw['duplicate_of']['title'], 40) }}”</button>
+                                        @endif
+                                        @if ($rw['rework'] !== null && $rw['rework']['applied_at'] !== null)
+                                            <span class="k" style="align-self:center">Reworked {{ \Illuminate\Support\Carbon::parse($rw['rework']['applied_at'])->format('j M') }}</span>
+                                        @endif
+                                    @endif
                                     @if ($s['lever'] === \App\Operator\Coverage\StuckPages::REPUSH)
                                         <button type="button" wire:click="repushPage('{{ $row['content_id'] }}')" wire:confirm="Re-push '{{ $row['title'] }}' to WordPress on the same URL?">Re-push this page</button>
                                     @endif

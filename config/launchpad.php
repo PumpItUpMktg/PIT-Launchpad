@@ -66,6 +66,14 @@ return [
         // as a green "landed" row before it falls off. Days after the index date a page stays listed.
         'watch_days' => (int) env('LAUNCHPAD_INDEX_WATCH_DAYS', 5),
 
+        // A page Google CRAWLED and declined is a rework candidate after this many days (a rewrite is never
+        // the lever for a page Google has not fetched). The three-way check: a near-duplicate post is merged,
+        // an off-topic post dropped, everything else — and every town page, always — reworked with the index brief.
+        'rework_days' => (int) env('LAUNCHPAD_INDEX_REWORK_DAYS', 30),
+        // Title-word overlap at/above which two published posts are near-duplicates (the merge verdict).
+        'duplicate_overlap' => (float) env('LAUNCHPAD_INDEX_DUPLICATE_OVERLAP', 0.6),
+        // A post's ingest relevance below this is off-topic for the site (the drop verdict).
+        'off_topic_relevance' => (float) env('LAUNCHPAD_INDEX_OFF_TOPIC_RELEVANCE', 0.4),
         // A published page still not indexed after this many days is "stuck" — the count the operator acts on.
         'stuck_days' => (int) env('LAUNCHPAD_INDEX_STUCK_DAYS', 10),
 

@@ -3,6 +3,7 @@
 namespace App\ContentEngine\Drafting;
 
 use App\Enums\ContentKind;
+use App\Operator\Coverage\IndexRework;
 use App\PageBuilder\Schema\SlotDefinition;
 
 /**
@@ -71,6 +72,7 @@ class Drafter
         $parts[] = $this->sourcesBlock($grounding);
         $parts[] = $this->localBlock($grounding);
         $parts[] = $this->briefBlock($request);
+        $parts[] = $this->reworkBlock($request);
 
         $parts[] = $request->kind === ContentKind::Page
             ? $this->kitBlock($grounding)
@@ -137,6 +139,14 @@ class Drafter
         $lines[] = 'Name AT MOST these towns and no others; if there is no genuine local angle, keep it town-agnostic. List any town you actually used in "towns".';
 
         return implode(' ', $lines);
+    }
+
+    /** The index-rework brief, when this draft is the rework of a post Google crawled and declined. */
+    private function reworkBlock(DraftRequest $request): string
+    {
+        $brief = $request->brief['index_rework'] ?? null;
+
+        return is_string($brief) && trim($brief) !== '' ? IndexRework::promptBlock($brief, false) : '';
     }
 
     private function briefBlock(DraftRequest $request): string
