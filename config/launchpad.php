@@ -75,7 +75,19 @@ return [
         // A post's ingest relevance below this is off-topic for the site (the drop verdict).
         'off_topic_relevance' => (float) env('LAUNCHPAD_INDEX_OFF_TOPIC_RELEVANCE', 0.4),
         // A published page still not indexed after this many days is "stuck" — the count the operator acts on.
-        'stuck_days' => (int) env('LAUNCHPAD_INDEX_STUCK_DAYS', 10),
+        // Under this a discovered page is simply waiting (Google often takes two to three weeks on a small
+        // crawl budget); from here the operator acts. The timeline below says what the action is.
+        'stuck_days' => (int) env('LAUNCHPAD_INDEX_STUCK_DAYS', 30),
+        // The 30 / 60 / 90-day timeline for a page Google has NOT crawled (discovered, or never met):
+        //   < decide_days  → ask: link it from a ranking page, resubmit the sitemap, request indexing by hand;
+        //   < budget_days  → decide: keep it with a stronger inbound link, or fold a small town into its hub;
+        //   ≥ budget_days  → budget: Google has judged the site's crawl budget, not this page — fewer, better
+        //                    pages first (prune off-topic posts, rework thin ones), then this page gets its turn.
+        // A crawled-and-declined page follows the rework window instead (rework_days).
+        'timeline' => [
+            'decide_days' => (int) env('LAUNCHPAD_INDEX_DECIDE_DAYS', 60),
+            'budget_days' => (int) env('LAUNCHPAD_INDEX_BUDGET_DAYS', 90),
+        ],
 
         // Hosts Google will never index: the build/staging domains a site lives on before its real one.
         // A site whose domain matches one of these is told so on the Indexing board rather than left

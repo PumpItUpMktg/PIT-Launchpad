@@ -23,6 +23,9 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
+// These tests encode the original ten-day stuck window; the default moved to 30 with the 30/60/90 timeline.
+beforeEach(fn () => config()->set('launchpad.indexing.stuck_days', 10));
+
 beforeEach(function () {
     Filament::setCurrentPanel('admin');
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));

@@ -13,6 +13,9 @@ use App\Operator\Coverage\IndexWatchlist;
 use App\Operator\Coverage\StuckPages;
 use App\Support\PublicUrl;
 
+// These tests encode the original ten-day stuck window; the default moved to 30 with the 30/60/90 timeline.
+beforeEach(fn () => config()->set('launchpad.indexing.stuck_days', 10));
+
 function stuckSite(): Site
 {
     return Site::factory()->create(['domain_url' => 'https://stuck.example', 'brand_name' => 'Stuck Co']);
@@ -71,16 +74,16 @@ it('assigns each stuck page the lever its reason and inbound links call for, old
     $report = app(StuckPages::class)->for($site);
 
     $byTitle = collect($report['rows'])->keyBy('title');
-    expect($byTitle->keys()->all())->toBe(['Unlinked Discovered', 'Crawled Unlinked', 'Linked Discovered', 'Never Inspected', 'Crawled Linked', 'Blocked']) // lever order (link, ping, recheck, regenerate, unblock), oldest first inside
+    expect($byTitle->keys()->all())->toBe(['Unlinked Discovered', 'Crawled Unlinked', 'Never Inspected', 'Crawled Linked', 'Linked Discovered', 'Blocked']) // lever order (link, ping, recheck, regenerate, unblock), oldest first inside
         ->and($byTitle['Unlinked Discovered']['lever'])->toBe(StuckPages::LINK)
         ->and($byTitle['Unlinked Discovered']['inbound'])->toBe(0)
         ->and($byTitle['Crawled Unlinked']['lever'])->toBe(StuckPages::LINK)
-        ->and($byTitle['Linked Discovered']['lever'])->toBe(StuckPages::PING)
+        ->and($byTitle['Linked Discovered']['lever'])->toBe(StuckPages::REQUEST)   // 30–60 days: ask Google (request indexing), never a rewrite
         ->and($byTitle['Linked Discovered']['inbound'])->toBe(1)
         ->and($byTitle['Crawled Linked']['lever'])->toBe(StuckPages::REGENERATE)
         ->and($byTitle['Never Inspected']['lever'])->toBe(StuckPages::RECHECK)
         ->and($byTitle['Blocked']['lever'])->toBe(StuckPages::UNBLOCK)
-        ->and($report['by_lever'])->toBe([StuckPages::LINK => 2, StuckPages::PING => 1, StuckPages::RECHECK => 1, StuckPages::REGENERATE => 1, StuckPages::UNBLOCK => 1])
+        ->and($report['by_lever'])->toBe([StuckPages::LINK => 2, StuckPages::RECHECK => 1, StuckPages::REGENERATE => 1, StuckPages::REQUEST => 1, StuckPages::UNBLOCK => 1])
         ->and($report['markets_needing_links'])->toBe([$market->id]);
 });
 
