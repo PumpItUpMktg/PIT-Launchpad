@@ -5,9 +5,11 @@ use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Jobs\PublishContent;
 use App\Models\Content;
+use App\Models\Location;
 use App\Models\PageIndexState;
 use App\Models\Site;
 use App\Publishing\Links\IndexBooster;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
@@ -135,4 +137,31 @@ it('runs the command and reports', function () {
     $this->artisan('launchpad:boost-indexing', ['site' => $site->id])
         ->expectsOutputToContain('Added 1 inbound link')
         ->assertExitCode(0);
+});
+
+it('links a new town page from its own office hub first, then the sibling town Google shows most — never an unrelated page ahead of them', function () {
+    Queue::fake();
+    config()->set('launchpad.internal_linking.index_boost.max_sources_per_target', 2);
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    $office = Location::factory()->create(['site_id' => $site->id, 'name' => 'Union office', 'served_towns' => []]);
+    $hub = ixSource($site, 'union-nj', ['page_type' => PageType::Location, 'location_id' => $office->id]);
+    $siblingBig = ixSource($site, 'westfield-nj', ['page_type' => PageType::Location, 'location_id' => null, 'parent_location_id' => $office->id]);
+    $siblingSmall = ixSource($site, 'garwood-nj', ['page_type' => PageType::Location, 'location_id' => null, 'parent_location_id' => $office->id]);
+    $unrelated = ixSource($site, 'water-heater-repair');
+    foreach ([['union-nj', 40], ['westfield-nj', 900], ['garwood-nj', 30], ['water-heater-repair', 5000]] as [$slug, $impr]) {
+        DB::table('gsc_url_daily')->insert([
+            'id' => (string) Str::ulid(), 'site_id' => $site->id, 'grain_hash' => hash('sha256', $site->id.$slug), 'date' => now()->toDateString(),
+            'url' => "https://apex.example/{$slug}/", 'impressions' => $impr, 'clicks' => 1, 'ctr' => 0, 'position' => 8, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+    }
+    $target = ixNewTarget($site, 'cranford-nj', ['page_type' => PageType::Location, 'location_id' => null, 'parent_location_id' => $office->id]);
+
+    $r = app(IndexBooster::class)->boostTargets($site, collect([$target]), apply: true);
+
+    expect($r['details'][0]['sources'])->toBe([(string) $hub->id, (string) $siblingBig->id])
+        ->and($hub->fresh()->slot_payload['intro'])->toContain('href="/cranford-nj"')
+        ->and($siblingBig->fresh()->slot_payload['intro'])->toContain('href="/cranford-nj"')
+        ->and($siblingSmall->fresh()->slot_payload['intro'])->not->toContain('cranford')
+        ->and($unrelated->fresh()->slot_payload['intro'])->not->toContain('cranford');
+    Queue::assertPushed(PublishContent::class, 2);
 });

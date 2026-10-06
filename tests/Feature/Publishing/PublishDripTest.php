@@ -6,6 +6,7 @@ use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\UserRole;
 use App\Filament\Pages\Operate\OperateLocationPages;
+use App\Jobs\BoostReleasedPages;
 use App\Jobs\PublishContent;
 use App\Jobs\ReleasePublishDrip;
 use App\Models\Content;
@@ -128,4 +129,21 @@ it('the pages board shows the drip panel, queues from its Publish button, and of
 
     $board->call('toggleDrip');
     expect($f['site']->fresh()->publishDrip()['enabled'])->toBeFalse();
+});
+
+it('a release queues the inbound-link boost for exactly the released pages, after the pushes have landed', function () {
+    Queue::fake();
+    $f = dripSite();
+    $drip = app(PublishDrip::class);
+    $drip->enqueue($f['big']);
+
+    $released = $drip->release($f['site']);
+    expect($released)->toBe([$f['big']->id]);
+    Queue::assertPushed(BoostReleasedPages::class, fn (BoostReleasedPages $job) => $job->siteId === $f['site']->id && $job->contentIds === [$f['big']->id] && $job->delay !== null);
+
+    // When the job runs, the now-live page is linked from the indexed office-sibling and that source re-pushed.
+    $f['big']->forceFill(['wp_post_id' => 55, 'published_at' => now()])->save();
+    $f['indexed']->forceFill(['slot_payload' => ['intro' => 'Washington homes get the same crew and the same guarantee.']])->save();
+    app()->call([new BoostReleasedPages($f['site']->id, [$f['big']->id]), 'handle']);
+    expect($f['indexed']->fresh()->slot_payload['intro'])->toContain('href="/hackettstown-nj"');
 });

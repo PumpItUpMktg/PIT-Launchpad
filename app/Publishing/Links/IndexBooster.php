@@ -4,11 +4,14 @@ namespace App\Publishing\Links;
 
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Jobs\BoostReleasedPages;
 use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
+use App\Models\Silo;
 use App\Models\Site;
+use App\Publishing\Redirects\GscUrlInventory;
 use Illuminate\Support\Collection;
 
 /**
@@ -34,7 +37,10 @@ use Illuminate\Support\Collection;
  */
 final class IndexBooster
 {
-    public function __construct(private readonly LinkInjector $injector) {}
+    public function __construct(
+        private readonly LinkInjector $injector,
+        private readonly GscUrlInventory $inventory,
+    ) {}
 
     /**
      * Add inbound "Related" links to the site's new unindexed pages from its indexed pages.
@@ -45,15 +51,34 @@ final class IndexBooster
     {
         $window = max(1, (int) config('launchpad.internal_linking.index_boost.window_days', 30));
         $maxTargets = max(1, (int) config('launchpad.internal_linking.index_boost.max_targets', 25));
+
+        $targets = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('status', ContentStatus::Published->value)
+            ->whereNotNull('wp_post_id')
+            ->whereNotIn('id', $this->indexedIds($site)->all())
+            ->where('published_at', '>=', now()->subDays($window))
+            ->orderByDesc('published_at')
+            ->limit($maxTargets)
+            ->get();
+
+        return $this->boostTargets($site, $targets, $apply);
+    }
+
+    /**
+     * Boost EXACT targets — the pages a publish-drip release just put live ({@see BoostReleasedPages}).
+     * A target already indexed, or not live, is skipped.
+     *
+     * @param  Collection<int, Content>  $targets
+     * @return array{targets: int, sources_available: int, links: int, sources_repushed: int, applied: bool, details: list<array{target: string, path: string, sources: list<string>}>}
+     */
+    public function boostTargets(Site $site, Collection $targets, bool $apply = true): array
+    {
         $maxSources = max(1, (int) config('launchpad.internal_linking.index_boost.max_sources_per_target', 3));
         $maxPerSource = max(1, (int) config('launchpad.internal_linking.index_boost.max_links_per_source', 3));
 
-        $indexedIds = PageIndexState::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->where('index_verdict', 'PASS')
-            ->whereNotNull('content_id')
-            ->pluck('content_id')->unique();
-
+        $indexedIds = $this->indexedIds($site);
         $sources = $indexedIds->isEmpty() ? collect() : Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
@@ -62,17 +87,10 @@ final class IndexBooster
             ->whereIn('id', $indexedIds->all())
             ->get()
             ->reject(fn (Content $c): bool => $c->isPublishProtected());
-
-        $targets = Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->where('kind', ContentKind::Page->value)
-            ->where('status', ContentStatus::Published->value)
-            ->whereNotNull('wp_post_id')
-            ->whereNotIn('id', $indexedIds->all())
-            ->where('published_at', '>=', now()->subDays($window))
-            ->orderByDesc('published_at')
-            ->limit($maxTargets)
-            ->get();
+        $indexedSet = array_fill_keys($indexedIds->map(fn ($id): string => (string) $id)->all(), true);
+        $targets = $targets->filter(fn (Content $t): bool => $t->wp_post_id !== null && ! isset($indexedSet[(string) $t->id]))->values();
+        $impressions = $this->impressionsByPath($site);
+        $pillars = $this->pillarIds($site);
 
         $linksBySource = [];   // source id => links added this run (the per-source cap)
         $repush = [];          // source id => true (distinct sources to re-push)
@@ -87,7 +105,7 @@ final class IndexBooster
             }
 
             $used = [];
-            foreach ($this->rankedSources($sources, $target) as $source) {
+            foreach ($this->rankedSources($sources, $target, $impressions, $pillars) as $source) {
                 if (count($used) >= $maxSources) {
                     break;
                 }
@@ -129,21 +147,81 @@ final class IndexBooster
     }
 
     /**
-     * Indexed source pages for a target, its own silo first (topical relevance), then the rest — so a new
-     * page always earns a few inbound links, preferring the most relevant. Never the target itself.
+     * Indexed source pages for a target, the HIGHEST-RANKING RELEVANT ones first: the pages that most
+     * naturally point at it (a town's own office hub; a page's silo pillar; sibling towns under the same
+     * office; same-silo pages), and within each tier the ones Google already shows most (Search Console
+     * impressions, the page booster's yardstick), then the rest. A page with no impressions is never
+     * preferred over one with some. Never the target itself.
      *
      * @param  Collection<int, Content>  $sources
+     * @param  array<string, int>  $impressions  normalized path → impressions
+     * @param  array<string, true>  $pillars  silo pillar content ids
      * @return list<Content>
      */
-    private function rankedSources(Collection $sources, Content $target): array
+    private function rankedSources(Collection $sources, Content $target, array $impressions, array $pillars): array
     {
         $siloId = $target->matched_silo_id ?? $target->silo_id;
+        $office = $target->parent_location_id !== null ? (string) $target->parent_location_id : null;
+        $tier = function (Content $s) use ($siloId, $office, $pillars): int {
+            if ($office !== null && $s->location_id !== null && (string) $s->location_id === $office) {
+                return 0;   // the town's own office hub
+            }
+            if ($siloId !== null && isset($pillars[(string) $s->id]) && $s->silo_id === $siloId) {
+                return 1;   // the silo's pillar page
+            }
+            if ($office !== null && $s->parent_location_id !== null && (string) $s->parent_location_id === $office) {
+                return 2;   // a sibling town under the same office
+            }
+            if ($siloId !== null && $s->silo_id === $siloId) {
+                return 3;   // same silo
+            }
+
+            return 4;
+        };
 
         return $sources
             ->reject(fn (Content $s): bool => (string) $s->id === (string) $target->id)
-            ->sortByDesc(fn (Content $s): int => $siloId !== null && $s->silo_id === $siloId ? 1 : 0)
+            ->sortBy(fn (Content $s): array => [$tier($s), -($impressions[$this->normalizePath((string) $s->slug)] ?? 0)])
             ->values()
             ->all();
+    }
+
+    /** @return Collection<int, string> */
+    private function indexedIds(Site $site): Collection
+    {
+        return PageIndexState::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('index_verdict', 'PASS')
+            ->whereNotNull('content_id')
+            ->pluck('content_id')->unique()->values();
+    }
+
+    /** @return array<string, int> normalized path → lifetime impressions (empty when Search Console has nothing) */
+    private function impressionsByPath(Site $site): array
+    {
+        $out = [];
+        foreach ($this->inventory->urlTotals($site) as $row) {
+            $out[$this->normalizePath($row['url'])] = $row['impressions'];
+        }
+
+        return $out;
+    }
+
+    /** @return array<string, true> */
+    private function pillarIds(Site $site): array
+    {
+        return array_fill_keys(
+            Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereNotNull('pillar_content_id')->pluck('pillar_content_id')->map(fn ($id): string => (string) $id)->all(),
+            true,
+        );
+    }
+
+    private function normalizePath(string $value): string
+    {
+        $parsed = parse_url(trim($value), PHP_URL_PATH);
+        $path = is_string($parsed) ? $parsed : $value;
+
+        return mb_strtolower(trim($path, '/'));
     }
 
     /** The target's link path — leading slash (mirrors {@see InboundLinkBooster}). */

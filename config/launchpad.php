@@ -413,6 +413,11 @@ return [
             'max_targets' => (int) env('LAUNCHPAD_INDEX_BOOST_MAX_TARGETS', 25),  // new pages boosted per run
             'max_sources_per_target' => (int) env('LAUNCHPAD_INDEX_BOOST_MAX_SOURCES', 3),
             'max_links_per_source' => (int) env('LAUNCHPAD_INDEX_BOOST_MAX_LINKS_PER_SOURCE', 3),  // anti-bloat
+            // After a publish-drip release: link the new pages from the highest-ranking relevant indexed pages
+            // (office hub, silo pillar, sibling towns — Search-Console-ranked) and re-push those sources once,
+            // this many minutes after the release so the pushes have landed.
+            'on_release' => (bool) env('LAUNCHPAD_INDEX_BOOST_ON_RELEASE', true),
+            'release_delay_minutes' => (int) env('LAUNCHPAD_INDEX_BOOST_RELEASE_DELAY', 15),
         ],
     ],
 

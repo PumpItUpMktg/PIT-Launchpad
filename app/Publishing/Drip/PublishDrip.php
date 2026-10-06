@@ -6,6 +6,7 @@ use App\Activity\ActivityRecorder;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
+use App\Jobs\BoostReleasedPages;
 use App\Jobs\PublishContent;
 use App\Jobs\ReleasePublishDrip;
 use App\Models\Content;
@@ -191,6 +192,11 @@ final class PublishDrip
             $page->forceFill(['meta' => $meta])->save();
             PublishContent::dispatch((string) $page->id, $actorId);
             $released[] = (string) $page->id;
+        }
+        if ($released !== [] && (bool) config('launchpad.internal_linking.index_boost.on_release', true)) {
+            // Once the pushes have landed: link the new pages from the site's highest-ranking relevant pages.
+            BoostReleasedPages::dispatch((string) $site->id, $released)
+                ->delay(Carbon::now()->addMinutes(max(1, (int) config('launchpad.internal_linking.index_boost.release_delay_minutes', 15))));
         }
         if ($released !== []) {
             $this->activity->record(
