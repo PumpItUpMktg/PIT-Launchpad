@@ -135,3 +135,37 @@ it('with no live read, the sitemap reveals a town served flat instead of nested 
         ->and($row['live_permalink'])->toBe('https://spg2.example/chester-pa/')
         ->and($row['action'])->toContain('the slug drifted');
 });
+
+it('a page WordPress prints but cannot serve (a broken parent chain) is not_served — the fix re-pushes the hub first, then the page', function () {
+    Queue::fake();
+    $site = Site::factory()->create(['brand_name' => 'SPG3', 'domain_url' => 'https://spg3.example']);
+    $office = Location::factory()->create(['site_id' => $site->id, 'name' => 'Downingtown office', 'served_towns' => []]);
+    $hub = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::Published,
+        'location_id' => $office->id, 'title' => 'Downingtown, PA', 'slug' => 'downingtown-pa', 'wp_post_id' => 10, 'published_at' => now()->subDays(60),
+    ]);
+    $chester = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::Published,
+        'location_id' => null, 'parent_location_id' => $office->id, 'parent_content_id' => $hub->id, 'title' => 'Chester, PA', 'slug' => 'downingtown-pa/chester-pa', 'wp_post_id' => 321,
+        'published_at' => now()->subDays(14), 'slot_payload' => ['intro' => 'x'],
+    ]);
+    PageIndexState::create(['site_id' => $site->id, 'content_id' => $chester->id, 'url' => 'https://spg3.example/downingtown-pa/chester-pa/', 'url_normalized' => 'https://spg3.example/downingtown-pa/chester-pa', 'coverage_state' => IndexCoverageState::DiscoveredNotIndexed->value, 'index_verdict' => IndexCoverageState::DiscoveredNotIndexed->value, 'last_inspected_at' => now()]);
+    Http::fake(['https://spg3.example/sitemap-content.xml' => Http::response('<?xml version="1.0"?><urlset><url><loc>https://spg3.example/downingtown-pa/</loc></url><url><loc>https://spg3.example/downingtown-pa/chester-pa/</loc></url></urlset>', 200)]);
+    // The live read: the permalink is the nested URL, but WordPress cannot resolve it (the parent chain is broken).
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('diagnoseContent')->andReturn(['found' => true, 'permalink' => 'https://spg3.example/downingtown-pa/chester-pa/', 'permalink_resolves' => false, 'post_parent' => 0, 'parent' => null]);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
+
+    $report = app(Reachability::class)->for($site, includeDiscovered: true);
+    $row = collect($report['pages'])->firstWhere('title', 'Chester, PA');
+    expect($row['verdict'])->toBe(Reachability::NOT_SERVED)
+        ->and($row['served'])->toBeFalse()
+        ->and($row['action'])->toContain('Re-push the hub page, then this page');
+
+    $fix = app(Reachability::class)->fix($site, $report);
+    expect($fix['repushed'])->toBe(2);
+    Queue::assertPushed(PublishContent::class, fn (PublishContent $job) => $job->contentId === $hub->id);
+    Queue::assertPushed(PublishContent::class, fn (PublishContent $job) => $job->contentId === $chester->id && $job->delay !== null);
+});

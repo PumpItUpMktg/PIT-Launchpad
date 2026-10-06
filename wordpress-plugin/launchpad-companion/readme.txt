@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.48
+Stable tag: 0.9.49
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,16 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.49 =
+* /content/diagnose no longer fatals: the diagnostics class imported EditGuard from the wrong namespace,
+  so every read of a found post answered HTTP 500 (the control plane's "Live URL matches: ?"). It also
+  reports post_type, the parent WordPress actually holds (id / slug / status / type / Launchpad id) beside
+  the parent Launchpad asked for, and whether WordPress serves the permalink it prints
+  (`permalink_resolves`) — the facts behind a nested town URL that 404s while the flat one loads.
+
+= 0.9.48 =
+* Job capture: past jobs from the phone — a typed address places the job, the work date dates the post.
 
 = 0.9.47 =
 * "Areas we serve" map: drawn server-side as inline SVG from the pushed county/town geometry, replacing

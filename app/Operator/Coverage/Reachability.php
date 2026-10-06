@@ -26,7 +26,8 @@ use Throwable;
  *  1. missing_on_site  — the live site has no post carrying this page (the push never landed) → re-push.
  *  2. url_mismatch     — the URL we inspect is not the URL the site serves (slug drift) → re-push.
  *  3. not_in_sitemap   — the live sitemap does not list it (the post lost its Launchpad marker) → re-push.
- *  4. sitemap_stale    — listed, but Search Console last read the sitemap before the page existed → resubmit.
+ *  4. not_served       — WordPress prints the URL but answers it with a 404 (a broken parent chain) → re-push the hub, then the page.
+ *  5. sitemap_stale    — listed, but Search Console last read the sitemap before the page existed → resubmit.
  *  5. orphan           — no indexed page links to it → link it from a ranking page.
  *  6. reachable        — in the sitemap, submitted, linked: Google simply has not come yet → request indexing.
  *
@@ -40,6 +41,9 @@ final class Reachability
     public const URL_MISMATCH = 'url_mismatch';
 
     public const NOT_IN_SITEMAP = 'not_in_sitemap';
+
+    /** WordPress prints this URL but serves a 404 for it — a broken parent chain; re-push the hub, then the page. */
+    public const NOT_SERVED = 'not_served';
 
     public const SITEMAP_STALE = 'sitemap_stale';
 
@@ -62,7 +66,7 @@ final class Reachability
      *     sitemap: array{url: ?string, fetched: bool, urls: int, error: ?string},
      *     gsc: array{connected: bool, last_submitted: ?string, submitted: int, pending: bool},
      *     live_error: ?string,
-     *     pages: list<array{content_id: string, title: string, url: ?string, state: string, published_at: ?string, days_waiting: ?int, in_sitemap: ?bool, live_permalink: ?string, url_matches: ?bool, found_on_site: ?bool, inbound: int, inbound_indexed: int, indexnow_at: ?string, verdict: string, action: string}>,
+     *     pages: list<array{content_id: string, title: string, url: ?string, state: string, published_at: ?string, days_waiting: ?int, in_sitemap: ?bool, live_permalink: ?string, url_matches: ?bool, served: ?bool, found_on_site: ?bool, inbound: int, inbound_indexed: int, indexnow_at: ?string, verdict: string, action: string}>,
      *     by_verdict: array<string, int>
      * }
      */
@@ -107,6 +111,7 @@ final class Reachability
                 }
             }
             $matches = $permalink === null || $url === null ? null : self::normalize($permalink) === self::normalize($url);
+            $served = $live === null || ! array_key_exists('permalink_resolves', $live) ? null : (bool) $live['permalink_resolves'];
 
             $inboundIds = $graph->inbound($row['content_id']);
             $inboundIndexed = count(array_filter($inboundIds, fn (string $id): bool => isset($indexed[$id])));
@@ -118,6 +123,7 @@ final class Reachability
             [$verdict, $action] = match (true) {
                 $found === false => [self::MISSING_ON_SITE, 'The live site has no post carrying this page — the push never landed. Re-push it.'],
                 $matches === false => [self::URL_MISMATCH, "We inspect {$url} but the site serves {$permalink} — the slug drifted. Re-push it so the URLs agree."],
+                $served === false => [self::NOT_SERVED, 'WordPress prints this URL but answers it with a 404 — the page\'s parent chain is broken on the site (the hub it nests under is missing, trashed, or a different post type). Re-push the hub page, then this page.'],
                 $inSitemap === false => [self::NOT_IN_SITEMAP, 'The live sitemap does not list it — the WordPress post lost its Launchpad marker. Re-push it.'],
                 $sitemapStale => [self::SITEMAP_STALE, 'Listed in the sitemap, but Search Console last read the sitemap before this page existed. Resubmit the sitemap.'],
                 $inboundIndexed === 0 => [self::ORPHAN, 'In the sitemap, but no indexed page links to it — link it from a ranking page (the index booster) so Google follows a path it already crawls.'],
@@ -134,6 +140,7 @@ final class Reachability
                 'in_sitemap' => $inSitemap,
                 'live_permalink' => $permalink,
                 'url_matches' => $matches,
+                'served' => $served,
                 'found_on_site' => $found,
                 'inbound' => count($inboundIds),
                 'inbound_indexed' => $inboundIndexed,
@@ -166,7 +173,21 @@ final class Reachability
         $repushed = 0;
         $orphans = [];
         $stale = false;
+        $hubsPushed = [];
         foreach ($report['pages'] as $p) {
+            if ($p['verdict'] === self::NOT_SERVED) {
+                $page = Content::withoutGlobalScope(SiteScope::class)->find($p['content_id']);
+                $hub = $page?->parent_content_id !== null ? (string) $page->parent_content_id : null;
+                if ($hub !== null && ! isset($hubsPushed[$hub])) {
+                    PublishContent::dispatch($hub);
+                    $hubsPushed[$hub] = true;
+                    $repushed++;
+                }
+                PublishContent::dispatch((string) $p['content_id'])->delay(Carbon::now()->addSeconds(30));
+                $repushed++;
+
+                continue;
+            }
             if (in_array($p['verdict'], [self::MISSING_ON_SITE, self::URL_MISMATCH, self::NOT_IN_SITEMAP], true)) {
                 PublishContent::dispatch((string) $p['content_id']);
                 $repushed++;

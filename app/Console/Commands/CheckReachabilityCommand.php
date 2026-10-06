@@ -48,10 +48,11 @@ class CheckReachabilityCommand extends Command
             $this->line(sprintf('  %-16s %d', $verdict, $n));
         }
         if ($report['pages'] !== []) {
-            $this->table(['Page', 'Google', 'Days', 'In sitemap', 'Live URL matches', 'Linked from indexed', 'Verdict'], array_map(fn (array $p): array => [
+            $this->table(['Page', 'Google', 'Days', 'In sitemap', 'Live URL matches', 'Serves it', 'Linked from indexed', 'Verdict'], array_map(fn (array $p): array => [
                 mb_substr($p['title'], 0, 40), $p['state'], $p['days_waiting'] ?? '—',
                 $p['in_sitemap'] === null ? '?' : ($p['in_sitemap'] ? 'yes' : 'NO'),
                 $p['url_matches'] === null ? ($p['found_on_site'] === false ? 'NOT ON SITE' : '?') : ($p['url_matches'] ? 'yes' : 'NO'),
+                $p['served'] === null ? '?' : ($p['served'] ? 'yes' : '404'),
                 $p['inbound_indexed'].' of '.$p['inbound'], $p['verdict'],
             ], $report['pages']));
         }

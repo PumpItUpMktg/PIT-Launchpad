@@ -17,7 +17,6 @@
 
 namespace Launchpad\Companion\Content;
 
-use Launchpad\Companion\EditGuard;
 use Launchpad\Companion\Meta;
 
 if (! defined('ABSPATH')) {
@@ -60,14 +59,31 @@ final class ContentDiagnostics
         $locked    = get_post_meta($post_id, Meta::LOCKED, true) === '1';
         $edited    = EditGuard::is_locally_edited($post_id);
         $drifted   = $expected !== '' && $post_name !== $expected;
+        $permalink = (string) get_permalink($post_id);
+        $parent_id = (int) wp_get_post_parent_id($post_id);
 
         return [
             'content_id'      => $content_id,
             'found'           => true,
             'wp_post_id'      => $post_id,
             'status'          => (string) get_post_status($post_id),
+            'post_type'       => (string) get_post_type($post_id),
             'post_name'       => $post_name,
-            'permalink'       => (string) get_permalink($post_id),
+            'permalink'       => $permalink,
+            // Does WordPress SERVE the URL it prints? A nested page whose parent chain is broken (the hub
+            // trashed, a different post type, a stale parent id) prints /hub/town/ and answers it with a 404.
+            'permalink_resolves' => $permalink !== '' && url_to_postid($permalink) === $post_id,
+            // The parent WordPress actually holds, beside the one Launchpad asked for (PARENT_ID meta):
+            // when they differ, the nesting never applied.
+            'post_parent'     => $parent_id,
+            'parent'          => $parent_id > 0 ? [
+                'wp_post_id' => $parent_id,
+                'post_name'  => (string) get_post_field('post_name', $parent_id),
+                'status'     => (string) get_post_status($parent_id),
+                'post_type'  => (string) get_post_type($parent_id),
+                'content_id' => (string) get_post_meta($parent_id, Meta::CONTENT_ID, true),
+            ] : null,
+            'parent_content_id' => (string) get_post_meta($post_id, Meta::PARENT_ID, true),
             // The two reasons a push is a silent no-op (ContentStore skips BEFORE body + slug reclaim).
             'locked'          => $locked,
             'locally_edited'  => $edited,
