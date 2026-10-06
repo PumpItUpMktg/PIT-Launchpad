@@ -75,5 +75,7 @@ final class PageGrounding
         // connector voice — no first-person performance, no pricing/quoting, no warranty, no implied
         // licensure in the trade. Set from the page's subject service's referral_mode.
         public readonly bool $referralMode = false,
+        /** A pending index-rework brief (Google crawled and declined the page) — see IndexRework. */
+        public readonly ?string $reworkBrief = null,
     ) {}
 }

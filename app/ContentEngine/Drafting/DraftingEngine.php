@@ -12,6 +12,7 @@ use App\Enums\RefreshTrigger;
 use App\Models\Content;
 use App\Models\RefreshEvent;
 use App\Models\Scopes\SiteScope;
+use App\Operator\Coverage\IndexRework;
 use App\Support\SeoTitle;
 use Illuminate\Support\Str;
 
@@ -114,6 +115,8 @@ class DraftingEngine
             $attributes['meta'] = $meta;
         }
 
+        // The page-life keys (a rework brief, stamped applied) survive the redraft; the rest is this draft's.
+        $attributes['meta'] = IndexRework::carry(is_array($candidate->meta) ? $candidate->meta : null, (array) $attributes['meta']);
         $candidate->fill($attributes)->save();
 
         // Longtail lane: a drafted article that substantially covers a queued blog target in its

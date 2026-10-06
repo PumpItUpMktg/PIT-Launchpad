@@ -7,6 +7,7 @@ use App\Enums\ContentStatus;
 use App\Enums\SlotContentType;
 use App\Enums\SlotRole;
 use App\Models\Content;
+use App\Operator\Coverage\IndexRework;
 use App\PageBuilder\Schema\KitSchema;
 use App\PageBuilder\Validation\KitValidator;
 use App\PageBuilder\Validation\ValidationCode;
@@ -418,7 +419,8 @@ class PageDraftingEngine
             'body' => null,
             'voice_profile_version' => $grounding->voiceProfileVersion,
             'wireframe_kit_version' => $grounding->kit->version,
-            'meta' => $meta,
+            // The page-life keys (priority sections, a rework brief) survive the redraft; the rest is this draft's.
+            'meta' => IndexRework::carry(is_array($page->meta) ? $page->meta : null, $meta),
         ])->save();
     }
 }

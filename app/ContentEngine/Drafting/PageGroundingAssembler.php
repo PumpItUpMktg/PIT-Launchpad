@@ -20,6 +20,7 @@ use App\Models\SiloBlueprint;
 use App\Models\SiteBranding;
 use App\Models\SiteNarrative;
 use App\Models\WireframeKit;
+use App\Operator\Coverage\IndexRework;
 use App\PageBuilder\Schema\KitSchema;
 use App\Publishing\Links\LinkPlanBuilder;
 use App\Publishing\Links\PostLinkInjector;
@@ -79,6 +80,7 @@ class PageGroundingAssembler
             location: $this->location($page),
             siblingHeadings: $this->siblingHeadings($page),
             referralMode: $referral,
+            reworkBrief: IndexRework::pending($page),
         );
     }
 

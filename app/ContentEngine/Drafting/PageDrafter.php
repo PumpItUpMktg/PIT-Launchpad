@@ -2,7 +2,9 @@
 
 namespace App\ContentEngine\Drafting;
 
+use App\Enums\PageType;
 use App\Enums\SlotContentType;
+use App\Operator\Coverage\IndexRework;
 use App\PageBuilder\Schema\SlotDefinition;
 
 /**
@@ -81,6 +83,7 @@ class PageDrafter
         $parts[] = $this->problemsBlock($grounding);
         $parts[] = $this->offersBlock($grounding);
         $parts[] = $this->marketsBlock($grounding);
+        $parts[] = $this->reworkBlock($grounding);
         $parts[] = $this->locationBlock($grounding);
         $parts[] = $this->factsBlock($grounding);
         $parts[] = $this->proofBlock($grounding);
@@ -90,6 +93,16 @@ class PageDrafter
         $parts[] = $this->outputContract();
 
         return implode("\n\n", array_filter($parts));
+    }
+
+    /** The index-rework brief, when this draft is the rework of a page Google crawled and declined. */
+    private function reworkBlock(PageGrounding $grounding): string
+    {
+        if ($grounding->reworkBrief === null) {
+            return '';
+        }
+
+        return IndexRework::promptBlock($grounding->reworkBrief, $grounding->pageType === PageType::Location && $grounding->location !== []);
     }
 
     private function voiceBlock(PageGrounding $grounding): string
