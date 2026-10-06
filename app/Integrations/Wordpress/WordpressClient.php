@@ -332,7 +332,7 @@ class WordpressClient
         );
 
         if (! $response->successful()) {
-            throw new WordpressException('WordPress /content/diagnose returned HTTP '.$response->status());
+            throw new WordpressException('WordPress /content/diagnose returned HTTP '.$response->status().$this->errorDetail($response));
         }
 
         $json = $response->json();
