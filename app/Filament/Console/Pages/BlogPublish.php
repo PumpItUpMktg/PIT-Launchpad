@@ -87,6 +87,6 @@ class BlogPublish extends ConsolePage
             return;
         }
 
-        Notification::make()->title('Publishing — pushing to WordPress now.')->success()->send();
+        Notification::make()->title($result->isQueued() ? "Queued to publish — #{$result->queuePosition} in line; it goes live as earlier pages are indexed." : 'Publishing — pushing to WordPress now.')->success()->send();
     }
 }

@@ -28,6 +28,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $silo_own_page_bar
  * @property array<string, int>|null $coverage_thresholds
  * @property array{indexed_pct?: float, stale_days?: int}|null $tier_gate
+ * @property array{enabled?: bool, batch?: int, stale_days?: int}|null $publish_drip
  * @property string|null $domain_url
  * @property string|null $gsc_property Search Console property to query for this tenant (from the shared Google grant)
  * @property string|null $bing_site_url Bing Webmaster Tools verified site URL to query for this tenant (agency BWT API key)
@@ -236,6 +237,23 @@ class Site extends Model
      *
      * @return array{indexed_pct: float, stale_days: int}
      */
+    /**
+     * The publish-drip settings: the config defaults under the per-site `publish_drip` override.
+     *
+     * @return array{enabled: bool, batch: int, stale_days: int}
+     */
+    public function publishDrip(): array
+    {
+        $defaults = (array) config('launchpad.publish_drip', []);
+        $override = is_array($this->publish_drip) ? $this->publish_drip : [];
+
+        return [
+            'enabled' => (bool) ($override['enabled'] ?? $defaults['enabled'] ?? false),
+            'batch' => max(1, (int) ($override['batch'] ?? $defaults['batch'] ?? 10)),
+            'stale_days' => max(1, (int) ($override['stale_days'] ?? $defaults['stale_days'] ?? 21)),
+        ];
+    }
+
     public function tierGate(): array
     {
         $defaults = (array) config('launchpad.tier_gate', []);
@@ -298,6 +316,7 @@ class Site extends Model
             'silo_own_page_bar' => 'integer',
             'coverage_thresholds' => 'array',
             'tier_gate' => 'array',
+            'publish_drip' => 'array',
             'insured' => 'boolean',
             'years_in_business' => 'integer',
             'review_backlog_count' => 'integer',

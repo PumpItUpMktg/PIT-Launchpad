@@ -365,7 +365,7 @@ class ProofEditor extends Page
             return;
         }
 
-        Notification::make()->success()->title('Publishing — composing and pushing to WordPress')
+        Notification::make()->success()->title($result->isQueued() ? "Queued to publish — #{$result->queuePosition} in line (the drip releases it as earlier pages are indexed)" : 'Publishing — composing and pushing to WordPress')
             ->body($result->warnings !== [] ? implode(' ', $result->warnings) : null)->send();
     }
 

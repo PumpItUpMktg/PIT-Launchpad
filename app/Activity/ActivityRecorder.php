@@ -19,6 +19,8 @@ final class ActivityRecorder
 
     public const PRIORITY_PUSH = 'priority_push';
 
+    public const PUBLISH_RELEASED = 'publish_released';
+
     /** @param  array<string, int|float|string>  $metrics */
     public function record(string $siteId, string $kind, string $summary, array $metrics = [], ?string $subject = null, ?string $actorId = null, bool $clientVisible = false): ActivityEvent
     {

@@ -176,6 +176,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Publish drip
+    |--------------------------------------------------------------------------
+    | First-time publishes don't all go live at once. With the drip on, "Publish"
+    | queues the page and the drip releases `batch` pages at a time: a new page
+    | goes out only when fewer than `batch` recently published pages are still
+    | waiting for Google to index them. A page waiting longer than `stale_days`
+    | stops counting (the Indexing board owns it), so one stubborn page never
+    | blocks the queue. Re-pushes of live pages are never queued. Per-tenant
+    | overrides live in `sites.publish_drip` (see Site::publishDrip()).
+    */
+    'publish_drip' => [
+        'enabled' => (bool) env('LAUNCHPAD_PUBLISH_DRIP_ENABLED', false),
+        'batch' => (int) env('LAUNCHPAD_PUBLISH_DRIP_BATCH', 10),
+        'stale_days' => (int) env('LAUNCHPAD_PUBLISH_DRIP_STALE_DAYS', 21),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Link plan on tier unlock
     |--------------------------------------------------------------------------
     |

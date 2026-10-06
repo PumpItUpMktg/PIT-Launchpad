@@ -22,6 +22,38 @@
             </div>
         @endif
 
+        {{-- Publish drip (§ Publish drip): first-time publishes go live a batch at a time, the next batch once
+             the previous one is indexed — so a hundred new URLs never compete for the same crawl budget. --}}
+        @php $drip = $this->drip; $ds = $drip['settings']; @endphp
+        <style>
+            .pb-drip { display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:12.5px; border:1px solid var(--line,#e5e7eb); border-radius:12px; padding:9px 12px; margin:0 0 12px; }
+            .pb-drip.on { border-color:rgba(37,99,235,.35); background:rgba(37,99,235,.05); }
+            .pb-drip b { font-variant-numeric:tabular-nums; }
+            .pb-drip .sp { color:#6b7280; }
+            .pb-drip .lv-btn { font-size:12px; }
+            .pb-drip .steps button { font-size:12px; border:1px solid var(--line,#e5e7eb); background:transparent; border-radius:6px; padding:2px 8px; cursor:pointer; color:inherit; }
+        </style>
+        <div class="pb-drip {{ $ds['enabled'] ? 'on' : '' }}">
+            <span><b>Publish drip</b> {{ $ds['enabled'] ? 'on' : 'off' }}</span>
+            <span class="sp">·</span>
+            <span class="steps">batch <button type="button" wire:click="setDripBatch({{ max(1, $ds['batch'] - 5) }})" title="Smaller batch">−</button> <b>{{ $ds['batch'] }}</b> <button type="button" wire:click="setDripBatch({{ $ds['batch'] + 5 }})" title="Bigger batch">+</button></span>
+            <span class="sp">·</span>
+            <span title="Published within the last {{ $ds['stale_days'] }} days and not yet indexed by Google — these hold the slots"><b>{{ count($drip['in_flight']) }}</b> waiting for Google</span>
+            <span class="sp">·</span>
+            <span><b>{{ $drip['slots'] }}</b> free slot{{ $drip['slots'] === 1 ? '' : 's' }}</span>
+            <span class="sp">·</span>
+            <span><b>{{ count($drip['queued']) }}</b> queued</span>
+            @if ($drip['queued'] !== [] && $drip['slots'] > 0)
+                <button class="lv-btn primary" wire:click="releaseDrip" wire:loading.attr="disabled" wire:target="releaseDrip"
+                        wire:confirm="Release the next {{ min($drip['slots'], count($drip['queued'])) }} queued page(s) to WordPress now?">Release {{ min($drip['slots'], count($drip['queued'])) }} now</button>
+            @endif
+            <button class="lv-btn" style="margin-left:auto" wire:click="toggleDrip"
+                    wire:confirm="{{ $ds['enabled'] ? 'Turn the publish drip off? Publish will push straight to WordPress again.' : 'Turn the publish drip on? Publish will queue first-time pages and release '.$ds['batch'].' at a time, the next batch once the previous one is indexed. Re-pushes of live pages are never queued.' }}">
+                {{ $ds['enabled'] ? 'Turn off' : 'Turn on' }}
+            </button>
+            <span class="sp" style="flex-basis:100%">{{ $ds['enabled'] ? 'Publish queues a first-time page; the hourly release pushes as many as there are free slots, biggest towns first. A page waiting more than '.$ds['stale_days'].' days stops holding a slot (the Indexing board owns it).' : 'Off: Publish pushes straight to WordPress. Turn it on before publishing a batch so new pages go out '.$ds['batch'].' at a time.' }}</span>
+        </div>
+
         {{-- Stalled-worker banner: publishing is async (Publish/Repush queue a job the worker runs). If the
              worker is down, approved pages sit at "publishing" forever — surface it here with the inline
              "Publish stuck pages now" drain, instead of it looking like a broken button. --}}

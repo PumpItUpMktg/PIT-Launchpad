@@ -5,6 +5,7 @@ use App\Integrations\DataForSeo\IngestSerpTasks;
 use App\Jobs\CloseMonthlySnapshots;
 use App\Jobs\IngestCoverageScans;
 use App\Jobs\IngestTownRankScans;
+use App\Jobs\ReleasePublishDrip;
 use App\Jobs\WarmTownOutlines;
 use App\KeywordGenerator\Pipeline\RefreshKeywordPipelines;
 use Illuminate\Foundation\Inspiring;
@@ -39,6 +40,10 @@ Schedule::command('launchpad:reconcile-site-counters')->daily()->withoutOverlapp
 // Activity log: freeze the month just ended for every site (and any earlier month still missing) — the
 // long-term progress record the Activity page reads; a closed month is never recomputed.
 Schedule::job(new CloseMonthlySnapshots)->monthlyOn(1, '03:30')->withoutOverlapping()->onOneServer();
+
+// Publish drip: release the next batch of queued first-time publishes wherever slots are free (batch minus the
+// pages still waiting for Google). Hourly, after the daily index sync has had its say; idempotent.
+Schedule::job(new ReleasePublishDrip)->hourly()->withoutOverlapping()->onOneServer();
 
 // §5 standard-mode DataForSEO ingest sweep — polls tasks_ready and collects
 // finished SERP/maps tasks into the cache the providers read (first-cut polling;

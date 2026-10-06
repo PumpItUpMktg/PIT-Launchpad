@@ -8,6 +8,8 @@ use App\Enums\EditReason;
 use App\Enums\ReviewFlag;
 use App\Jobs\PublishContent;
 use App\Models\Content;
+use App\Models\Site;
+use App\Publishing\Drip\PublishDrip;
 use App\Publishing\Links\ContentLinks;
 use App\Publishing\Links\InternalLinkValidator;
 use App\Publishing\SiteContact;
@@ -108,7 +110,7 @@ class ReviewActions
      * (compose into the Elementor template + brand kit, then push to WordPress). Re-checks the same
      * blocking guard so a render_failed page can never push a partial page.
      */
-    public function publish(Content $content, ?string $actorId = null): ApproveResult
+    public function publish(Content $content, ?string $actorId = null, bool $skipDrip = false): ApproveResult
     {
         $blocker = $this->blockingReason($content);
         if ($blocker !== null) {
@@ -116,6 +118,17 @@ class ReviewActions
         }
 
         $warnings = $this->warnings($content);
+
+        // The publish drip (§ Publish drip): a FIRST publish queues when the drip is on and goes live as
+        // the earlier batch gets indexed; a re-push of a live page, or an explicit "publish now", pushes.
+        $site = Site::withoutGlobalScopes()->find($content->site_id);
+        $drip = app(PublishDrip::class);
+        if (! $skipDrip && $site !== null && $drip->applies($site, $content)) {
+            return ApproveResult::queued($drip->enqueue($content, $actorId), $warnings);
+        }
+        if ($skipDrip) {
+            $drip->dequeue($content);
+        }
 
         PublishContent::dispatch($content->id, $actorId);
 
