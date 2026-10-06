@@ -15,6 +15,7 @@ use App\Publishing\Links\InternalLinkGraph;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -60,6 +61,7 @@ final class Reachability
      * @return array{
      *     sitemap: array{url: ?string, fetched: bool, urls: int, error: ?string},
      *     gsc: array{connected: bool, last_submitted: ?string, submitted: int, pending: bool},
+     *     live_error: ?string,
      *     pages: list<array{content_id: string, title: string, url: ?string, state: string, published_at: ?string, days_waiting: ?int, in_sitemap: ?bool, live_permalink: ?string, url_matches: ?bool, found_on_site: ?bool, inbound: int, inbound_indexed: int, indexnow_at: ?string, verdict: string, action: string}>,
      *     by_verdict: array<string, int>
      * }
@@ -98,6 +100,12 @@ final class Reachability
             }
             $found = $live === null ? null : (bool) ($live['found'] ?? false);
             $permalink = $live !== null && is_string($live['permalink'] ?? null) ? (string) $live['permalink'] : null;
+            if ($permalink === null && $url !== null && $sitemap['fetched']) {
+                $twin = self::sitemapTwin($url, $sitemap['paths']);
+                if ($twin !== null) {
+                    $permalink = rtrim((string) $site->domain_url, '/').'/'.$twin.'/';   // the sitemap's own entry: the URL the site serves
+                }
+            }
             $matches = $permalink === null || $url === null ? null : self::normalize($permalink) === self::normalize($url);
 
             $inboundIds = $graph->inbound($row['content_id']);
@@ -140,6 +148,7 @@ final class Reachability
         return [
             'sitemap' => ['url' => $sitemap['url'], 'fetched' => $sitemap['fetched'], 'urls' => count($sitemap['paths']), 'error' => $sitemap['error']],
             'gsc' => $gsc,
+            'live_error' => $this->liveError,
             'pages' => $out,
             'by_verdict' => $byVerdict,
         ];
@@ -234,14 +243,44 @@ final class Reachability
         return ['connected' => (bool) $status['connected'], 'last_submitted' => $last, 'submitted' => (int) $status['submitted'], 'pending' => (bool) $status['pending']];
     }
 
+    /** The first reason a live permalink read failed this run (null when every read answered). */
+    private ?string $liveError = null;
+
     /** @return array<string, mixed>|null */
     private function diagnose(Site $site, Content $page): ?array
     {
         try {
             return $this->wordpress->forSite($site)->diagnoseContent((string) $page->id, (string) $page->slug);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            $this->liveError ??= $e->getMessage();
+            Log::warning('Reachability: live permalink read failed', ['site_id' => $site->id, 'content_id' => $page->id, 'error' => $e->getMessage()]);
+
             return null;
         }
+    }
+
+    /**
+     * When the live read is unavailable, the sitemap still tells us the URL the site serves: a sitemap entry
+     * whose last path segment is this page's last slug segment but whose full path differs is the page at a
+     * different nesting (a hub that was never pushed, or was taken down, so WordPress serves the town flat).
+     *
+     * @param  array<string, true>  $sitemapPaths  normalized
+     */
+    private static function sitemapTwin(string $ourUrl, array $sitemapPaths): ?string
+    {
+        $ours = self::normalize($ourUrl);
+        $last = substr($ours, (int) strrpos('/'.$ours, '/'));
+        if ($last === '' || isset($sitemapPaths[$ours])) {
+            return null;
+        }
+        foreach (array_keys($sitemapPaths) as $path) {
+            $segment = substr($path, (int) strrpos('/'.$path, '/'));
+            if ($segment === $last) {
+                return $path;
+            }
+        }
+
+        return null;
     }
 
     /** Lower-cased path without the scheme, host, or edge slashes — so "/a/b/" and "https://x/A/B" agree. */

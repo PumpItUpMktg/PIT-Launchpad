@@ -40,6 +40,9 @@ class CheckReachabilityCommand extends Command
         $this->line($gsc['connected']
             ? sprintf('Search Console: sitemap last submitted %s · %s URLs submitted%s', $gsc['last_submitted'] ?? 'never', number_format($gsc['submitted']), $gsc['pending'] ? ' · pending' : '')
             : 'Search Console: not connected for this site');
+        if ($report['live_error'] !== null) {
+            $this->warn('Live permalink read (the plugin\'s /content/diagnose) failed: '.$report['live_error'].' — "Live URL matches" falls back to the sitemap; an older companion plugin (before 0.9.48) lacks the route.');
+        }
         $this->line(sprintf('Pages checked: %d', count($report['pages'])));
         foreach ($report['by_verdict'] as $verdict => $n) {
             $this->line(sprintf('  %-16s %d', $verdict, $n));
