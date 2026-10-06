@@ -51,7 +51,7 @@ final class Reachability
 
     public const REACHABLE = 'reachable';
 
-    private const DIAGNOSE_LIMIT = 40;
+    private const DIAGNOSE_LIMIT = 150;
 
     public function __construct(
         private readonly IndexWatchlist $watchlist,
