@@ -67,6 +67,7 @@
         </x-lp.empty>
         {{-- Published pages are waiting whether or not Search Console has looked yet — the watchlist
              shows them (plain) so a fresh tenant sees what it has put in front of Google. --}}
+        @include('filament.pages.partials.indexing-request-today')
         @include('filament.pages.partials.indexing-watchlist')
     @else
         <div class="ix-grid">
@@ -160,6 +161,7 @@
             </div>
         </div>
 
+        @include('filament.pages.partials.indexing-request-today')
         @include('filament.pages.partials.indexing-watchlist')
 
         <div class="ix-note">

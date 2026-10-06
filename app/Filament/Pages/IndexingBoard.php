@@ -13,6 +13,7 @@ use App\Models\Site;
 use App\Operator\ActiveTenant;
 use App\Operator\Coverage\IndexStandings;
 use App\Operator\Coverage\IndexWatchlist;
+use App\Operator\Coverage\RequestQueue;
 use App\Operator\Coverage\ReworkCandidates;
 use App\Publishing\DeleteFromWordpress;
 use BackedEnum;
@@ -210,6 +211,38 @@ class IndexingBoard extends Page
      * offers: §2's delete by ULID, then the row goes back to Candidates. Only a post, only in the locked
      * tenant; a page is never dropped from here.
      */
+    /** "Request today": the most valuable not-crawled pages to request indexing for in Search Console, with their links. */
+    public function getRequestQueueProperty(): ?array
+    {
+        $site = $this->siteId === null ? null : Site::withoutGlobalScopes()->find($this->siteId);
+
+        return $site === null ? null : app(RequestQueue::class)->for($site);
+    }
+
+    /** The operator pressed Request indexing in Search Console for this page: stamp it so it rotates off the list. */
+    public function markRequested(string $contentId): void
+    {
+        $content = $this->siteId === null ? null : Content::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->whereKey($contentId)->first();
+        if ($content === null) {
+            return;
+        }
+        app(RequestQueue::class)->markRequested($content, Auth::id());
+        Cache::forget(ComputeStuckPages::cacheKey((string) $this->siteId));
+        Notification::make()->success()->title("Marked requested: {$content->title}")
+            ->body('It leaves today\'s list and comes back only if Google has not indexed it after the cooldown. Re-check indexing in a day or two.')->send();
+    }
+
+    /** Undo a stamp pressed by mistake. */
+    public function unmarkRequested(string $contentId): void
+    {
+        $content = $this->siteId === null ? null : Content::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->whereKey($contentId)->first();
+        if ($content === null) {
+            return;
+        }
+        app(RequestQueue::class)->unmark($content);
+        Cache::forget(ComputeStuckPages::cacheKey((string) $this->siteId));
+    }
+
     /** Rework a crawled-and-declined page: store the index brief and regenerate (page or post flow). Never prunes. */
     public function reworkPage(string $contentId): void
     {
