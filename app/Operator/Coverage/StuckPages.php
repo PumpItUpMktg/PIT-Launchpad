@@ -91,6 +91,7 @@ class StuckPages
         $pages = Content::query()->withoutGlobalScope(SiteScope::class)->whereKey(array_column($stuck, 'content_id'))->get();
         $everSeen = $this->impressions->ever($site, $pages);
         $kinds = $pages->mapWithKeys(fn (Content $c): array => [(string) $c->id => $c->kind])->all();
+        $requested = $pages->mapWithKeys(fn (Content $c): array => [(string) $c->id => RequestQueue::requestedAt($c)])->all();
 
         // A page UNKNOWN to Google is never a content question: the reachability check says whether the
         // push landed, the URL agrees, the sitemap lists it, Search Console has read the sitemap, and an
@@ -149,6 +150,7 @@ class StuckPages
                 'stage' => $stage,
                 'stage_label' => self::stageLabel($stage),
                 'inspect_url' => self::inspectUrl($site, $row['url']),
+                'requested_at' => $requested[$row['content_id']] ?? null,
             ];
             $byLever[$lever] = ($byLever[$lever] ?? 0) + 1;
             if ($lever === self::LINK && $row['market_id'] !== null) {

@@ -88,6 +88,16 @@ return [
             'decide_days' => (int) env('LAUNCHPAD_INDEX_DECIDE_DAYS', 60),
             'budget_days' => (int) env('LAUNCHPAD_INDEX_BUDGET_DAYS', 90),
         ],
+        // "Request today": Google has no API to request indexing for an ordinary page — the operator presses
+        // Request indexing in Search Console, about `quota_per_day` a day per property. The board lists the
+        // `limit` most valuable not-crawled pages waiting `after_days`+, skipping any requested within
+        // `cooldown_days`, each with its inspect link; "Requested" stamps the page so it rotates off.
+        'request' => [
+            'limit' => (int) env('LAUNCHPAD_INDEX_REQUEST_LIMIT', 10),
+            'quota_per_day' => (int) env('LAUNCHPAD_INDEX_REQUEST_QUOTA', 10),
+            'after_days' => (int) env('LAUNCHPAD_INDEX_REQUEST_AFTER_DAYS', 14),
+            'cooldown_days' => (int) env('LAUNCHPAD_INDEX_REQUEST_COOLDOWN_DAYS', 14),
+        ],
 
         // Hosts Google will never index: the build/staging domains a site lives on before its real one.
         // A site whose domain matches one of these is told so on the Indexing board rather than left

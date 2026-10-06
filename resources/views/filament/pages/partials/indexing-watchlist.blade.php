@@ -113,6 +113,7 @@
                                     <span>Pages linking to it: <b>{{ $s['inbound'] }}</b></span>
                                     <span>Search impressions ever: <b>{{ $s['impressions_ever'] ? 'yes' : 'none' }}</b></span>
                                     <span>IndexNow pinged: <b>{{ $s['indexnow_at'] ? \Illuminate\Support\Carbon::parse($s['indexnow_at'])->format('j M') : 'never' }}</b></span>
+                                    <span>Requested in Search Console: <b>{{ ($s['requested_at'] ?? null) ? \Illuminate\Support\Carbon::parse($s['requested_at'])->format('j M') : 'not yet' }}</b></span>
                                     @if (($s['reachability'] ?? null) !== null)
                                         @php($rc = $s['reachability'])
                                         <span>In the live sitemap: <b>{{ $rc['in_sitemap'] === null ? 'unknown' : ($rc['in_sitemap'] ? 'yes' : 'NO') }}</b></span>
@@ -153,6 +154,7 @@
                                     @endif
                                     @if (($s['inspect_url'] ?? null) !== null && in_array($s['lever'], [\App\Operator\Coverage\StuckPages::REQUEST, \App\Operator\Coverage\StuckPages::PING, \App\Operator\Coverage\StuckPages::DECIDE], true))
                                         <a href="{{ $s['inspect_url'] }}" target="_blank" rel="noopener">Inspect in Search Console ↗</a>
+                                        <button type="button" wire:click="markRequested('{{ $row['content_id'] }}')" title="Press after you clicked Request indexing in Search Console">Requested</button>
                                     @endif
                                     @if ($s['url'])<a href="{{ $s['url'] }}" target="_blank" rel="noopener">View page ↗</a>@endif
                                     <span class="k" style="align-self:center">Diagnosis from {{ \Illuminate\Support\Carbon::parse($stuckReport['computed_at'])->diffForHumans() }} · <button type="button" class="ix-why" style="margin-left:0" wire:click="refreshStuck">Recompute</button></span>
