@@ -190,7 +190,7 @@ final class BlockSections
      * and complete on purpose — cards are for the six-post feeds; the index is the map of everything.
      * Empty (no posts yet) → a single honest line, never an empty section.
      *
-     * @param  list<array{silo: string, posts: list<array{title: string, url: string, date: string}>}>  $groups
+     * @param  list<array{silo: string, pillar?: array{title: string, url: string}|null, posts: list<array{title: string, url: string, date: string, excerpt?: string}>}>  $groups
      */
     public function postIndex(string $eyebrow, string $heading, array $groups, bool $preview = false): string
     {
@@ -205,13 +205,20 @@ final class BlockSections
                     continue;
                 }
                 $date = trim($p['date']);
-                $items[] = '<a href="'.$this->attr($url).'">'.$this->text($title).'</a>'.($date !== '' ? ' <span class="lp-post-meta">· '.$this->text($date).'</span>' : '');
+                $excerpt = trim((string) ($p['excerpt'] ?? ''));
+                $items[] = '<a href="'.$this->attr($url).'">'.$this->text($title).'</a>'.($date !== '' ? ' <span class="lp-post-meta">· '.$this->text($date).'</span>' : '')
+                    .($excerpt !== '' ? '<span class="lp-post-excerpt">'.$this->text($excerpt).'</span>' : '');
             }
             if ($items === []) {
                 continue;
             }
             $any = true;
             $children[] = $this->b->heading(3, trim((string) $group['silo']));
+            // The topic's anchor: its pillar guide, when live — the hub reads as a topic map, not a list.
+            $pillar = is_array($group['pillar'] ?? null) ? $group['pillar'] : null;
+            if ($pillar !== null && trim($pillar['url']) !== '' && trim($pillar['title']) !== '') {
+                $children[] = $this->b->paragraph('Start with our guide: <a href="'.$this->attr($pillar['url']).'">'.$this->text($pillar['title']).'</a>', ['className' => 'lp-post-pillar']);
+            }
             $children[] = $this->b->list($items, ['className' => 'lp-post-index']);
         }
         if (! $any) {

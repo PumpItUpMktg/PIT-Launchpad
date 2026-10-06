@@ -2,6 +2,7 @@
 
 namespace App\Publishing\Blocks;
 
+use App\Build\Permalinks;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Models\Content;
@@ -112,7 +113,10 @@ class BlogFeeds
      * "More articles" last), newest first inside each group, groups by name. The page every post is
      * reachable from — the durable answer to a post that fell out of every feed.
      *
-     * @return list<array{silo: string, posts: Collection<int, Content>}>
+     * Each group also carries its silo's PILLAR page (title + path) when that page is live, so the index can
+     * lead a topic with the guide that anchors it — the hub reads as a topic map, not a bare list.
+     *
+     * @return list<array{silo: string, pillar: array{title: string, url: string}|null, posts: Collection<int, Content>}>
      */
     public function index(string $siteId): array
     {
@@ -120,14 +124,26 @@ class BlogFeeds
         if ($posts->isEmpty()) {
             return [];
         }
-        $names = Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId)->pluck('name', 'id');
+        $silos = Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId)->get(['id', 'name', 'pillar_content_id'])->keyBy('id');
+        $pillarIds = $silos->pluck('pillar_content_id')->filter()->unique()->values()->all();
+        $pillars = $pillarIds === [] ? collect() : Content::withoutGlobalScope(SiteScope::class)
+            ->whereKey($pillarIds)->where('status', ContentStatus::Published->value)->whereNotNull('wp_post_id')->whereNotNull('slug')
+            ->get(['id', 'title', 'slug'])->keyBy('id');
 
         $groups = [];
         foreach ($posts as $post) {
             $siloId = $post->matched_silo_id ?? $post->silo_id;
-            $name = $siloId !== null ? trim((string) ($names[(string) $siloId] ?? '')) : '';
+            $silo = $siloId !== null ? $silos->get((string) $siloId) : null;
+            $name = $silo !== null ? trim((string) $silo->name) : '';
             $key = $name !== '' ? $name : "\u{10FFFF}"; // routed-nowhere sorts last
-            $groups[$key] ??= ['silo' => $name !== '' ? $name : 'More articles', 'posts' => new Collection];
+            if (! isset($groups[$key])) {
+                $pillar = $silo?->pillar_content_id !== null ? $pillars->get((string) $silo->pillar_content_id) : null;
+                $groups[$key] = [
+                    'silo' => $name !== '' ? $name : 'More articles',
+                    'pillar' => $pillar !== null ? ['title' => (string) $pillar->title, 'url' => '/'.Permalinks::slugPath((string) $pillar->slug)] : null,
+                    'posts' => new Collection,
+                ];
+            }
             $groups[$key]['posts']->push($post);
         }
         ksort($groups, SORT_NATURAL | SORT_FLAG_CASE);

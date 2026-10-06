@@ -106,6 +106,12 @@
                                     <span>Pages linking to it: <b>{{ $s['inbound'] }}</b></span>
                                     <span>Search impressions ever: <b>{{ $s['impressions_ever'] ? 'yes' : 'none' }}</b></span>
                                     <span>IndexNow pinged: <b>{{ $s['indexnow_at'] ? \Illuminate\Support\Carbon::parse($s['indexnow_at'])->format('j M') : 'never' }}</b></span>
+                                    @if (($s['reachability'] ?? null) !== null)
+                                        @php($rc = $s['reachability'])
+                                        <span>In the live sitemap: <b>{{ $rc['in_sitemap'] === null ? 'unknown' : ($rc['in_sitemap'] ? 'yes' : 'NO') }}</b></span>
+                                        <span>Live URL matches: <b>{{ $rc['found_on_site'] === false ? 'NOT ON THE SITE' : ($rc['url_matches'] === null ? 'unknown' : ($rc['url_matches'] ? 'yes' : 'NO — '.$rc['live_permalink'])) }}</b></span>
+                                        <span>Linked from indexed pages: <b>{{ $rc['inbound_indexed'] }}</b></span>
+                                    @endif
                                 </div>
                                 <div class="say">{{ $s['action'] }}.</div>
                                 <div class="acts">
@@ -114,6 +120,9 @@
                                     @endif
                                     @if ($s['lever'] === \App\Operator\Coverage\StuckPages::REGENERATE || $s['lever'] === \App\Operator\Coverage\StuckPages::DROP)
                                         <a href="{{ $s['is_post'] ? \App\Filament\Pages\Operate\OperateBlog::getUrl() : \App\Filament\Pages\Operate\OperatePages::getUrl() }}" wire:navigate>Open in {{ $s['is_post'] ? 'Posts' : 'Pages' }} to regenerate</a>
+                                    @endif
+                                    @if ($s['lever'] === \App\Operator\Coverage\StuckPages::REPUSH)
+                                        <button type="button" wire:click="repushPage('{{ $row['content_id'] }}')" wire:confirm="Re-push '{{ $row['title'] }}' to WordPress on the same URL?">Re-push this page</button>
                                     @endif
                                     @if ($s['lever'] === \App\Operator\Coverage\StuckPages::LINK)
                                         <a href="{{ \App\Filament\Pages\LocationCoverage::getUrl() }}" wire:navigate>Open the market link plan</a>
