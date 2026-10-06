@@ -35,7 +35,7 @@
                         </td>
                         <td class="act">
                             @if ($r['inspect_url'])<a class="primary" href="{{ $r['inspect_url'] }}" target="_blank" rel="noopener">Inspect in Search Console ↗</a>@endif
-                            <button type="button" wire:click="markRequested('{{ $r['content_id'] }}')" wire:loading.attr="disabled" wire:target="markRequested" title="Press after you clicked Request indexing in Search Console">Requested</button>
+                            <button type="button" wire:click="markRequested('{{ $r['content_id'] }}')" wire:loading.attr="disabled" wire:target="markRequested" title="Press after you clicked Request indexing in Search Console — it stamps the page and takes it off today's list">Mark requested</button>
                         </td>
                     </tr>
                 @endforeach

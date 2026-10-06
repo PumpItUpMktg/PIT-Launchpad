@@ -154,7 +154,7 @@
                                     @endif
                                     @if (($s['inspect_url'] ?? null) !== null && in_array($s['lever'], [\App\Operator\Coverage\StuckPages::REQUEST, \App\Operator\Coverage\StuckPages::PING, \App\Operator\Coverage\StuckPages::DECIDE], true))
                                         <a href="{{ $s['inspect_url'] }}" target="_blank" rel="noopener">Inspect in Search Console ↗</a>
-                                        <button type="button" wire:click="markRequested('{{ $row['content_id'] }}')" title="Press after you clicked Request indexing in Search Console">Requested</button>
+                                        <button type="button" wire:click="markRequested('{{ $row['content_id'] }}')" title="Press after you clicked Request indexing in Search Console — it stamps the page">Mark requested</button>
                                     @endif
                                     @if ($s['url'])<a href="{{ $s['url'] }}" target="_blank" rel="noopener">View page ↗</a>@endif
                                     <span class="k" style="align-self:center">Diagnosis from {{ \Illuminate\Support\Carbon::parse($stuckReport['computed_at'])->diffForHumans() }} · <button type="button" class="ix-why" style="margin-left:0" wire:click="refreshStuck">Recompute</button></span>

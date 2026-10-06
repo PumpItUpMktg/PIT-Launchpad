@@ -108,3 +108,30 @@ it('works without the live permalink read (sitemap + links only) when WordPress 
         ->and($byTitle['Hope, NJ']['in_sitemap'])->toBeFalse()
         ->and($byTitle['Allamuchy, NJ']['verdict'])->toBe(Reachability::NOT_IN_SITEMAP);
 });
+
+it('with no live read, the sitemap reveals a town served flat instead of nested under its hub — a URL mismatch to re-push', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG2', 'domain_url' => 'https://spg2.example']);
+    $office = Location::factory()->create(['site_id' => $site->id, 'name' => 'Downingtown office', 'served_towns' => []]);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andThrow(new RuntimeException('WordPress /content/diagnose returned HTTP 404'));
+    app()->instance(WordpressClientFactory::class, $factory);
+    // Chester is nested under the Downingtown hub in Launchpad, but the live sitemap serves it flat.
+    $chester = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::Published,
+        'location_id' => null, 'parent_location_id' => $office->id, 'title' => 'Chester, PA', 'slug' => 'downingtown-pa/chester-pa', 'wp_post_id' => 321,
+        'published_at' => now()->subDays(14), 'slot_payload' => ['intro' => 'x'],
+    ]);
+    PageIndexState::create(['site_id' => $site->id, 'content_id' => $chester->id, 'url' => 'https://spg2.example/downingtown-pa/chester-pa/', 'url_normalized' => 'https://spg2.example/downingtown-pa/chester-pa', 'coverage_state' => IndexCoverageState::Unknown->value, 'index_verdict' => IndexCoverageState::Unknown->value, 'last_inspected_at' => now()]);
+    Http::fake(['https://spg2.example/sitemap-content.xml' => Http::response(
+        '<?xml version="1.0"?><urlset><url><loc>https://spg2.example/downingtown-pa/</loc></url><url><loc>https://spg2.example/chester-pa/</loc></url></urlset>',
+        200, ['Content-Type' => 'application/xml'],
+    )]);
+
+    $report = app(Reachability::class)->for($site);
+    $row = collect($report['pages'])->firstWhere('title', 'Chester, PA');
+
+    expect($report['live_error'])->toContain('HTTP 404')
+        ->and($row['verdict'])->toBe(Reachability::URL_MISMATCH)
+        ->and($row['live_permalink'])->toBe('https://spg2.example/chester-pa/')
+        ->and($row['action'])->toContain('the slug drifted');
+});
