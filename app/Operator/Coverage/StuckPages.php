@@ -50,6 +50,21 @@ class StuckPages
     /** A post that duplicates a live post: merge it into the stronger one (redirect + take-down). */
     public const MERGE = 'merge';
 
+    /** 30–60 days, not crawled, linked and listed: ask Google — request indexing by hand, resubmit the sitemap. */
+    public const REQUEST = 'request';
+
+    /** 60–90 days, not crawled: decide — a stronger inbound link, or fold a small town into its hub. */
+    public const DECIDE = 'decide';
+
+    /** 90+ days, not crawled: Google has judged the site's crawl budget — fewer, better pages first. */
+    public const BUDGET = 'budget';
+
+    public const STAGE_ASK = 'ask';
+
+    public const STAGE_DECIDE = 'decide';
+
+    public const STAGE_BUDGET = 'budget';
+
     public const REWORK = 'rework';
 
     public function __construct(
@@ -103,10 +118,11 @@ class StuckPages
             $inbound = count($graph->inbound($row['content_id']));
             $isPost = ($kinds[$row['content_id']] ?? null) === ContentKind::Post;
             $seen = isset($everSeen[$row['content_id']]);
+            $stage = self::stage((int) ($row['days_waiting'] ?? 0));
             [$lever, $action] = match (true) {
                 isset($reach[$row['content_id']]) => self::reachabilityLever($reach[$row['content_id']]),
                 isset($rework[$row['content_id']]) => self::reworkLever($rework[$row['content_id']]),
-                default => $this->lever($row['verdict'], $inbound, $isPost, $seen),
+                default => $this->lever($row['verdict'], $inbound, $isPost, $seen, $stage),
             };
             $rows[] = [
                 'content_id' => $row['content_id'],
@@ -130,6 +146,9 @@ class StuckPages
                 'is_post' => $isPost,
                 'reachability' => $reach[$row['content_id']] ?? null,
                 'rework' => $rework[$row['content_id']] ?? null,
+                'stage' => $stage,
+                'stage_label' => self::stageLabel($stage),
+                'inspect_url' => self::inspectUrl($site, $row['url']),
             ];
             $byLever[$lever] = ($byLever[$lever] ?? 0) + 1;
             if ($lever === self::LINK && $row['market_id'] !== null) {
@@ -179,8 +198,48 @@ class StuckPages
         };
     }
 
+    /** Where a not-crawled page sits on the 30 / 60 / 90-day timeline. */
+    public static function stage(int $daysWaiting): string
+    {
+        return match (true) {
+            $daysWaiting >= self::budgetDays() => self::STAGE_BUDGET,
+            $daysWaiting >= self::decideDays() => self::STAGE_DECIDE,
+            default => self::STAGE_ASK,
+        };
+    }
+
+    public static function stageLabel(string $stage): string
+    {
+        return match ($stage) {
+            self::STAGE_BUDGET => sprintf('%d+ days — crawl budget', self::budgetDays()),
+            self::STAGE_DECIDE => sprintf('%d–%d days — decide', self::decideDays(), self::budgetDays()),
+            default => sprintf('%d–%d days — ask Google', max(1, (int) config('launchpad.indexing.stuck_days', 30)), self::decideDays()),
+        };
+    }
+
+    public static function decideDays(): int
+    {
+        return max(1, (int) config('launchpad.indexing.timeline.decide_days', 60));
+    }
+
+    public static function budgetDays(): int
+    {
+        return max(self::decideDays() + 1, (int) config('launchpad.indexing.timeline.budget_days', 90));
+    }
+
+    /** The Search Console URL-inspection link for a page (the manual "request indexing"), when the property is known. */
+    public static function inspectUrl(Site $site, ?string $url): ?string
+    {
+        $property = is_string($site->gsc_property) ? trim($site->gsc_property) : '';
+        if ($property === '' || $url === null || $url === '') {
+            return null;
+        }
+
+        return 'https://search.google.com/search-console/inspect?resource_id='.rawurlencode($property).'&id='.rawurlencode($url);
+    }
+
     /** @return array{0: string, 1: string} [lever, the sentence] */
-    private function lever(?string $verdict, int $inbound, bool $isPost = false, bool $impressionsEver = false): array
+    private function lever(?string $verdict, int $inbound, bool $isPost = false, bool $impressionsEver = false, string $stage = self::STAGE_ASK): array
     {
         $state = $verdict === null ? IndexCoverageState::NotInspected : (IndexCoverageState::tryFrom($verdict) ?? IndexCoverageState::NotIndexedOther);
 
@@ -194,8 +253,12 @@ class StuckPages
             $state === IndexCoverageState::CrawledNotIndexed && $isPost && ! $impressionsEver => [self::DROP, 'Google crawled it, declined to index it, and it has never earned a single impression — a thin or duplicate post. Take it down rather than rework it; the pillar page carries the topic'],
             $state === IndexCoverageState::CrawledNotIndexed && $inbound === 0 => [self::LINK, 'Crawled but judged not worth indexing, and nothing links to it — link it first (the market link plan), then re-inspect'],
             $state === IndexCoverageState::CrawledNotIndexed => [self::REGENERATE, 'Crawled, linked, still not indexed — regenerate with local grounding (jobs, reviews, neighbours), then re-inspect'],
-            $inbound === 0 => [self::LINK, 'Google has not crawled it and nothing links to it — link it (the market link plan), then ping IndexNow'],
-            default => [self::PING, 'Linked but not crawled yet — ping IndexNow and resubmit the sitemap, then wait for the crawl'],
+            // Not crawled: the 30 / 60 / 90-day timeline. Nothing here is a content lever — Google has not read the page.
+            $stage === self::STAGE_BUDGET => [self::BUDGET, sprintf('%d+ days without a crawl — Google has judged the site\'s crawl budget, not this page. Fewer, better pages first: prune off-topic posts and rework the thin ones (Rework candidates); this page gets its turn as the site earns more crawl', self::budgetDays())],
+            $stage === self::STAGE_DECIDE && $isPost => [self::DECIDE, sprintf('%d+ days without a crawl — decide: give it a link from a ranking post in its silo, or drop it if it is off the site\'s topics', self::decideDays())],
+            $stage === self::STAGE_DECIDE => [self::DECIDE, sprintf('%d+ days without a crawl — decide: keep it with a stronger inbound link from a ranking page, or fold a small town into its hub. A town page is never dropped', self::decideDays())],
+            $inbound === 0 => [self::LINK, 'Google has not crawled it and nothing links to it — link it from a ranking page (the index booster / market link plan), then resubmit the sitemap'],
+            default => [self::REQUEST, 'Linked and in the sitemap, not crawled yet — ask Google: request indexing for it in Search Console (the link below), and resubmit the sitemap. Do not rewrite it: Google has not read it'],
         };
     }
 }

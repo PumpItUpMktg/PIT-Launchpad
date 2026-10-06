@@ -48,6 +48,13 @@
         <div class="ix-num"><div class="n {{ $m['indexed_week'] > 0 ? 'good' : 'neutral' }}">{{ number_format($m['indexed_week']) }}</div><div class="l">Indexed, past week</div></div>
         <div class="ix-num"><div class="n {{ $m['not_indexed'] > 0 ? 'warn' : 'neutral' }}">{{ number_format($m['not_indexed']) }}</div><div class="l">Not indexed</div></div>
         <div class="ix-num"><div class="n {{ $m['stuck'] > 0 ? 'bad' : 'neutral' }}">{{ number_format($m['stuck']) }}</div><div class="l">Not indexed, over {{ $m['stuck_days'] }} days</div></div>
+        <div class="ix-timeline" title="A page Google has not crawled follows this timeline; a page Google crawled and declined follows the rework window instead">
+            <b>Not crawled yet:</b>
+            <span>under {{ $m['stuck_days'] }} days · waiting</span>
+            <span>{{ $m['stuck_days'] }}–{{ \App\Operator\Coverage\StuckPages::decideDays() }} · ask Google (link it, resubmit the sitemap, request indexing)</span>
+            <span>{{ \App\Operator\Coverage\StuckPages::decideDays() }}–{{ \App\Operator\Coverage\StuckPages::budgetDays() }} · decide (a stronger link, or fold a small town into its hub)</span>
+            <span>{{ \App\Operator\Coverage\StuckPages::budgetDays() }}+ · crawl budget (fewer, better pages first)</span>
+        </div>
     </div>
     @if ($watch['rows'] === [])
         <div class="ix-none">{{ $ready['connected'] && ! $ready['test_domain'] ? 'Nothing waiting — every published page is indexed.' : 'Nothing on the list.' }}</div>
@@ -102,7 +109,7 @@
                                 <span class="rec {{ $s['recommendation'] }}">{{ ['wait' => 'Wait — process lever', 'rework' => 'Rework the content', 'drop' => 'Drop it'][$s['recommendation']] ?? $s['recommendation'] }}</span>
                                 <div class="facts">
                                     <span>Google says: <b>{{ $s['reason'] }}</b></span>
-                                    <span>Waiting: <b>{{ $s['days_waiting'] ?? '—' }} days</b></span>
+                                    <span>Waiting: <b>{{ $s['days_waiting'] ?? '—' }} days</b>{{ ($s['stage_label'] ?? null) !== null && ($s['rework'] ?? null) === null && ($s['reachability'] ?? null) === null ? ' · '.$s['stage_label'] : '' }}</span>
                                     <span>Pages linking to it: <b>{{ $s['inbound'] }}</b></span>
                                     <span>Search impressions ever: <b>{{ $s['impressions_ever'] ? 'yes' : 'none' }}</b></span>
                                     <span>IndexNow pinged: <b>{{ $s['indexnow_at'] ? \Illuminate\Support\Carbon::parse($s['indexnow_at'])->format('j M') : 'never' }}</b></span>
@@ -143,6 +150,9 @@
                                     @endif
                                     @if ($s['lever'] === \App\Operator\Coverage\StuckPages::RECHECK || $s['lever'] === \App\Operator\Coverage\StuckPages::PING)
                                         <span class="k" style="align-self:center">Use “Re-check indexing now” at the top of this page{{ $s['lever'] === \App\Operator\Coverage\StuckPages::PING ? ', then ping IndexNow (launchpad:boost-indexing)' : '' }}.</span>
+                                    @endif
+                                    @if (($s['inspect_url'] ?? null) !== null && in_array($s['lever'], [\App\Operator\Coverage\StuckPages::REQUEST, \App\Operator\Coverage\StuckPages::PING, \App\Operator\Coverage\StuckPages::DECIDE], true))
+                                        <a href="{{ $s['inspect_url'] }}" target="_blank" rel="noopener">Inspect in Search Console ↗</a>
                                     @endif
                                     @if ($s['url'])<a href="{{ $s['url'] }}" target="_blank" rel="noopener">View page ↗</a>@endif
                                     <span class="k" style="align-self:center">Diagnosis from {{ \Illuminate\Support\Carbon::parse($stuckReport['computed_at'])->diffForHumans() }} · <button type="button" class="ix-why" style="margin-left:0" wire:click="refreshStuck">Recompute</button></span>

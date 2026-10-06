@@ -15,6 +15,8 @@
         .ix-head .d { font-size:12px; color:var(--ink-soft); margin-top:2px; }
         .ix-nums { display:flex; gap:20px; padding:14px 16px; flex-wrap:wrap; }
         .ix-num .n { font-family:'Spline Sans Mono',monospace; font-size:22px; font-weight:600; }
+        .ix-timeline { flex-basis:100%; display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:#6b7280; margin-top:-4px; }
+        .ix-timeline b { color:inherit; }
         .ix-num .n.good { color:#2E7D6B; } .ix-num .n.warn { color:var(--amber); } .ix-num .n.neutral { color:var(--ink-soft); } .ix-num .n.bad { color:#B5341A; }
         .ix-num .l { font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin-top:2px; }
         .ix-bar { height:8px; display:flex; margin:0 16px 14px; border-radius:5px; overflow:hidden; background:var(--paper); }
