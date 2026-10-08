@@ -235,13 +235,18 @@ class LegacyContentReviver
 
     /**
      * Create one blog candidate per revival family (status `candidate`, gated for operator generation).
+     * `$only` restricts the run to those family keys — how `--clean` applies just what the review passed.
      *
+     * @param  list<string>|null  $only
      * @return list<Content>
      */
-    public function revive(Site $site, ?int $minImpressions = null, ?int $limit = null): array
+    public function revive(Site $site, ?int $minImpressions = null, ?int $limit = null, ?array $only = null): array
     {
         $created = [];
         foreach ($this->plan($site, $minImpressions, $limit) as $family) {
+            if ($only !== null && ! in_array($family['key'], $only, true)) {
+                continue;
+            }
             $query = is_string($family['query']) && trim($family['query']) !== ''
                 ? trim($family['query'])
                 : $this->titleFromSlug($family['from_urls'][0]);
