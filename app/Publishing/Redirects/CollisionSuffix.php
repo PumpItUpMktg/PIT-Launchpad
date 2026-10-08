@@ -40,6 +40,26 @@ final class CollisionSuffix
         return $n >= 2 && $n <= self::max() ? $m[1] : null;
     }
 
+    /**
+     * A full PATH with the collision suffix removed from its last segment, or null when the last segment
+     * does not carry one. Pagination is never a twin: `/blog/page/2` is page two of the blog, not a copy
+     * of `/blog/page`. Shared by every surface that asks "is this URL a numbered twin of that one", so
+     * they cannot disagree about what a duplicate is.
+     */
+    public static function stripPath(string $path): ?string
+    {
+        $cut = strrpos($path, '/');
+        if ($cut === false) {
+            return null;
+        }
+        $base = self::strip(substr($path, $cut + 1));
+        if ($base === null || str_ends_with(substr($path, 0, $cut), '/page')) {
+            return null;
+        }
+
+        return substr($path, 0, $cut + 1).$base;
+    }
+
     /** Whether this slug carries a plausible collision suffix. */
     public static function has(string $slug): bool
     {

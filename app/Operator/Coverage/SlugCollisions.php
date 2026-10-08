@@ -90,7 +90,7 @@ final class SlugCollisions
             if (isset($oursByPath[$path])) {
                 continue;
             }
-            $base = $this->stripNumberedSuffix($path);
+            $base = CollisionSuffix::stripPath($path);
             if ($base === null || ! isset($oursByPath[$base])) {
                 continue;
             }
@@ -276,20 +276,5 @@ final class SlugCollisions
         } catch (Throwable) {
             return [null, null];
         }
-    }
-
-    /** The same rule {@see UnmanagedUrls} applies: a collision suffix on the last segment, never pagination. */
-    private function stripNumberedSuffix(string $path): ?string
-    {
-        $cut = strrpos($path, '/');
-        if ($cut === false) {
-            return null;
-        }
-        $base = CollisionSuffix::strip(substr($path, $cut + 1));
-        if ($base === null || str_ends_with(substr($path, 0, $cut), '/page')) {
-            return null;
-        }
-
-        return substr($path, 0, $cut + 1).$base;
     }
 }

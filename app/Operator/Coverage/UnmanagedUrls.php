@@ -169,7 +169,7 @@ class UnmanagedUrls
      */
     private function classify(string $path, array $ours): string
     {
-        $base = $this->stripNumberedSuffix($path);
+        $base = CollisionSuffix::stripPath($path);
         if ($base !== null) {
             return isset($ours[$base]) ? 'duplicate of a published page' : 'numbered twin (not ours)';
         }
@@ -185,33 +185,5 @@ class UnmanagedUrls
             $path === '' || $path === '/' => 'home',
             default => 'other page',
         };
-    }
-
-    /**
-     * The path with WordPress's collision suffix removed, or null when the last segment does not carry one.
-     *
-     * Only a suffix on the LAST segment counts, and only where something remains in front of it — `/page/2`
-     * is pagination, not a twin of `/page`, and a slug that is nothing but a number is not a duplicate of
-     * the empty string.
-     */
-    private function stripNumberedSuffix(string $path): ?string
-    {
-        $cut = strrpos($path, '/');
-        if ($cut === false) {
-            return null;
-        }
-        $segment = substr($path, $cut + 1);
-        // A large trailing number is a title, not WordPress's collision counter — the same rule the
-        // redirect planner applies, so the two cannot disagree about what a duplicate is.
-        $base = CollisionSuffix::strip($segment);
-        if ($base === null) {
-            return null;
-        }
-        // /page/2, /blog/page/3 — pagination, already its own shape.
-        if (str_ends_with(substr($path, 0, $cut), '/page')) {
-            return null;
-        }
-
-        return substr($path, 0, $cut + 1).$base;
     }
 }
