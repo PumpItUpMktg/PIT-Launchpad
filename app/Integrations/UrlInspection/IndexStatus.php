@@ -21,6 +21,8 @@ final class IndexStatus
         public readonly ?string $googleCanonical = null,
         public readonly ?string $userCanonical = null,
         public readonly ?Carbon $lastCrawledAt = null,
+        /** When Google gave this answer — the honest "as of" for a verdict served from cache. */
+        public readonly ?Carbon $inspectedAt = null,
     ) {}
 
     public function indexed(): bool
@@ -37,7 +39,7 @@ final class IndexStatus
     }
 
     /**
-     * @return array{url: string, state: string, label: string, indexed: bool, coverage_state: string, verdict: ?string, google_canonical: ?string, user_canonical: ?string, canonical_mismatch: bool, last_crawled_at: ?string}
+     * @return array{url: string, state: string, label: string, indexed: bool, coverage_state: string, verdict: ?string, google_canonical: ?string, user_canonical: ?string, canonical_mismatch: bool, last_crawled_at: ?string, inspected_at: ?string}
      */
     public function toArray(): array
     {
@@ -52,6 +54,7 @@ final class IndexStatus
             'google_canonical' => $this->googleCanonical,
             'canonical_mismatch' => $this->canonicalMismatch(),
             'last_crawled_at' => $this->lastCrawledAt?->toIso8601String(),
+            'inspected_at' => $this->inspectedAt?->toIso8601String(),
         ];
     }
 
@@ -65,9 +68,13 @@ final class IndexStatus
             verdict: isset($data['verdict']) ? (string) $data['verdict'] : null,
             googleCanonical: isset($data['google_canonical']) ? (string) $data['google_canonical'] : null,
             userCanonical: isset($data['user_canonical']) ? (string) $data['user_canonical'] : null,
-            lastCrawledAt: isset($data['last_crawled_at']) && is_string($data['last_crawled_at']) && $data['last_crawled_at'] !== ''
-                ? Carbon::parse($data['last_crawled_at'])
-                : null,
+            lastCrawledAt: self::time($data['last_crawled_at'] ?? null),
+            inspectedAt: self::time($data['inspected_at'] ?? null),
         );
+    }
+
+    private static function time(mixed $value): ?Carbon
+    {
+        return is_string($value) && $value !== '' ? Carbon::parse($value) : null;
     }
 }

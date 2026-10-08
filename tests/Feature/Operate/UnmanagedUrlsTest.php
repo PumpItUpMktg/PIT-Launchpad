@@ -4,8 +4,10 @@ use App\Enums\ContentStatus;
 use App\Enums\UserRole;
 use App\Models\Content;
 use App\Models\GscUrlDaily;
+use App\Models\Job;
 use App\Models\Site;
 use App\Models\User;
+use App\Operator\Coverage\DiscoveredUrls;
 use App\Operator\Coverage\UnmanagedUrls;
 use App\Support\CurrentSite;
 use App\Support\PublicUrl;
@@ -179,4 +181,28 @@ it('reports a URL with no stored position as unknown rather than guessing a band
     ]);
 
     expect(app(UnmanagedUrls::class)->for($site)['position_bands'])->toHaveKey('unknown');
+});
+
+it('counts a published job page as ours, not as a page Google found on its own', function () {
+    $site = Site::factory()->create();
+    $job = Job::factory()->published()->create(['site_id' => $site->id, 'post_title' => 'Sump Pump Job']);
+    gscUrl($site, (string) $job->publicUrl($site->domain_url), 25);
+    gscUrl($site, rtrim((string) $site->domain_url, '/').'/legacy-post/', 90);
+
+    $r = app(UnmanagedUrls::class)->for($site);
+
+    expect($r['managed'])->toBe(1)->and($r['unmanaged'])->toBe(1);
+});
+
+it('enumerates the legacy URLs for the all-known capture, most impressions first, ours excluded', function () {
+    $site = Site::factory()->create();
+    $page = Content::factory()->create(['site_id' => $site->id, 'slug' => 'sump-pump-repair', 'status' => ContentStatus::Published]);
+    $base = rtrim((string) $site->domain_url, '/');
+    gscUrl($site, (string) PublicUrl::forContent($site->domain_url, $page), 300);
+    gscUrl($site, $base.'/category/sump-pumps/', 90);
+    gscUrl($site, $base.'/sump-pump-installation-cost-breakdown-3/', 189_317);
+    gscUrl($site, $base.'/sump-pump-installation-cost-breakdown-3', 1); // the slash-less twin of the same URL
+
+    expect(app(DiscoveredUrls::class)->urls($site))
+        ->toBe([$base.'/sump-pump-installation-cost-breakdown-3/', $base.'/category/sump-pumps/']);
 });

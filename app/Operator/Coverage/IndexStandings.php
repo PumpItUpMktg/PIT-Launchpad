@@ -23,11 +23,15 @@ use Illuminate\Support\Collection;
  *
  * Two design points the surface exists to make honest:
  *   • The per-reason breakdown is the point, not the count — grouped by `index_verdict` (the reliable
- *     reason key: 'PASS' for indexed, else the {@see IndexCoverageState} value; `coverage_state` holds
- *     Google's raw free-text and is not safe to group on).
- *   • Sitemap-published vs all-known — a URL Launchpad published (a Content page, `content_id` set) is
- *     distinguished from a URL Google merely found (WP archives outside our sitemap, `content_id` null),
- *     so a large "not indexed" number over discovered archives never masks a healthy published set.
+ *     reason key: 'PASS' for indexed, else the {@see IndexCoverageState} value). Each group is LABELLED
+ *     with Google's own phrase for it (the `coverage_state` text URL Inspection returned, e.g. "Crawled -
+ *     currently not indexed") so the words on this board are the words on Search Console's Pages report;
+ *     grouping stays on the stable key because the phrase is free text.
+ *   • The two panels are Search Console's two views of the Pages report. "Submitted pages" is the sitemap —
+ *     the pages Launchpad published (a Content page, `content_id` set). "All known pages" is everything,
+ *     including the legacy URLs the all-known capture inspects (`origin` = discovered). The split means a
+ *     large "not indexed" number over legacy archives never masks a healthy published set — and a client
+ *     comparing the board to Search Console is told which view matches which panel.
  */
 class IndexStandings
 {
@@ -39,6 +43,8 @@ class IndexStandings
      *     published: array{total: int, indexed: int, not_indexed: int, excluded: int, reasons: list<array{state: string, label: string, count: int}>},
      *     all_known: array{total: int, indexed: int, not_indexed: int, excluded: int, reasons: list<array{state: string, label: string, count: int}>},
      *     discovered_only: int,
+     *     discovered: int,
+     *     discovered_last_inspected_at: ?string,
      *     all_known_available: bool,
      *     inspected_count: int,
      *     published_content_count: int,
@@ -61,6 +67,7 @@ class IndexStandings
 
             return [
                 'published' => $empty, 'all_known' => $empty, 'discovered_only' => 0,
+                'discovered' => 0, 'discovered_last_inspected_at' => null,
                 'all_known_available' => $allKnownAvailable,
                 'inspected_count' => 0, 'published_content_count' => 0, 'coverage_gap' => 0, 'data_through' => null,
                 'last_inspected_at' => null,
@@ -72,7 +79,7 @@ class IndexStandings
         /** @var Collection<int, PageIndexState> $rows */
         $rows = PageIndexState::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
-            ->get(['content_id', 'index_verdict', 'last_inspected_at']);
+            ->get(['content_id', 'origin', 'coverage_state', 'index_verdict', 'last_inspected_at']);
 
         // The published panel counts CURRENTLY PUBLISHED pages — not every row that happens to carry a
         // content_id. A page that was unpublished, retired or replaced leaves its verdict row behind, and
@@ -108,15 +115,22 @@ class IndexStandings
         $publishedContent = $publishedPages->count();
 
         // Freshness: a daily sync that fails silently would leave the panel confidently showing week-old
-        // verdicts. Stamp the panel with the newest verdict's as-of date so staleness is visible.
-        $lastInspected = PageIndexState::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $siteId)
-            ->max('last_inspected_at');
+        // verdicts. Stamp each panel with its newest verdict's as-of date so staleness is visible — the
+        // legacy URLs are inspected after the submitted pages, so their date is its own.
+        $newest = function (Collection $set): ?string {
+            $max = $set->max('last_inspected_at');
+
+            return $max === null ? null : (string) $max;
+        };
+        $lastInspected = $newest($publishedRows);
+        $discoveredRows = $rows->filter(fn (PageIndexState $r): bool => $r->origin === 'discovered');
 
         return [
             'published' => $published,
             'all_known' => $allKnown,
             'discovered_only' => $allKnown['total'] - $published['total'],
+            'discovered' => $discoveredRows->count(),
+            'discovered_last_inspected_at' => $newest($discoveredRows),
             'all_known_available' => $allKnownAvailable,
             'inspected_count' => $inspected,
             'published_content_count' => $publishedContent,
@@ -126,6 +140,27 @@ class IndexStandings
             'freshness' => $this->vintage($publishedRows),
             'orphan_rows' => $orphanRows,
         ];
+    }
+
+    /**
+     * Google's phrase for a reason group — the most common `coverage_state` text URL Inspection returned
+     * for its rows ("Crawled - currently not indexed", "URL is unknown to Google") — so the board reads in
+     * the same words as Search Console's Pages report. Falls back to our label when no row carries the
+     * phrase (never inspected, or a fixture that stored the key itself).
+     *
+     * @param  Collection<int, PageIndexState>  $group
+     */
+    private function googleLabel(Collection $group, string $state): string
+    {
+        $phrase = $group
+            ->map(fn (PageIndexState $r): string => trim((string) $r->coverage_state))
+            ->filter(fn (string $text): bool => $text !== '' && $text !== $state)
+            ->countBy()
+            ->sortDesc()
+            ->keys()
+            ->first();
+
+        return is_string($phrase) && $phrase !== '' ? $phrase : (IndexCoverageState::tryFrom($state)?->label() ?? $state);
     }
 
     /**
@@ -188,13 +223,13 @@ class IndexStandings
             fn (PageIndexState $r): bool => ! $isIndexed($r) && in_array($verdict($r), self::EXCLUDED, true),
         )->count();
 
-        // Reasons: every non-indexed row grouped by its verdict, resolved to a label, biggest first.
+        // Reasons: every non-indexed row grouped by its verdict, labelled in Google's words, biggest first.
         $reasons = $rows
             ->filter(fn (PageIndexState $r): bool => ! $isIndexed($r))
             ->groupBy($verdict)
             ->map(fn (Collection $group, string $state): array => [
                 'state' => $state,
-                'label' => IndexCoverageState::tryFrom($state)?->label() ?? $state,
+                'label' => $this->googleLabel($group, $state),
                 'count' => $group->count(),
             ])
             ->sortByDesc('count')

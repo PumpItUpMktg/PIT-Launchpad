@@ -55,12 +55,13 @@ return [
     ],
 
     'indexing' => [
-        // Whether Launchpad ingests EVERY URL Google knows (its Index-Coverage list — WP archives, feeds,
-        // param URLs it discovered on its own), not just the pages Launchpad published. Until that capture
-        // path is wired, `page_index_states` holds only published URLs, so the Indexing surface shows the
-        // "all-known" panel as NOT YET ENABLED rather than a panel that silently mirrors the published set.
-        // The all-known capture item flips this on when it ships. Default OFF (honest for production today).
-        'all_known_capture' => (bool) env('LAUNCHPAD_ALL_KNOWN_CAPTURE', false),
+        // Whether the index sync also inspects the URLs Google has shown that Launchpad did NOT publish
+        // (legacy posts, numbered twins, WP archives — App\Operator\Coverage\DiscoveredUrls, built from the
+        // search-analytics series since Google exposes no API for its known-URL list). On, the Indexing
+        // board's "All known pages" panel is Google's verdict on real legacy URLs — the figure a client sees
+        // on Search Console's Pages screen; off, the panel says it is off rather than mirror the sitemap.
+        // Costs URL-Inspection quota: legacy URLs are inspected AFTER every submitted page on each run.
+        'all_known_capture' => (bool) env('LAUNCHPAD_ALL_KNOWN_CAPTURE', true),
 
         // The Indexing board's watchlist: every published page until it is indexed, then a few more days
         // as a green "landed" row before it falls off. Days after the index date a page stays listed.

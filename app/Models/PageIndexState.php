@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
  *
  * @property string $site_id
  * @property string|null $content_id
+ * @property string $origin content | job | discovered — which Search Console Pages view the row belongs to
  * @property string $url
  * @property string $url_normalized
  * @property string|null $coverage_state

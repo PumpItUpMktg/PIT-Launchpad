@@ -11,6 +11,7 @@ use App\Metrics\MetricProviderRegistry;
 use App\Metrics\Providers\IndexMetricProvider;
 use App\Metrics\UrlNormalizer;
 use App\Models\Content;
+use App\Models\GscUrlDaily;
 use App\Models\Job;
 use App\Models\MetricSnapshot;
 use App\Models\PageIndexState;
@@ -98,14 +99,74 @@ it('persists per-URL verdicts durably and stamps the daily pages-indexed snapsho
 
     // A job is not a Content row — content_id stays null.
     $jobRow = PageIndexState::withoutGlobalScopes()->where('url_normalized', UrlNormalizer::url($urlJob))->first();
-    expect($jobRow->content_id)->toBeNull()->and($jobRow->index_verdict)->toBe('PASS');
+    expect($jobRow->content_id)->toBeNull()->and($jobRow->index_verdict)->toBe('PASS')->and($jobRow->origin)->toBe('job')
+        ->and($rowIndexed->origin)->toBe('content');
 
     // Daily site snapshot, read from the durable table: 2 of 3 indexed.
     $today = now()->toDateString();
     $snap = fn (string $key) => MetricSnapshot::withoutGlobalScopes()->where('site_id', $site->id)
         ->where('provider', 'index')->where('metric_key', $key)->where('period_date', $today)->value('value_numeric');
     expect((int) $snap('pages_indexed'))->toBe(2)
-        ->and((int) $snap('pages_known'))->toBe(3);
+        ->and((int) $snap('pages_known'))->toBe(3)
+        ->and((int) $snap('all_known_indexed'))->toBe(2)
+        ->and((int) $snap('all_known_pages'))->toBe(3);
+});
+
+function legacyGscUrl(Site $site, string $url, int $impressions): void
+{
+    GscUrlDaily::withoutGlobalScopes()->create([
+        'id' => (string) Str::ulid(), 'site_id' => $site->id, 'grain_hash' => Str::random(32),
+        'date' => now()->subDays(3)->toDateString(), 'url' => $url,
+        'impressions' => $impressions, 'clicks' => 0, 'position' => 9.0,
+    ]);
+}
+
+it('stores the legacy URLs Google has shown as discovered rows, outside the submitted trend', function () {
+    config()->set('launchpad.indexing.all_known_capture', true);
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    $page = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'p', 'title' => 'P']);
+    $url = PublicUrl::forContent($site->domain_url, $page);
+    $legacy = 'https://apex.example/how-to-install-a-sump-pump-correctly-2/';
+    legacyGscUrl($site, $url, 100);
+    legacyGscUrl($site, $legacy, 87_949);
+
+    $inspector = fakeInspector();
+    $inspector->verdicts = [
+        $url => indexStatus($url, IndexCoverageState::CrawledNotIndexed),
+        $legacy => indexStatus($legacy, IndexCoverageState::Indexed),
+    ];
+    $result = providerWith($inspector)->sync($site, CarbonPeriod::create('2026-08-10', '2026-08-10'));
+
+    expect($result->rowsWritten)->toBe(2);
+    $row = PageIndexState::withoutGlobalScopes()->where('url_normalized', UrlNormalizer::url($legacy))->first();
+    expect($row->origin)->toBe('discovered')
+        ->and($row->content_id)->toBeNull()
+        ->and($row->index_verdict)->toBe('PASS')
+        ->and($row->indexed_at)->not->toBeNull();
+
+    // The client-facing trend is the SUBMITTED set: 0 of 1 — the legacy page must not inflate it.
+    $today = now()->toDateString();
+    $snap = fn (string $key) => MetricSnapshot::withoutGlobalScopes()->where('site_id', $site->id)
+        ->where('provider', 'index')->where('metric_key', $key)->where('period_date', $today)->value('value_numeric');
+    expect((int) $snap('pages_indexed'))->toBe(0)
+        ->and((int) $snap('pages_known'))->toBe(1)
+        ->and((int) $snap('all_known_indexed'))->toBe(1)
+        ->and((int) $snap('all_known_pages'))->toBe(2);
+});
+
+it('stamps last_inspected_at with the time Google answered, not the sync time', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://apex.example']);
+    $page = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'p', 'title' => 'P']);
+    $url = PublicUrl::forContent($site->domain_url, $page);
+    $answered = now()->subDays(9)->startOfMinute();
+
+    $inspector = fakeInspector();
+    $inspector->verdicts = [$url => new IndexStatus(url: $url, state: IndexCoverageState::Indexed, coverageState: 'Submitted and indexed', verdict: 'PASS', inspectedAt: $answered)];
+    providerWith($inspector)->sync($site, CarbonPeriod::create('2026-08-10', '2026-08-10'));
+
+    // A verdict served from the inspector's cache keeps its fetch time — the board's "as of" stays honest.
+    expect(PageIndexState::withoutGlobalScopes()->where('content_id', $page->id)->first()->last_inspected_at->toIso8601String())
+        ->toBe($answered->toIso8601String());
 });
 
 it('is idempotent — a re-run updates rows in place, never duplicates', function () {
