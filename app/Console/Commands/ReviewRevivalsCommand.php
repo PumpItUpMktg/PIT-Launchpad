@@ -2,11 +2,14 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\ContentStatus;
 use App\Enums\RedirectSource;
+use App\Models\Content;
 use App\Models\Redirect;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Publishing\PublishRedirectsService;
+use App\Publishing\Redirects\CollisionSuffix;
 use App\Publishing\Redirects\RevivalReview;
 use Illuminate\Console\Command;
 
@@ -22,6 +25,7 @@ class ReviewRevivalsCommand extends Command
         {--min-impressions= : Impression floor (default config, 5000)}
         {--limit= : Max families reviewed (default config, 100)}
         {--redirect-covered : 301 the families a live post already covers → that post (preview unless --apply)}
+        {--retarget=* : family=/live-post-path — send a covered family to a different live post than the review matched (repeatable)}
         {--apply : With --redirect-covered: write the redirects and push them to WordPress}';
 
     protected $description = 'Review the legacy revival plan before applying it: already covered, shared brief, weak brief, not an article, off the footprint.';
@@ -73,6 +77,18 @@ class ReviewRevivalsCommand extends Command
         $this->line('absorbs the folded URLs when the lead is rebriefed on every query its family earns. DECIDE: a human reads the URL.');
 
         $covered = $review->coveredRedirects($r);
+        $retargets = $this->retargets($site);
+        if ($retargets === null) {
+            return self::FAILURE;
+        }
+        foreach ($covered as &$row) {
+            $family = CollisionSuffix::strip($row['from']) ?? $row['from'];
+            if (isset($retargets[$family])) {
+                $row['to'] = $retargets[$family]['path'];
+                $row['title'] = $retargets[$family]['title'].' [--retarget]';
+            }
+        }
+        unset($row);
         if (! $this->option('redirect-covered')) {
             if ($covered !== []) {
                 $this->line(sprintf('REDIRECT: %d URL(s) want a 301 to the live post that covers them — preview with <comment>--redirect-covered</comment>, write with <comment>--redirect-covered --apply</comment>.', count($covered)));
@@ -106,6 +122,41 @@ class ReviewRevivalsCommand extends Command
         $this->info(sprintf('Wrote %d redirect(s) and pushed the active set to WordPress. The revival plan drops these URLs on its next run.', count($covered)));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * `--retarget=/family=/live-path` overrides, each checked against a PUBLISHED page or post at that path
+     * — a redirect into a URL nobody serves is the one thing this step must never write.
+     *
+     * @return array<string, array{path: string, title: string}>|null null when an override is invalid (reported)
+     */
+    private function retargets(Site $site): ?array
+    {
+        $out = [];
+        foreach ((array) $this->option('retarget') as $spec) {
+            $spec = trim((string) $spec);
+            if ($spec === '' || ! str_contains($spec, '=')) {
+                $this->error("--retarget expects family=/live-path, got [{$spec}].");
+
+                return null;
+            }
+            [$family, $path] = array_map('trim', explode('=', $spec, 2));
+            $family = '/'.trim(mb_strtolower($family), '/');
+            $slug = trim($path, '/');
+            $live = Content::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $site->id)
+                ->where('status', ContentStatus::Published->value)
+                ->where('slug', $slug)
+                ->first(['id', 'title', 'slug']);
+            if ($live === null) {
+                $this->error("--retarget {$family}: nothing published at /{$slug}/ — a redirect must land on a live page.");
+
+                return null;
+            }
+            $out[$family] = ['path' => '/'.$slug, 'title' => (string) $live->title];
+        }
+
+        return $out;
     }
 
     private function resolveSite(): ?Site
