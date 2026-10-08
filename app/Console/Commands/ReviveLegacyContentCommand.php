@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Site;
 use App\Publishing\Redirects\LegacyContentReviver;
+use App\Publishing\Redirects\RevivalReview;
 use Illuminate\Console\Command;
 
 /**
@@ -16,7 +17,8 @@ use Illuminate\Console\Command;
  */
 class ReviveLegacyContentCommand extends Command
 {
-    protected $signature = 'launchpad:revive-legacy-content {--site= : Site id or brand name (required)} {--min-impressions= : Impression floor (default config, 5000)} {--limit= : Max candidates this run (default config, 100)} {--apply : Create the candidates}';
+    protected $signature = 'launchpad:revive-legacy-content {--site= : Site id or brand name (required)} {--min-impressions= : Impression floor (default config, 5000)} {--limit= : Max candidates this run (default config, 100)} {--clean : Only the families launchpad:review-revivals passes as CLEAN (covered / shared / weak / not-an-article families are held back)}
+        {--apply : Create the candidates}';
 
     protected $description = 'Seed reviewable blog candidates from high-value unresolved legacy URLs (301 old→new on publish).';
 
@@ -57,8 +59,16 @@ class ReviveLegacyContentCommand extends Command
             return self::SUCCESS;
         }
 
+        $only = null;
+        if ($this->option('clean')) {
+            $only = app(RevivalReview::class)->cleanKeys($site, $floor, $limit);
+            $held = count($plan) - count($only);
+            $this->newLine();
+            $this->line(sprintf('--clean: %d of %d family(ies) pass the review; %d held back (see launchpad:review-revivals).', count($only), count($plan), $held));
+        }
+
         if ($this->option('apply')) {
-            $created = $reviver->revive($site, $floor, $limit);
+            $created = $reviver->revive($site, $floor, $limit, $only);
             $this->newLine();
             $this->info(sprintf('Created %d blog candidate(s). Generate them from the Blog surface — each 301s its old URL on publish.', count($created)));
         } else {
