@@ -22,7 +22,8 @@ use Illuminate\Support\Facades\DB;
  * is not the page Google is sending people to today), lifetime as the fallback when the window is quiet:
  *   - exactly one member tops the window → keep it (`earner`);
  *   - window all zero, exactly one tops lifetime → keep it (`earner-lifetime`);
- *   - a tie at the top (either measure) → `ambiguous-earner`: a human chooses, never the rule.
+ *   - a tie at the top (either measure) → `ambiguous-earner`: a human chooses, never the rule — by pinning
+ *     the keeper's path (`operator-override`).
  * A group whose base is a page WE publish is not a legacy twin — that is {@see SlugCollisions} — and is
  * left out here so the two reports cannot both claim it.
  *
@@ -43,8 +44,20 @@ final class LegacyTwins
      *     window_days: int
      * }
      */
-    public function for(Site $site, int $days = 28): array
+    /**
+     * `$keep` pins a keeper per group by PATH (`/foo-3`) — how an `ambiguous-earner` group is settled by a
+     * human. A pinned path overrides the impression rule for its group (`operator-override`); two pins in
+     * one group is an `override-conflict` (reported, never resolved); a pin matching no member is ignored
+     * (the command surfaces it).
+     *
+     * @param  list<string>  $keep
+     */
+    public function for(Site $site, int $days = 28, array $keep = []): array
     {
+        $pins = [];
+        foreach ($keep as $path) {
+            $pins[UrlNormalizer::path($path)] = true;
+        }
         $ours = app(DiscoveredUrls::class)->ours($site);
         $cutoff = Carbon::now()->subDays($days)->toDateString();
         $base = rtrim((string) $site->domain_url, '/');
@@ -103,6 +116,12 @@ final class LegacyTwins
             $list = array_map(fn (string $p): array => $this->member($members[$p]), $paths);
 
             [$keeper, $reason] = $this->keeper($list);
+            $pinned = array_values(array_filter($list, fn (array $m): bool => isset($pins[$m['path']])));
+            if (count($pinned) > 1) {
+                [$keeper, $reason] = [null, 'override-conflict'];
+            } elseif (count($pinned) === 1) {
+                [$keeper, $reason] = [$pinned[0], 'operator-override'];
+            }
             $losers = [];
             if ($keeper !== null) {
                 foreach ($list as $m) {

@@ -256,3 +256,20 @@ test('a failed push surfaces the WHY from the response body, not just the status
     expect(fn () => wpClient()->activateStyle('bold'))
         ->toThrow(WordpressException::class, 'is the Launchpad block theme active?');
 });
+
+it('retires an unmanaged post by path through the plugin, and names the plugin update when the route is missing', function () {
+    // Stubs are first-match-wins, so one sequence answers the three calls in turn.
+    Http::fake(['wp.test/wp-json/launchpad/v1/post/retire' => Http::sequence()
+        ->push(['path' => '/sump-pump-cost-2', 'wp_post_id' => 12, 'retired' => true], 200)
+        ->push('', 404)
+        ->push(['retired' => false, 'error' => 'no redirect covers this path — retiring it would 404 a live URL'], 409),
+    ]);
+
+    expect(wpClient()->retirePost('/sump-pump-cost-2'))->toBe(['path' => '/sump-pump-cost-2', 'wp_post_id' => 12, 'retired' => true]);
+    Http::assertSent(fn ($request) => str_ends_with($request->url(), '/post/retire') && $request['path'] === '/sump-pump-cost-2');
+
+    expect(fn () => wpClient()->retirePost('/sump-pump-cost-2'))->toThrow(WordpressException::class, '0.9.51');
+
+    // A refusal (409: owned, or no redirect covers the path) surfaces the plugin's reason.
+    expect(fn () => wpClient()->retirePost('/sump-pump-cost-2'))->toThrow(WordpressException::class, 'no redirect covers this path');
+});

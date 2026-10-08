@@ -15,6 +15,7 @@ use Launchpad\Companion\Content\StyleStore;
 use Launchpad\Companion\Content\ContentStore;
 use Launchpad\Companion\Content\JobStore;
 use Launchpad\Companion\Content\KitTemplateStore;
+use Launchpad\Companion\Content\PostRetirer;
 use Launchpad\Companion\Content\RedirectStore;
 use Launchpad\Companion\Content\SiloStore;
 use Launchpad\Companion\Content\SiteProfileStore;
@@ -55,6 +56,15 @@ final class Routes
         register_rest_route(self::NS, '/content/delete', [
             'methods' => 'POST',
             'callback' => [$this, 'delete_content'],
+            'permission_callback' => $auth,
+        ]);
+
+        // Retire an UNMANAGED (legacy) post by its path — the legacy-twin consolidation's remove step.
+        // Refuses a Launchpad-owned post (that is /content/delete) and any path the redirect map does
+        // not cover (retiring it would 404 a URL Google holds); trashes, never force-deletes.
+        register_rest_route(self::NS, '/post/retire', [
+            'methods' => 'POST',
+            'callback' => [$this, 'retire_post'],
             'permission_callback' => $auth,
         ]);
 
@@ -268,6 +278,25 @@ final class Routes
         $result = ( new SiteProfileStore() )->save((array) $request->get_json_params());
 
         return new WP_REST_Response($result, empty($result['updated']) ? 422 : 200);
+    }
+
+    public function retire_post(WP_REST_Request $request): WP_REST_Response
+    {
+        $params = (array) $request->get_json_params();
+        $result = ( new PostRetirer() )->retire((string) ($params['path'] ?? ''));
+
+        // 200 retired (or already absent), 422 bad path, 409 refused (owned / no redirect), 500 WP refused.
+        if (! empty($result['retired'])) {
+            $status = 200;
+        } elseif (($result['error'] ?? '') === 'path required') {
+            $status = 422;
+        } elseif (($result['error'] ?? '') === 'wp_trash_post failed') {
+            $status = 500;
+        } else {
+            $status = 409;
+        }
+
+        return new WP_REST_Response($result, $status);
     }
 
     public function diagnose_content(WP_REST_Request $request): WP_REST_Response

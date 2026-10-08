@@ -377,6 +377,37 @@ class WordpressClient
      *                            delete route is missing (the companion plugin predates it) — surfaced as
      *                            an explicit "update the plugin" message, never mistaken for success.
      */
+    /**
+     * Retire an UNMANAGED (legacy) post by its path — the legacy-twin consolidation's remove step. The
+     * plugin trashes it only when its redirect map already covers the path (never a 404) and only when
+     * the post is not Launchpad-owned (that is {@see deleteContent}). Idempotent: already absent = success.
+     *
+     * @return array<string, mixed> the plugin's answer ({path, wp_post_id?, retired, already_absent?})
+     */
+    public function retirePost(string $path): array
+    {
+        $response = $this->request()->post(
+            rtrim($this->baseUrl, '/').self::NAMESPACE.'/post/retire',
+            ['path' => $path],
+        );
+
+        if ($response->status() === 404) {
+            throw new WordpressException(
+                'WordPress retire endpoint not found (HTTP 404) — update the Launchpad companion plugin (needs 0.9.51+, launchpad/v1 post retire).'
+            );
+        }
+
+        if (! $response->successful()) {
+            throw new WordpressException(
+                'WordPress retire of '.$path.' returned HTTP '.$response->status().$this->errorDetail($response)
+            );
+        }
+
+        $json = $response->json();
+
+        return is_array($json) ? $json : [];
+    }
+
     public function deleteContent(string $contentId): bool
     {
         $response = $this->request()->post(

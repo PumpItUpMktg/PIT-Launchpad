@@ -15,9 +15,9 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Publishing\DeleteFromWordpress;
 use App\Publishing\PublishRedirectsService;
+use App\Publishing\Redirects\ServingCheck;
 use App\Support\PublicUrl;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Http;
 
 /**
  * Resolves LIVE duplicate location pages by pointing the redundant one at the keeper with a 301 and
@@ -207,40 +207,10 @@ final class LiveDuplicateResolver
         return (bool) preg_match('/-\d+$/', $last);
     }
 
-    /**
-     * A live request to the loser URL must answer a 3xx whose Location resolves to the keeper path. No WP
-     * read-back for a redirect exists, so this is the only honest confirmation it is serving.
-     */
+    /** The shared origin-verified serving check ({@see ServingCheck}) — identical for every resolver. */
     private function verifyServing(Site $site, string $fromPath, string $toPath): bool
     {
-        $domain = $site->domain_url;
-        if (! is_string($domain) || trim($domain) === '') {
-            return false;
-        }
-
-        // Cache-buster query → a guaranteed CDN cache MISS, so this confirms the ORIGIN redirect rather than
-        // a stale edge copy (a server-side request can otherwise reach origin while a cached path still serves
-        // the old 200). "Verified" therefore means origin-verified; the CDN edge may serve the old page until
-        // purged — the command flags that after --execute.
-        $fromUrl = rtrim(trim($domain), '/').'/'.trim($fromPath, '/').'/?__lpverify='.time();
-        $want = $this->normalizePath($toPath);
-
-        for ($attempt = 0; $attempt < 3; $attempt++) {
-            try {
-                $response = Http::withoutRedirecting()->timeout(10)->get($fromUrl);
-            } catch (\Throwable) {
-                continue;
-            }
-
-            if (in_array($response->status(), [301, 302, 307, 308], true)) {
-                $location = (string) $response->header('Location');
-                if ($location !== '' && $this->normalizePath((string) parse_url($location, PHP_URL_PATH)) === $want) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return app(ServingCheck::class)->confirms($site, $fromPath, $toPath);
     }
 
     /** Redirect path form: leading slash, no trailing slash, lowercased (mirrors LegacyRedirectPlanner). */
