@@ -46,6 +46,29 @@ final class ServingCheck
         return false;
     }
 
+    /**
+     * What a path answers today, un-followed: the HTTP status and, for a redirect, where it points.
+     * Null status when the site cannot be reached. One request; the caller decides what the answer means.
+     *
+     * @return array{status: ?int, location: ?string}
+     */
+    public function answers(Site $site, string $path): array
+    {
+        $domain = $site->domain_url;
+        if (! is_string($domain) || trim($domain) === '') {
+            return ['status' => null, 'location' => null];
+        }
+
+        try {
+            $response = Http::withoutRedirecting()->timeout(10)->get(rtrim(trim($domain), '/').'/'.trim($path, '/').'/');
+            $location = (string) $response->header('Location');
+
+            return ['status' => $response->status(), 'location' => $location !== '' ? $location : null];
+        } catch (Throwable) {
+            return ['status' => null, 'location' => null];
+        }
+    }
+
     /** Redirect path form: leading slash, no trailing slash, lowercased. */
     public static function path(string $value): string
     {
