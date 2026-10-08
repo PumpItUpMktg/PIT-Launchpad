@@ -204,3 +204,27 @@ it('the review command reports, previews the covered redirects, and writes them 
     $after = collect(app(RevivalReview::class)->for($site)['families'])->pluck('key');
     expect($after)->not->toContain('/best-water-sump-pump-flow-rate')->not->toContain('/sump-pump-gallons-per-minute-chart');
 });
+
+it('--retarget sends a covered family to a different live post, and refuses a path nobody serves', function () {
+    $site = reviewSite();
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'types-of-sump-pumps-how-to-choose-the-right-one', 'title' => 'Types of Sump Pumps: How To Choose the Right One']);
+    $client = Mockery::mock(WordpressClient::class);
+    $client->shouldReceive('upsertRedirects')->once()->andReturn([]);
+    $factory = Mockery::mock(WordpressClientFactory::class);
+    $factory->shouldReceive('forSite')->andReturn($client);
+    app()->instance(WordpressClientFactory::class, $factory);
+
+    $this->artisan('launchpad:review-revivals --site=SPG --redirect-covered --retarget=/sump-pump-size-matters-choosing-right-one-for-home=/nowhere-live')
+        ->expectsOutputToContain('nothing published at /nowhere-live/')
+        ->assertFailed();
+    expect(Redirect::withoutGlobalScopes()->count())->toBe(0);
+
+    $this->artisan('launchpad:review-revivals --site=SPG --redirect-covered --apply --retarget=/sump-pump-size-matters-choosing-right-one-for-home=/types-of-sump-pumps-how-to-choose-the-right-one/')
+        ->expectsOutputToContain('301 /sump-pump-size-matters-choosing-right-one-for-home → /types-of-sump-pumps-how-to-choose-the-right-one  (“Types of Sump Pumps: How To Choose the Right One [--retarget]”)')
+        ->expectsOutputToContain('Wrote 4 redirect(s)')
+        ->assertSuccessful();
+
+    $rows = Redirect::withoutGlobalScopes()->where('site_id', $site->id)->get()->keyBy('from_url');
+    expect($rows['/sump-pump-size-matters-choosing-right-one-for-home']->to_url)->toBe('/types-of-sump-pumps-how-to-choose-the-right-one')
+        ->and($rows['/check-if-sump-pump-fits-drainage-pipe']->to_url)->toBe('/sump-pump-gpm-how-to-size-your-pump-for-your-home'); // the other families keep the review's match
+});
