@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.49
+Stable tag: 0.9.50
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,12 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.50 =
+* POST /post/retire: trash an unmanaged (legacy) post by its path — the remove step of the legacy-twin
+  consolidation (`/foo-2/`, `/foo-8/` → the earner). Refuses a Launchpad-owned post (that is
+  /content/delete) and any path the redirect map does not cover, so a retire can never 404 a URL Google
+  holds; trashes rather than force-deletes, so it is recoverable.
 
 = 0.9.49 =
 * /content/diagnose no longer fatals: the diagnostics class imported EditGuard from the wrong namespace,

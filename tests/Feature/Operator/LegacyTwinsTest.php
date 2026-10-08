@@ -128,3 +128,25 @@ it('says none for a site without legacy twins', function () {
         ->expectsOutputToContain('None.')
         ->assertSuccessful();
 });
+
+it('lets the operator pin the keeper of an ambiguous group by path, and reports two pins in one group as a conflict', function () {
+    $site = twinSite();
+
+    $r = app(LegacyTwins::class)->for($site, keep: ['/how-to-install-a-sump-pump-correctly-3/']);
+    $install = collect($r['groups'])->firstWhere('base', '/how-to-install-a-sump-pump-correctly');
+    expect($install['resolvable'])->toBeTrue()
+        ->and($install['reason'])->toBe('operator-override')
+        ->and($install['keeper']['path'])->toBe('/how-to-install-a-sump-pump-correctly-3')
+        ->and($install['losers'][0]['from'])->toBe('/how-to-install-a-sump-pump-correctly-2')
+        ->and($r['totals']['ambiguous'])->toBe(0);
+
+    $r = app(LegacyTwins::class)->for($site, keep: ['/how-to-install-a-sump-pump-correctly-2', '/how-to-install-a-sump-pump-correctly-3']);
+    $install = collect($r['groups'])->firstWhere('base', '/how-to-install-a-sump-pump-correctly');
+    expect($install['resolvable'])->toBeFalse()->and($install['reason'])->toBe('override-conflict');
+
+    // A pin overrides the impression rule too — the operator can keep the clean slug over the earner.
+    $r = app(LegacyTwins::class)->for($site, keep: ['/sump-pump-installation-cost-breakdown']);
+    $cost = collect($r['groups'])->firstWhere('base', '/sump-pump-installation-cost-breakdown');
+    expect($cost['keeper']['path'])->toBe('/sump-pump-installation-cost-breakdown')
+        ->and(collect($cost['losers'])->pluck('to')->unique()->all())->toBe(['/sump-pump-installation-cost-breakdown']);
+});

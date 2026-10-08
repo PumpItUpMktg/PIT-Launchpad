@@ -15,6 +15,7 @@ class ReportLegacyTwinsCommand extends Command
     protected $signature = 'launchpad:report-legacy-twins
         {--site= : Site id or brand name}
         {--days=28 : The recent window the earner is judged on (lifetime is the fallback)}
+        {--keep=* : Pin a keeper by path (per group; repeatable) — settles an ambiguous group}
         {--limit=0 : Show this many groups, biggest first (0 = all)}';
 
     protected $description = 'Group the legacy numbered twins by the title they copy, name the earner per group, and show what a consolidation would redirect (report only).';
@@ -28,7 +29,9 @@ class ReportLegacyTwinsCommand extends Command
             return self::FAILURE;
         }
 
-        $r = $twins->for($site, max(1, (int) $this->option('days')));
+        /** @var list<string> $keep */
+        $keep = array_values(array_filter(array_map('strval', (array) $this->option('keep'))));
+        $r = $twins->for($site, max(1, (int) $this->option('days')), $keep);
         $t = $r['totals'];
 
         $this->info($site->brand_name.' — legacy numbered twins (none of these are pages Launchpad published)');
