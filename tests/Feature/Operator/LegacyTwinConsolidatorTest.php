@@ -101,9 +101,48 @@ it('respects redirects that already exist: a loser routed elsewhere is left alon
     expect($out['/sump-pump-installation-cost-breakdown-8']['redirected'])->toBeFalse()
         ->and($out['/sump-pump-installation-cost-breakdown-8']['note'])->toBe('already redirects to /our-guide — left as is')
         ->and(Redirect::withoutGlobalScopes()->where('from_url', '/sump-pump-installation-cost-breakdown-8')->value('to_url'))->toBe('/our-guide')
-        ->and($out['/when-to-replace-sump-pump-check-valve']['note'])->toBe('keeper itself redirects to /our-guide — group skipped')
+        ->and($out->has('/when-to-replace-sump-pump-check-valve'))->toBeFalse()   // the valve group is blocked in the plan, so apply never reaches it
         ->and($out['/sump-pump-installation-cost-breakdown']['removed'])->toBeTrue();
     $client->shouldHaveReceived('retirePost')->once();
+
+    $valve = collect(app(LegacyTwinConsolidator::class)->plan($site)['groups'])->firstWhere('base', '/when-to-replace-sump-pump-check-valve');
+    expect($valve['resolvable'])->toBeFalse()->and($valve['reason'])->toBe('keeper-redirects → /our-guide');
+});
+
+it('refuses a group whose keeper is not a live page today — a family of dead URLs has nothing to keep', function () {
+    $site = twinSite();
+    $client = fakeConsolidationWp();
+    Http::fake([
+        // The whole cost-breakdown chain is gone, keeper included — the Sump Pump Gurus case.
+        'spg.example/sump-pump-installation-cost-breakdown-3/*' => Http::response('', 404),
+        // The valve keeper redirects live on the site (not in our rows).
+        'spg.example/when-to-replace-sump-pump-check-valve-2/*' => Http::response('', 301, ['Location' => 'https://spg.example/sump-pump-replacement/']),
+        '*' => Http::response('', 200),
+    ]);
+
+    $plan = app(LegacyTwinConsolidator::class)->plan($site);
+    $byBase = collect($plan['groups'])->keyBy('base');
+
+    expect($byBase['/sump-pump-installation-cost-breakdown']['resolvable'])->toBeFalse()
+        ->and($byBase['/sump-pump-installation-cost-breakdown']['reason'])->toBe('keeper-dead (HTTP 404)')
+        ->and($byBase['/sump-pump-installation-cost-breakdown']['keeper_status'])->toBe(404)
+        ->and($byBase['/sump-pump-installation-cost-breakdown']['losers'])->toBe([])
+        ->and($byBase['/when-to-replace-sump-pump-check-valve']['reason'])->toBe('keeper-redirects → https://spg.example/sump-pump-replacement/')
+        ->and($byBase['/when-to-replace-sump-pump-check-valve']['keeper_status'])->toBe(301)
+        ->and($plan['totals']['resolvable'])->toBe(0)
+        ->and($plan['totals']['redirects'])->toBe(0);
+
+    // Nothing is written for a dead family, however many impressions it still earns.
+    expect(app(LegacyTwinConsolidator::class)->apply($site))->toBe([])
+        ->and(Redirect::withoutGlobalScopes()->count())->toBe(0);
+    $client->shouldNotHaveReceived('retirePost');
+
+    $this->artisan('launchpad:consolidate-legacy-twins --site=SPG')
+        // Expectations match output lines in order; the BLOCKED line carries the revival hint itself.
+        ->expectsOutputToContain('BLOCKED (keeper-dead (HTTP 404)) /sump-pump-installation-cost-breakdown — nothing live to keep — a family of dead URLs is for the revival flow (launchpad:revive-legacy-content)')
+        ->expectsOutputToContain('1 group(s) have no live keeper')
+        ->expectsOutputToContain('0 redirect(s) would be written')
+        ->assertSuccessful();
 });
 
 it('honours --limit and --keep when applying', function () {
@@ -131,8 +170,10 @@ it('the command plans by default and applies only with --execute, naming the URL
 
     $this->artisan('launchpad:consolidate-legacy-twins --site=SPG')
         ->expectsOutputToContain('Read-only')
+        ->expectsOutputToContain('answers HTTP 200')   // the cost keep line (biggest group first)
+        ->expectsOutputToContain('301 /sump-pump-installation-cost-breakdown → /sump-pump-installation-cost-breakdown-3')
+        ->expectsOutputToContain('301 /sump-pump-installation-cost-breakdown-8 → /sump-pump-installation-cost-breakdown-3 (impr 75,000 (5,000 in 28d) · pos 30 · last seen')
         ->expectsOutputToContain('BLOCKED (ambiguous-earner)')
-        ->expectsOutputToContain('301 /sump-pump-installation-cost-breakdown-8 → /sump-pump-installation-cost-breakdown-3')
         ->expectsOutputToContain('3 redirect(s) would be written')
         ->assertSuccessful();
     expect(Redirect::withoutGlobalScopes()->count())->toBe(0);
