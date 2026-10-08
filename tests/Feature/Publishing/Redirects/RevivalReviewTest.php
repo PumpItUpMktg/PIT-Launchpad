@@ -117,11 +117,30 @@ it('reads the revival plan and gives every family one verdict with the reason', 
         ->and($byKey['/forever-pump-program-sump-pump']['verdict'])->toBe(RevivalReview::DECIDE)
         ->and($byKey['/forever-pump-program-sump-pump']['flags'][0])->toContain('offer or structural page (program)')
         ->and($byKey['/commercial-carwash-oil-separator-requirements']['verdict'])->toBe(RevivalReview::DECIDE)
-        ->and($byKey['/commercial-carwash-oil-separator-requirements']['flags'][0])->toContain('no silo matches')
+        ->and($byKey['/commercial-carwash-oil-separator-requirements']['flags'][0])->toContain('no silo or service covers the brief')
         ->and($byKey['/structural-engineer-water-damage-assessment']['verdict'])->toBe(RevivalReview::DECIDE)   // decide outranks rebrief
         ->and(collect($byKey['/structural-engineer-water-damage-assessment']['flags'])->join(' '))->toContain('a sentence, not a query');
 
     expect($r['counts'])->toBe([RevivalReview::CLEAN => 3, RevivalReview::REDIRECT => 4, RevivalReview::REBRIEF => 3, RevivalReview::DECIDE => 4, RevivalReview::FOLD => 1]);
+});
+
+it('keeps an informational brief on the footprint by the silo or service NAME when the rule_sets only carry service phrases', function () {
+    // Sump Pump Gurus' rule_sets route commercial phrases ("sump pump installation"); "sump pump check valve"
+    // matches none of them and was flagged "outside what the site does" on a site about sump pumps.
+    $site = Site::factory()->create(['brand_name' => 'Phrases', 'domain_url' => 'https://spg.example']);
+    CurrentSite::set($site->id);
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Installation', 'silo_role' => ServiceSiloRole::Pillar]);
+    Silo::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pumps', 'rule_set' => ['include_patterns' => ['sump pump installation', 'sump pump repair'], 'exclude_patterns' => []]]);
+    Silo::factory()->create(['site_id' => $site->id, 'name' => 'Radon Mitigation', 'rule_set' => ['include_patterns' => ['radon mitigation system'], 'exclude_patterns' => []]]);
+    rrDaily($site, '/when-to-replace-sump-pump-check-valve-2/', 59_516, 'sump pump check valve');
+    rrDaily($site, '/radon-mitigation-fan-placement-guidelines/', 25_177, 'radon fan');
+    rrDaily($site, '/commercial-grade-dehumidifiers-for-restoration/', 8_698, 'best water restoration dehumidifier');
+
+    $byKey = collect(app(RevivalReview::class)->for($site)['families'])->keyBy('key');
+
+    expect($byKey['/when-to-replace-sump-pump-check-valve']['verdict'])->toBe(RevivalReview::CLEAN)
+        ->and($byKey['/radon-mitigation-fan-placement-guidelines']['verdict'])->toBe(RevivalReview::CLEAN)
+        ->and($byKey['/commercial-grade-dehumidifiers-for-restoration']['verdict'])->toBe(RevivalReview::DECIDE);
 });
 
 it('skips the footprint check, and says so, when the site has no silo rule_sets', function () {

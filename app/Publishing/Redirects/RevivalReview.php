@@ -56,6 +56,9 @@ final class RevivalReview
 
     private const STOP = ['the', 'and', 'for', 'your', 'you', 'with', 'from', 'that', 'this', 'how', 'what', 'why', 'when', 'into', 'out', 'not', 'are', 'can', 'should', 'does', 'guide', 'homeowners', 'homeowner', 'best', 'top', 'need', 'home'];
 
+    /** Words a silo or service name carries that say nothing about its topic. */
+    private const TRADE_GENERIC = ['services', 'service', 'installation', 'install', 'repair', 'repairs', 'replacement', 'maintenance', 'system', 'systems', 'solutions', 'company', 'local'];
+
     private const STRUCTURAL = ['program', 'programme', 'offer', 'coupon', 'warranty', 'financing', 'pricing', 'careers', 'about', 'contact', 'reviews', 'testimonials', 'faq', 'privacy', 'terms'];
 
     public function __construct(
@@ -88,6 +91,7 @@ final class RevivalReview
             ->get()
             ->filter(fn (Silo $s): bool => is_array($s->rule_set) && (($s->rule_set['include_patterns'] ?? []) !== [] || ($s->rule_set['seed_terms'] ?? []) !== []));
         $siloCheck = $silos->isNotEmpty();
+        $footprint = $this->footprintTokens($site);
 
         // Shared briefs: the biggest family on a query leads; the rest fold into it.
         $leadByQuery = [];
@@ -132,11 +136,16 @@ final class RevivalReview
             if ($structural !== []) {
                 $decide[] = 'reads like an offer or structural page ('.implode(', ', $structural).')';
             }
-            // 4. Off the footprint?
+            // 4. Off the footprint? Two rungs: the §5 bucketer (the silo rule_sets — service phrases such as
+            // "sump pump installation", which an informational brief like "sump pump check valve" never
+            // contains), then the topic words of the silo and service NAMES ("Sump Pumps" → sump, pump;
+            // "Radon Mitigation" → radon). A brief sharing none of those is about something else: car-wash
+            // separators, restoration dehumidifiers, mold removal on a sump-pump site.
             if ($siloCheck) {
                 $probe = $q !== '' ? $q : str_replace('-', ' ', $leaf);
-                if ($probe !== '' && $this->bucketer->bucket($probe, $silos) === null) {
-                    $decide[] = 'no silo matches the brief — outside what the site does?';
+                if ($probe !== '' && $this->bucketer->bucket($probe, $silos) === null
+                    && array_intersect($this->stems($this->tokens($probe)), $footprint) === []) {
+                    $decide[] = 'no silo or service covers the brief — outside what the site does?';
                 }
             }
             array_push($flags, ...$decide);
@@ -269,6 +278,43 @@ final class RevivalReview
         }
 
         return null;
+    }
+
+    /**
+     * The topic words of the site's silo and service names, stemmed — what the site is ABOUT, as distinct
+     * from the service phrases its rule_sets route commercial queries with.
+     *
+     * @return list<string>
+     */
+    private function footprintTokens(Site $site): array
+    {
+        $names = Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->pluck('name')
+            ->merge(Service::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->pluck('name'));
+
+        $tokens = [];
+        foreach ($names as $name) {
+            foreach ($this->stems($this->tokens((string) $name)) as $t) {
+                if (! in_array($t, self::TRADE_GENERIC, true)) {
+                    $tokens[$t] = true;
+                }
+            }
+        }
+
+        return array_keys($tokens);
+    }
+
+    /**
+     * A crude plural fold so "Sump Pumps" meets "sump pump" and "radon detectors" meets "detector".
+     *
+     * @param  list<string>  $tokens
+     * @return list<string>
+     */
+    private function stems(array $tokens): array
+    {
+        return array_values(array_unique(array_map(
+            fn (string $t): string => mb_strlen($t) > 4 && str_ends_with($t, 's') && ! str_ends_with($t, 'ss') ? mb_substr($t, 0, -1) : $t,
+            $tokens,
+        )));
     }
 
     /** @return Collection<int, array{title: string, path: string, tokens: list<string>}> */
