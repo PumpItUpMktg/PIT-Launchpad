@@ -393,7 +393,7 @@ class WordpressClient
 
         if ($response->status() === 404) {
             throw new WordpressException(
-                'WordPress retire endpoint not found (HTTP 404) — update the Launchpad companion plugin (needs 0.9.50+, launchpad/v1 post retire).'
+                'WordPress retire endpoint not found (HTTP 404) — update the Launchpad companion plugin (needs 0.9.51+, launchpad/v1 post retire).'
             );
         }
 

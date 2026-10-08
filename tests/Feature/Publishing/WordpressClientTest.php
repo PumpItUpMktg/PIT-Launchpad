@@ -268,7 +268,7 @@ it('retires an unmanaged post by path through the plugin, and names the plugin u
     expect(wpClient()->retirePost('/sump-pump-cost-2'))->toBe(['path' => '/sump-pump-cost-2', 'wp_post_id' => 12, 'retired' => true]);
     Http::assertSent(fn ($request) => str_ends_with($request->url(), '/post/retire') && $request['path'] === '/sump-pump-cost-2');
 
-    expect(fn () => wpClient()->retirePost('/sump-pump-cost-2'))->toThrow(WordpressException::class, '0.9.50');
+    expect(fn () => wpClient()->retirePost('/sump-pump-cost-2'))->toThrow(WordpressException::class, '0.9.51');
 
     // A refusal (409: owned, or no redirect covers the path) surfaces the plugin's reason.
     expect(fn () => wpClient()->retirePost('/sump-pump-cost-2'))->toThrow(WordpressException::class, 'no redirect covers this path');

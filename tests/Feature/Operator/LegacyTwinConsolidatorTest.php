@@ -78,14 +78,14 @@ it('writes the 301, pushes it, verifies it is serving, then retires the loser �
 
 it('leaves the post in place behind the 301 when the plugin is too old to retire, and says so', function () {
     $site = twinSite();
-    fakeConsolidationWp(fn () => throw new WordpressException('WordPress retire endpoint not found (HTTP 404) — update the Launchpad companion plugin (needs 0.9.50+, launchpad/v1 post retire).'));
+    fakeConsolidationWp(fn () => throw new WordpressException('WordPress retire endpoint not found (HTTP 404) — update the Launchpad companion plugin (needs 0.9.51+, launchpad/v1 post retire).'));
     fakeConsolidationOrigin();
 
     $out = collect(app(LegacyTwinConsolidator::class)->apply($site))->keyBy('from');
 
     expect($out['/sump-pump-installation-cost-breakdown-8']['verified'])->toBeTrue()
         ->and($out['/sump-pump-installation-cost-breakdown-8']['removed'])->toBeFalse()
-        ->and($out['/sump-pump-installation-cost-breakdown-8']['note'])->toContain('0.9.50');
+        ->and($out['/sump-pump-installation-cost-breakdown-8']['note'])->toContain('0.9.51');
 });
 
 it('respects redirects that already exist: a loser routed elsewhere is left alone, a redirecting keeper skips its group', function () {

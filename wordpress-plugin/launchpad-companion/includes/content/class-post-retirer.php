@@ -37,7 +37,7 @@ final class PostRetirer
             return ['path' => $path, 'retired' => false, 'error' => 'no redirect covers this path — retiring it would 404 a live URL'];
         }
 
-        $post_id = (int) url_to_postid(home_url($path . '/'));
+        $post_id = self::post_at($path);
         if ($post_id <= 0) {
             // Nothing served there (already trashed, or never a post) — idempotent success.
             return ['path' => $path, 'retired' => true, 'already_absent' => true];
@@ -56,5 +56,22 @@ final class PostRetirer
         }
 
         return ['path' => $path, 'wp_post_id' => $post_id, 'retired' => true];
+    }
+
+    /**
+     * The published page or post served at a path. Pretty permalinks resolve through the rewrite rules
+     * (url_to_postid); a site on plain permalinks — or a path the rules cannot parse — falls back to the
+     * slug hierarchy, which is the same thing WordPress does to serve the request.
+     */
+    private static function post_at(string $path): int
+    {
+        $post_id = (int) url_to_postid(home_url($path . '/'));
+        if ($post_id > 0) {
+            return $post_id;
+        }
+
+        $post = get_page_by_path(trim($path, '/'), OBJECT, ['page', 'post']);
+
+        return $post instanceof \WP_Post && $post->post_status !== 'trash' ? (int) $post->ID : 0;
     }
 }

@@ -1,15 +1,11 @@
 <?php
 
-use App\Enums\ContentStatus;
 use App\Enums\UserRole;
-use App\Models\Content;
-use App\Models\GscUrlDaily;
 use App\Models\Site;
 use App\Models\User;
 use App\Operator\Coverage\LegacyTwins;
 use App\Publishing\Redirects\CollisionSuffix;
 use App\Support\CurrentSite;
-use Illuminate\Support\Str;
 
 beforeEach(function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
@@ -18,45 +14,6 @@ beforeEach(function () {
 afterEach(function () {
     CurrentSite::clear();
 });
-
-function twinGscUrl(Site $site, string $path, int $impressions, int $daysAgo = 3, float $position = 9.0, int $clicks = 1): void
-{
-    GscUrlDaily::withoutGlobalScopes()->create([
-        'id' => (string) Str::ulid(), 'site_id' => $site->id, 'grain_hash' => Str::random(32),
-        'date' => now()->subDays($daysAgo)->toDateString(), 'url' => 'https://spg.example'.$path,
-        'impressions' => $impressions, 'clicks' => $clicks, 'position' => $position,
-    ]);
-}
-
-/**
- * cost-breakdown: the base + -3 + -8, -3 earns most in the window → keeper; the others redirect to it.
- * install: -2 and -3 tie in the window → ambiguous. valve: -2 earned only last year → earner-lifetime.
- * maintenance-101 is a title. A twin of OUR page is SlugCollisions' business, not a legacy twin.
- */
-function twinSite(): Site
-{
-    $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
-    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'our-guide']);
-
-    twinGscUrl($site, '/sump-pump-installation-cost-breakdown/', 1_000, daysAgo: 400, position: 14.0);
-    twinGscUrl($site, '/sump-pump-installation-cost-breakdown-3/', 20_000, daysAgo: 2, position: 6.0, clicks: 150);
-    twinGscUrl($site, '/sump-pump-installation-cost-breakdown-3', 1_000, daysAgo: 5, position: 6.0); // slash-less form folds in
-    twinGscUrl($site, '/sump-pump-installation-cost-breakdown-8/', 70_000, daysAgo: 300, position: 30.0);
-    twinGscUrl($site, '/sump-pump-installation-cost-breakdown-8/', 5_000, daysAgo: 4, position: 30.0);
-
-    twinGscUrl($site, '/how-to-install-a-sump-pump-correctly-2/', 500, daysAgo: 1);
-    twinGscUrl($site, '/how-to-install-a-sump-pump-correctly-3/', 500, daysAgo: 1);
-
-    twinGscUrl($site, '/when-to-replace-sump-pump-check-valve/', 40, daysAgo: 200);
-    twinGscUrl($site, '/when-to-replace-sump-pump-check-valve-2/', 59_516, daysAgo: 200);
-
-    twinGscUrl($site, '/sump-pump-maintenance-101/', 7_073);
-    twinGscUrl($site, '/our-guide/', 300);
-    twinGscUrl($site, '/our-guide-2/', 900);
-    twinGscUrl($site, '/blog/page/2/', 10);
-
-    return $site;
-}
 
 it('groups the legacy twins by the title they copy and names the earner on the recent window', function () {
     $r = app(LegacyTwins::class)->for(twinSite());

@@ -20,7 +20,7 @@ use Throwable;
  *   1. write the Redirect row (from = loser path, to = keeper path, 301, source duplicate);
  *   2. push the active set to WordPress ({@see PublishRedirectsService});
  *   3. VERIFY it is serving at origin ({@see ServingCheck});
- *   4. only then retire the loser — the plugin's /post/retire (0.9.50+), which trashes an unmanaged post
+ *   4. only then retire the loser — the plugin's /post/retire (0.9.51+), which trashes an unmanaged post
  *      only when its redirect map covers the path. An older plugin leaves the post in place behind the
  *      301 and the result says so; nothing is ever removed without a confirmed redirect.
  *
