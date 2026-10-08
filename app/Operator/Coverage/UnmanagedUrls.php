@@ -2,15 +2,12 @@
 
 namespace App\Operator\Coverage;
 
-use App\Enums\ContentStatus;
 use App\Metrics\UrlNormalizer;
-use App\Models\Content;
 use App\Models\GscUrlDaily;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Publishing\Redirects\CollisionSuffix;
 use App\Publishing\Redirects\GscUrlInventory;
-use App\Support\PublicUrl;
 
 /**
  * URLs Google holds on this property that Launchpad did not publish — the gap between Search Console's
@@ -47,18 +44,8 @@ class UnmanagedUrls
      */
     public function for(Site $site, int $examples = 25): array
     {
-        $published = Content::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)
-            ->where('status', ContentStatus::Published->value)
-            ->get(['id', 'slug', 'kind', 'page_type']);
-
-        $ours = [];
-        foreach ($published as $page) {
-            $url = PublicUrl::forContent($site->domain_url, $page);
-            if ($url !== null) {
-                $ours[UrlNormalizer::path($url)] = true;
-            }
-        }
+        // ONE definition of "ours" (published pages + job pages), shared with the all-known capture.
+        $ours = app(DiscoveredUrls::class)->ours($site);
 
         // Unmanaged URLs have no Content row, so the shared per-page helper cannot key them — position
         // here is read straight off the series by URL. The weighting rule is the same one PagePositions

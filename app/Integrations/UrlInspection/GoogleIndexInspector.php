@@ -130,6 +130,8 @@ final class GoogleIndexInspector implements IndexInspector
             googleCanonical: isset($r['googleCanonical']) ? (string) $r['googleCanonical'] : null,
             userCanonical: isset($r['userCanonical']) ? (string) $r['userCanonical'] : null,
             lastCrawledAt: $this->parseTime($r['lastCrawlTime'] ?? null),
+            // Stamped at fetch so a verdict served from cache still says when Google actually answered.
+            inspectedAt: Carbon::now(),
         );
     }
 

@@ -59,7 +59,8 @@ class AuditIndexCommand extends Command
         }
 
         $this->line("<info>{$site->brand_name}</info> ({$site->id}) — index coverage");
-        $this->line("  <comment>{$r['indexed']}</comment> of {$r['total']} published URLs indexed; {$r['inspected']} inspected, {$r['not_inspected']} not inspected (quota/pending).");
+        $submitted = $r['total'] - $r['discovered'];
+        $this->line("  <comment>{$r['indexed']}</comment> of {$r['total']} URLs indexed ({$submitted} published, {$r['discovered']} found outside the sitemap); {$r['inspected']} inspected, {$r['not_inspected']} not inspected (quota/pending).");
 
         foreach ($r['by_state'] as $state => $count) {
             $this->line(sprintf('  • %-24s %d', $state, $count));

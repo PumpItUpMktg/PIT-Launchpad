@@ -20,10 +20,12 @@ use Illuminate\Support\Str;
  *
  * It reuses {@see IndexCoverage::audit()} — the same quota-guarded, cache-first inspection the weekly
  * `launchpad:audit-index` operator report runs — so it shares that inspection cache and spends NO extra
- * URL-Inspection quota. For every inspected published URL it upserts a `page_index_states` row (keyed on the
- * normalized URL), then writes two site-level daily snapshots from the DURABLE table: `pages_indexed`
- * (verdict PASS) and `pages_known` (rows on file). Reading the counts back off the table — not just this
- * run's inspections — keeps the trend honest when the daily quota only refreshes part of a large site.
+ * URL-Inspection quota. For every inspected URL — published pages, job pages, and (all-known capture) the
+ * legacy URLs Google has shown — it upserts a `page_index_states` row (keyed on the normalized URL, tagged
+ * with its `origin`), then writes the site-level daily snapshots from the DURABLE table: `pages_indexed` /
+ * `pages_known` over the submitted set and `all_known_indexed` / `all_known_pages` over everything.
+ * Reading the counts back off the table — not just this run's inspections — keeps the trend honest when
+ * the daily quota only refreshes part of a large site.
  *
  * The range is point-in-time by nature (current index state), so `sync()` ignores it beyond stamping today's
  * snapshot. Writes are idempotent: page_index_states on (site, url_normalized), snapshots on the grain key.
@@ -68,11 +70,20 @@ class IndexMetricProvider implements MetricProvider
                 continue;
             }
 
+            // Which of Search Console's two Pages views the row belongs to: a published page or job (the
+            // sitemap — "All submitted pages") or a legacy URL Google found on its own ("All known pages").
+            $origin = match ($f['kind']) {
+                'job' => 'job',
+                'discovered' => 'discovered',
+                default => 'content',
+            };
+
             $rows[$urlNormalized] = [
                 'id' => (string) Str::ulid(),
                 'site_id' => $site->id,
                 // Jobs are not Content rows — the finding's id is a Job id there, so don't store it as content_id.
-                'content_id' => $f['kind'] === 'job' ? null : $f['content_id'],
+                'content_id' => $origin === 'content' ? $f['content_id'] : null,
+                'origin' => $origin,
                 'url' => (string) $f['url'],
                 'url_normalized' => $urlNormalized,
                 'coverage_state' => (string) $f['coverage_state'],
@@ -80,7 +91,9 @@ class IndexMetricProvider implements MetricProvider
                 // coarse coverage state so the operator can tell crawled-not-indexed from excluded, etc.
                 'index_verdict' => $f['indexed'] ? 'PASS' : (string) $f['state'],
                 'canonical_url' => $f['google_canonical'] !== null ? (string) $f['google_canonical'] : null,
-                'last_inspected_at' => $now,
+                // When Google actually answered — a verdict served from the inspector's cache keeps the
+                // time it was fetched, so the board's "as of" never claims today for a two-week-old answer.
+                'last_inspected_at' => $f['inspected_at'] !== null ? Carbon::parse($f['inspected_at']) : $now,
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -90,7 +103,7 @@ class IndexMetricProvider implements MetricProvider
             DB::table('page_index_states')->upsert(
                 $chunk,
                 ['site_id', 'url_normalized'],
-                ['content_id', 'coverage_state', 'index_verdict', 'canonical_url', 'last_inspected_at', 'updated_at'],
+                ['content_id', 'origin', 'coverage_state', 'index_verdict', 'canonical_url', 'last_inspected_at', 'updated_at'],
             );
         }
 
@@ -153,19 +166,30 @@ class IndexMetricProvider implements MetricProvider
         }
     }
 
-    /** The two site-level daily counts the dashboard trends, read from the durable page_index_states table. */
+    /**
+     * The site-level daily counts the dashboard trends, read from the durable page_index_states table.
+     * `pages_indexed` / `pages_known` are the SUBMITTED set (our pages + jobs) — the trend a client reads
+     * as "how many of my pages has Google added", which must not jump by hundreds the day legacy URLs are
+     * first captured. `all_known_indexed` / `all_known_pages` are the whole-property counts, Search
+     * Console's headline figure, trended separately.
+     */
     private function writeDailySnapshot(Site $site, Carbon $now): void
     {
-        $indexed = DB::table('page_index_states')
-            ->where('site_id', $site->id)->where('index_verdict', 'PASS')->count();
-        $known = DB::table('page_index_states')
-            ->where('site_id', $site->id)->count();
+        $submitted = DB::table('page_index_states')->where('site_id', $site->id)->where('origin', '!=', 'discovered');
+        $indexed = (clone $submitted)->where('index_verdict', 'PASS')->count();
+        $known = (clone $submitted)->count();
+
+        $all = DB::table('page_index_states')->where('site_id', $site->id);
+        $allIndexed = (clone $all)->where('index_verdict', 'PASS')->count();
+        $allKnown = (clone $all)->count();
 
         $today = $now->toDateString();
         DB::table('metric_snapshots')->upsert(
             [
                 $this->snapshotRow($site->id, 'pages_indexed', $today, (float) $indexed, $now),
                 $this->snapshotRow($site->id, 'pages_known', $today, (float) $known, $now),
+                $this->snapshotRow($site->id, 'all_known_indexed', $today, (float) $allIndexed, $now),
+                $this->snapshotRow($site->id, 'all_known_pages', $today, (float) $allKnown, $now),
             ],
             MetricSnapshot::GRAIN_KEYS,
             ['value_numeric', 'captured_at', 'updated_at'],

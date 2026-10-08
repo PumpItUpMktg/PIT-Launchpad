@@ -75,8 +75,8 @@
             @php($pt = max(1, $pub['total']))
             <div class="ix-card">
                 <div class="ix-head">
-                    <div class="t">Pages you published <span style="color:var(--ink-soft);font-weight:600">— in your sitemap</span></div>
-                    <div class="d">The town + service pages Launchpad built. This is the coverage you can act on.</div>
+                    <div class="t">Submitted pages <span style="color:var(--ink-soft);font-weight:600">— in your sitemap</span></div>
+                    <div class="d">The town, service and blog pages Launchpad built — the coverage you can act on. In Search Console this is <b>Pages → All submitted pages</b>.</div>
                     <div class="d" style="margin-top:4px">{{ number_format($board['inspected_count']).' inspected of '.number_format($board['published_content_count']).' published'.(($board['coverage_gap'] ?? 0) > 0 ? ' · '.number_format($board['coverage_gap']).' not yet inspected' : '') }}</div>
                     {{-- Freshness via the ONE shared stamp (App\Support\FreshnessStamp): "as of {date}" when
                          verdicts exist, an honest quiet "never checked" when none — same treatment + escalation
@@ -123,24 +123,35 @@
                  that silently mirrors the published set. --}}
             <div class="ix-card">
                 <div class="ix-head">
-                    <div class="t">All URLs Google knows <span style="color:var(--ink-soft);font-weight:600">— incl. found outside your sitemap</span></div>
-                    <div class="d">Every URL in Google's index for this site, not just the pages Launchpad published.</div>
+                    <div class="t">All known pages <span style="color:var(--ink-soft);font-weight:600">— the whole domain</span></div>
+                    <div class="d">Everything Google holds on the domain, including legacy posts and WordPress archives Launchpad did not publish. In Search Console this is the headline figure on <b>Pages → All known pages</b>.</div>
                 </div>
                 @if (! $board['all_known_available'])
                     <div class="ix-notenabled">
-                        <div class="ne-title">All-known capture not yet enabled</div>
+                        <div class="ne-title">All-known capture not enabled</div>
                         <div class="ne-body">
-                            Launchpad tracks the URLs it published (left). The rest of what Google holds for this site
-                            is mostly WordPress archives — category, tag, author and date pages, feeds — that it found
-                            by crawling; those should be noindexed at the WordPress level, not ranked. Google exposes
-                            no API for its full known-URL list, so this panel stays off rather than mixing those URLs
-                            into a number that would look alarming and mean nothing.
+                            Launchpad tracks the pages it published (left). The rest of what Google holds for this
+                            site — legacy posts, category, tag, author and date archives — is captured only when the
+                            all-known capture is on; Google exposes no API for its known-URL list, so this panel stays
+                            off rather than show a number that would silently mirror the sitemap.
+                        </div>
+                    </div>
+                @elseif ($board['discovered'] === 0)
+                    <div class="ix-notenabled">
+                        <div class="ne-title">Capture is on — first inspection pending</div>
+                        <div class="ne-body">
+                            The URLs Google has shown that Launchpad did not publish are inspected after every
+                            submitted page on each sync, so a large site fills this panel over several runs. Check
+                            back after the next sync, or use “Re-check indexing now”.
                         </div>
                     </div>
                 @else
                     @php($at = max(1, $all['total']))
                     <div class="ix-head" style="border-top:1px solid var(--line);border-bottom:0;padding-top:10px">
-                        <div class="d"><b>{{ number_format($board['discovered_only']) }}</b> are URLs Google found on its own (WordPress archives, params) — not pages you published.</div>
+                        <div class="d"><b>{{ number_format($board['discovered']) }}</b> are URLs Google found on its own — legacy posts, numbered twins, archives — seen in Search. Google's figure can also count URLs that never earned an impression, which nothing on our side can see.</div>
+                        <div class="d" style="margin-top:2px"><x-lp.freshness-stamp
+                            :last-checked="$board['discovered_last_inspected_at'] ? \Illuminate\Support\Carbon::parse($board['discovered_last_inspected_at']) : null"
+                            :interval="\App\Support\Cadence::intervalSeconds('index')" noun="legacy URL data" /></div>
                     </div>
                     <div class="ix-nums">
                         <div class="ix-num"><div class="n good">{{ number_format($all['indexed']) }}</div><div class="l">Indexed</div></div>
@@ -166,11 +177,12 @@
 
         <div class="ix-note">
             @if ($board['all_known_available'])
-                A big "not indexed" number is usually the URLs on the right — archives and parameter pages Google discovered that were never meant to rank. What matters is the left: of your <b>{{ number_format($pub['total']) }}</b> published pages, <b>{{ number_format($pub['not_indexed']) }}</b> aren't indexed.
+                A big "not indexed" number is usually the URLs on the right — legacy posts and archives Google found on its own that were never meant to rank. What matters is the left: of your <b>{{ number_format($pub['total']) }}</b> submitted pages, <b>{{ number_format($pub['not_indexed']) }}</b> aren't indexed.
             @else
-                What matters is your published pages: of <b>{{ number_format($pub['total']) }}</b>, <b>{{ number_format($pub['not_indexed']) }}</b> aren't indexed. The URLs Google finds on its own (WordPress archives) aren't tracked yet — see the panel on the right.
+                What matters is your submitted pages: of <b>{{ number_format($pub['total']) }}</b>, <b>{{ number_format($pub['not_indexed']) }}</b> aren't indexed. The URLs Google finds on its own (legacy posts, archives) aren't captured — see the panel on the right.
             @endif
-            Indexed = a URL-Inspection <code>PASS</code>; a redirect or canonical is a correct exclusion, not pending.
+            To compare with Search Console, open <b>Pages</b>: the <b>All submitted pages</b> filter matches the left panel; the unfiltered <b>All known pages</b> view matches the right. Google refreshes that report every few days, so the two drift by a handful of URLs between refreshes — each panel says when its verdicts are from.
+            Indexed = a URL-Inspection <code>PASS</code> or a page earning Search impressions; a redirect or canonical is a correct exclusion, not pending.
         </div>
     @endif
 </x-lp.shell>

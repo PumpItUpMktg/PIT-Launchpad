@@ -100,6 +100,22 @@ it('caches a PASS verdict for 14 days and a non-PASS verdict for 3 days (tiered 
         ->and($ttls)->toBe([1209600, 259200]); // PASS → 14d, non-PASS → 3d
 });
 
+it('stamps the fetch time on a verdict and keeps it through the cache', function () {
+    inspectGrant();
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+    HttpFacade::fake(['*/urlInspection/index:inspect' => HttpFacade::response(inspectResponse('Submitted and indexed', 'PASS'))]);
+
+    $fetched = app(IndexInspector::class)->inspect($site, 'https://spg.example/stamped');
+    expect($fetched->inspectedAt)->not->toBeNull()
+        ->and($fetched->inspectedAt->diffInSeconds(now(), true))->toBeLessThan(5);
+
+    // Served from cache: the same fetch time, not "now" — the caller can tell how old the answer is.
+    $this->travel(3)->days();
+    $cached = app(IndexInspector::class)->cached($site, 'https://spg.example/stamped');
+    expect($cached->inspectedAt->toIso8601String())->toBe($fetched->inspectedAt->toIso8601String());
+    HttpFacade::assertSentCount(1);
+});
+
 it('cached() never makes an API call and returns null before an inspection', function () {
     inspectGrant();
     $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);

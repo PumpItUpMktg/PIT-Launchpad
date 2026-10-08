@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Operator\ActiveTenant;
 use App\Operator\Coverage\IndexStandings;
 use App\Operator\Coverage\StuckPages;
+use Carbon\Carbon;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
@@ -31,15 +32,18 @@ beforeEach(function () {
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
 });
 
-function indexRow(Site $s, ?Content $content, string $verdict, string $url): void
+function indexRow(Site $s, ?Content $content, string $verdict, string $url, ?string $coverage = null, ?string $origin = null, ?Carbon $inspectedAt = null): void
 {
     PageIndexState::create([
         'site_id' => $s->id,
         'content_id' => $content?->id,
+        // A row with no content is a legacy URL the all-known capture inspected, unless told otherwise.
+        'origin' => $origin ?? ($content === null ? 'discovered' : 'content'),
         'url' => $url,
         'url_normalized' => rtrim($url, '/'),
-        'coverage_state' => $verdict === 'PASS' ? 'indexed' : $verdict,
+        'coverage_state' => $coverage ?? ($verdict === 'PASS' ? 'indexed' : $verdict),
         'index_verdict' => $verdict,
+        'last_inspected_at' => $inspectedAt,
     ]);
 }
 
@@ -179,8 +183,8 @@ it('shows an honest "not yet enabled" state for all-known by default — never a
     $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
 
     // Published side renders for real; the all-known side declares it's off rather than showing archives.
-    expect($html)->toContain('Pages you published')
-        ->and($html)->toContain('All-known capture not yet enabled')
+    expect($html)->toContain('Submitted pages')
+        ->and($html)->toContain('All-known capture not enabled')
         ->and($html)->not->toContain('Discovered — not indexed') // gated off
         ->and($html)->not->toContain('<select');
 });
@@ -196,7 +200,7 @@ it('renders the all-known reason breakdown once the capture is enabled', functio
     $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
 
     expect($html)->toContain('Discovered — not indexed')
-        ->and($html)->not->toContain('All-known capture not yet enabled')
+        ->and($html)->not->toContain('All-known capture not enabled')
         ->and($html)->not->toContain('<select');
 });
 
@@ -208,6 +212,52 @@ it('renders the all-known reason breakdown once the capture is enabled', functio
  * It queues rather than inspecting inline: the run is minutes of HTTP against Search Console and has no
  * business holding a web request open.
  */
+it('labels each reason in Google\'s own words when the verdict carries them', function () {
+    $site = Site::factory()->create();
+    indexRow($site, null, IndexCoverageState::CrawledNotIndexed->value, 'https://x/1', 'Crawled - currently not indexed');
+    indexRow($site, null, IndexCoverageState::CrawledNotIndexed->value, 'https://x/2', 'Crawled - currently not indexed');
+    indexRow($site, null, IndexCoverageState::Unknown->value, 'https://x/3', 'URL is unknown to Google');
+    indexRow($site, null, IndexCoverageState::DiscoveredNotIndexed->value, 'https://x/4'); // fixture stores the key → our label
+
+    $reasons = collect(app(IndexStandings::class)->for($site->id)['all_known']['reasons'])->keyBy('state');
+
+    expect($reasons[IndexCoverageState::CrawledNotIndexed->value]['label'])->toBe('Crawled - currently not indexed')
+        ->and($reasons[IndexCoverageState::Unknown->value]['label'])->toBe('URL is unknown to Google')
+        ->and($reasons[IndexCoverageState::DiscoveredNotIndexed->value]['label'])->toBe('Discovered — not indexed');
+});
+
+it('shows "first inspection pending" when the capture is on but no legacy URL has a verdict yet', function () {
+    config()->set('launchpad.indexing.all_known_capture', true);
+    $site = Site::factory()->create();
+    $p = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
+    indexRow($site, $p, 'PASS', 'https://x/p');
+    app(ActiveTenant::class)->set($site->id);
+
+    $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
+
+    expect($html)->toContain('Capture is on — first inspection pending')
+        ->and($html)->not->toContain('All-known capture not enabled');
+});
+
+it('dates each panel by its own verdicts and names the Search Console view it matches', function () {
+    config()->set('launchpad.indexing.all_known_capture', true);
+    $site = Site::factory()->create();
+    $p = Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published]);
+    indexRow($site, $p, 'PASS', 'https://x/p', inspectedAt: now()->subDays(12));
+    indexRow($site, null, 'PASS', 'https://x/legacy-post', 'Indexed, not submitted in sitemap', inspectedAt: now()->subDays(1));
+    app(ActiveTenant::class)->set($site->id);
+
+    $board = app(IndexStandings::class)->for($site->id);
+    expect($board['discovered'])->toBe(1)
+        ->and($board['data_through'])->toBe(now()->subDays(12)->toDateString())
+        ->and(Illuminate\Support\Carbon::parse($board['discovered_last_inspected_at'])->toDateString())->toBe(now()->subDays(1)->toDateString());
+
+    $html = Livewire::test(IndexingBoard::class)->assertOk()->html();
+    expect($html)->toContain('All submitted pages')
+        ->and($html)->toContain('All known pages')
+        ->and($html)->toContain('1</b> are URLs Google found on its own');
+});
+
 it('queues a Search Console re-inspection from the indexing board', function () {
     Queue::fake();
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));

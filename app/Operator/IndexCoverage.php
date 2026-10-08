@@ -6,11 +6,14 @@ use App\Enums\ContentStatus;
 use App\Enums\IndexCoverageState;
 use App\Enums\JobStatus;
 use App\Integrations\UrlInspection\IndexInspector;
+use App\Integrations\UrlInspection\IndexStatus;
+use App\Metrics\UrlNormalizer;
 use App\Models\Content;
 use App\Models\Job;
 use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Operator\Coverage\DiscoveredUrls;
 use App\Support\PublicUrl;
 
 /**
@@ -27,17 +30,25 @@ use App\Support\PublicUrl;
  */
 class IndexCoverage
 {
-    public function __construct(private readonly IndexInspector $inspector) {}
+    public function __construct(
+        private readonly IndexInspector $inspector,
+        private readonly ?DiscoveredUrls $discovered = null,
+    ) {}
 
     /**
      * Run (or read-cache) an inspection for every published URL. `live=false` reads only cached results
      * (no API calls) — for a cheap render; `live=true` performs the batched, quota-guarded inspection.
      *
+     * Three passes, in the order the budget should be spent: the pages Launchpad published, then published
+     * job pages, then — when the all-known capture is on — the URLs Google has shown that are not ours
+     * ({@see DiscoveredUrls}: legacy posts, archives). The legacy pass is last on purpose: a budget-capped
+     * run must reach every submitted page before it spends a call on a page nobody wrote.
+     *
      * @return array{
      *   connected: bool,
-     *   total: int, inspected: int, indexed: int, not_inspected: int,
+     *   total: int, inspected: int, indexed: int, not_inspected: int, discovered: int,
      *   by_state: array<string, int>,
-     *   findings: list<array{content_id: string, kind: string, title: string, url: string, state: string, label: string, indexed: bool, coverage_state: string, canonical_mismatch: bool, google_canonical: ?string}>,
+     *   findings: list<array{content_id: string, kind: string, title: string, url: string, state: string, label: string, indexed: bool, coverage_state: string, canonical_mismatch: bool, google_canonical: ?string, inspected_at: ?string}>,
      * }
      */
     public function audit(Site $site, bool $live = true, ?float $liveBudgetSeconds = null): array
@@ -82,45 +93,25 @@ class IndexCoverage
         $indexed = 0;
         $inspected = 0;
 
+        $tally = function (array $finding) use (&$findings, &$byState, &$indexed, &$inspected): void {
+            $findings[] = $finding;
+            $byState[$finding['state']] = ($byState[$finding['state']] ?? 0) + 1;
+            if ($finding['state'] !== IndexCoverageState::NotInspected->value) {
+                $inspected++;
+            }
+            if ($finding['indexed']) {
+                $indexed++;
+            }
+        };
+
         foreach ($pages as $content) {
             // Trailing-slash form (PublicUrl) so this inspects/caches the SAME URL the Live cards read —
             // the WordPress permalink, not the slash-less variant that 301-redirects to it.
             $url = PublicUrl::forContent($site->domain_url, $content);
-            $status = ($connected && $url !== null)
-                ? ($this->inspectLive($live, $deadline) ? $this->inspector->inspect($site, $url) : $this->inspector->cached($site, $url))
-                : null;
+            $status = ($connected && $url !== null) ? $this->resolve($site, $url, $live, $deadline) : null;
             $url ??= '/'.ltrim((string) $content->slug, '/');
 
-            if ($status === null) {
-                $state = IndexCoverageState::NotInspected;
-                $byState[$state->value] = ($byState[$state->value] ?? 0) + 1;
-                $findings[] = [
-                    'content_id' => (string) $content->id, 'kind' => (string) ($content->kind->value ?? ''),
-                    'title' => (string) $content->title, 'url' => $url, 'state' => $state->value, 'label' => $state->label(),
-                    'indexed' => false, 'coverage_state' => '', 'canonical_mismatch' => false, 'google_canonical' => null,
-                ];
-
-                continue;
-            }
-
-            $inspected++;
-            if ($status->indexed()) {
-                $indexed++;
-            }
-            $byState[$status->state->value] = ($byState[$status->state->value] ?? 0) + 1;
-
-            $findings[] = [
-                'content_id' => (string) $content->id,
-                'kind' => (string) ($content->kind->value ?? ''),
-                'title' => (string) $content->title,
-                'url' => $url,
-                'state' => $status->state->value,
-                'label' => $status->state->label(),
-                'indexed' => $status->indexed(),
-                'coverage_state' => $status->coverageState,
-                'canonical_mismatch' => $status->canonicalMismatch(),
-                'google_canonical' => $status->googleCanonical,
-            ];
+            $tally($this->finding((string) $content->id, (string) ($content->kind->value ?? ''), (string) $content->title, $url, $status));
         }
 
         // Job Capture pages too — inspect + cache each published job's URL so the Published-Jobs cards can
@@ -133,36 +124,21 @@ class IndexCoverage
 
         foreach ($jobs as $job) {
             $url = $job->publicUrl($site->domain_url);
-            $status = ($connected && $url !== null)
-                ? ($this->inspectLive($live, $deadline) ? $this->inspector->inspect($site, $url) : $this->inspector->cached($site, $url))
-                : null;
-            $displayUrl = $url ?? $job->publicPath();
+            $status = ($connected && $url !== null) ? $this->resolve($site, $url, $live, $deadline) : null;
 
-            if ($status === null) {
-                $state = IndexCoverageState::NotInspected;
-                $byState[$state->value] = ($byState[$state->value] ?? 0) + 1;
-                $findings[] = [
-                    'content_id' => (string) $job->id, 'kind' => 'job',
-                    'title' => $job->publicTitle(), 'url' => $displayUrl, 'state' => $state->value, 'label' => $state->label(),
-                    'indexed' => false, 'coverage_state' => '', 'canonical_mismatch' => false, 'google_canonical' => null,
-                ];
+            $tally($this->finding((string) $job->id, 'job', $job->publicTitle(), $url ?? $job->publicPath(), $status));
+        }
 
-                continue;
-            }
+        // The all-known capture: the URLs Google has shown that Launchpad did not publish, so the board's
+        // "All known pages" panel is built from Google's verdicts on real legacy URLs — not inferred.
+        // Same stalest-first order as the pages, keyed on the URL since there is no content to key on.
+        $discoveredUrls = ($connected && $this->captureAllKnown()) ? $this->discoveredUrls($site) : [];
+        $discovered = count($discoveredUrls);
 
-            $inspected++;
-            if ($status->indexed()) {
-                $indexed++;
-            }
-            $byState[$status->state->value] = ($byState[$status->state->value] ?? 0) + 1;
+        foreach ($discoveredUrls as $url) {
+            $status = $this->resolve($site, $url, $live, $deadline);
 
-            $findings[] = [
-                'content_id' => (string) $job->id, 'kind' => 'job',
-                'title' => $job->publicTitle(), 'url' => $displayUrl,
-                'state' => $status->state->value, 'label' => $status->state->label(),
-                'indexed' => $status->indexed(), 'coverage_state' => $status->coverageState,
-                'canonical_mismatch' => $status->canonicalMismatch(), 'google_canonical' => $status->googleCanonical,
-            ];
+            $tally($this->finding('', 'discovered', $url, $url, $status));
         }
 
         $total = count($findings);
@@ -173,9 +149,78 @@ class IndexCoverage
             'inspected' => $inspected,
             'indexed' => $indexed,
             'not_inspected' => $total - $inspected,
+            'discovered' => $discovered,
             'by_state' => $byState,
             'findings' => $findings,
         ];
+    }
+
+    /** Live (cache-first, quota-guarded) while the budget lasts, cached-only after — never null-on-principle. */
+    private function resolve(Site $site, string $url, bool $live, ?float $deadline): ?IndexStatus
+    {
+        return $this->inspectLive($live, $deadline)
+            ? $this->inspector->inspect($site, $url)
+            : $this->inspector->cached($site, $url);
+    }
+
+    /**
+     * One finding row. A null status is the honest "not inspected" (quota reached / never fetched) — never
+     * a fabricated verdict.
+     *
+     * @return array{content_id: string, kind: string, title: string, url: string, state: string, label: string, indexed: bool, coverage_state: string, canonical_mismatch: bool, google_canonical: ?string, inspected_at: ?string}
+     */
+    private function finding(string $id, string $kind, string $title, string $url, ?IndexStatus $status): array
+    {
+        if ($status === null) {
+            $state = IndexCoverageState::NotInspected;
+
+            return [
+                'content_id' => $id, 'kind' => $kind, 'title' => $title, 'url' => $url,
+                'state' => $state->value, 'label' => $state->label(),
+                'indexed' => false, 'coverage_state' => '', 'canonical_mismatch' => false, 'google_canonical' => null,
+                'inspected_at' => null,
+            ];
+        }
+
+        return [
+            'content_id' => $id, 'kind' => $kind, 'title' => $title, 'url' => $url,
+            'state' => $status->state->value, 'label' => $status->state->label(),
+            'indexed' => $status->indexed(), 'coverage_state' => $status->coverageState,
+            'canonical_mismatch' => $status->canonicalMismatch(), 'google_canonical' => $status->googleCanonical,
+            'inspected_at' => $status->inspectedAt?->toIso8601String(),
+        ];
+    }
+
+    private function captureAllKnown(): bool
+    {
+        return (bool) config('launchpad.indexing.all_known_capture', true);
+    }
+
+    /**
+     * The legacy URLs in stalest-first order: never-inspected first, then by the oldest stored verdict —
+     * the same rule the pages use, so a budget-capped run always reaches the URLs it knows least about.
+     *
+     * @return list<string>
+     */
+    private function discoveredUrls(Site $site): array
+    {
+        $urls = ($this->discovered ?? app(DiscoveredUrls::class))->urls($site);
+        if ($urls === []) {
+            return [];
+        }
+
+        $freshness = PageIndexState::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('origin', 'discovered')
+            ->pluck('last_inspected_at', 'url_normalized');
+
+        usort($urls, function (string $a, string $b) use ($freshness): int {
+            $key = fn (string $url): string => ($last = $freshness[UrlNormalizer::url($url)] ?? null) === null || $last === '' ? '0' : '1'.$last;
+
+            return strcmp($key($a), $key($b));
+        });
+
+        return $urls;
     }
 
     /** Whether to make a live inspection now: only when live mode is on and the time budget isn't spent. */

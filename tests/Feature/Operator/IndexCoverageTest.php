@@ -7,11 +7,14 @@ use App\Enums\PageType;
 use App\Integrations\UrlInspection\IndexInspector;
 use App\Integrations\UrlInspection\IndexStatus;
 use App\Models\Content;
+use App\Models\GscUrlDaily;
 use App\Models\Job;
 use App\Models\PageIndexState;
 use App\Models\Site;
 use App\Models\User;
 use App\Operator\IndexCoverage;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /** A deterministic IndexInspector keyed by URL — no HTTP. */
 function bindFakeInspector(array $byUrl, bool $connected = true): void
@@ -225,6 +228,73 @@ it('the audit-index command prints the coverage summary', function () {
     ]);
 
     $this->artisan('launchpad:audit-index --site=SPG')
-        ->expectsOutputToContain('1 of 1 published URLs indexed')
+        ->expectsOutputToContain('1 of 1 URLs indexed (1 published, 0 found outside the sitemap)')
         ->assertSuccessful();
+});
+
+function coverageGscUrl(Site $site, string $url, int $impressions): void
+{
+    GscUrlDaily::withoutGlobalScopes()->create([
+        'id' => (string) Str::ulid(), 'site_id' => $site->id, 'grain_hash' => Str::random(32),
+        'date' => now()->subDays(3)->toDateString(), 'url' => $url,
+        'impressions' => $impressions, 'clicks' => 0, 'position' => 9.0,
+    ]);
+}
+
+it('inspects the legacy URLs Google has shown AFTER every submitted page (all-known capture)', function () {
+    config()->set('launchpad.indexing.all_known_capture', true);
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+    $page = Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'hoboken-nj', 'title' => 'Hoboken']);
+    $job = Job::factory()->published()->create(['site_id' => $site->id, 'post_title' => 'Sump Pump Job']);
+
+    $ours = 'https://spg.example/hoboken-nj/';
+    $jobUrl = (string) $job->publicUrl($site->domain_url);
+    $legacy = 'https://spg.example/sump-pump-installation-cost-breakdown-3/';
+    coverageGscUrl($site, $ours, 300);          // ours — never a "discovered" finding
+    coverageGscUrl($site, $jobUrl, 20);         // a job page is ours too
+    coverageGscUrl($site, $legacy, 189_317);    // the legacy twin
+    coverageGscUrl($site, 'https://spg.example/category/sump-pumps/', 40);
+
+    bindFakeInspector([
+        $ours => status($ours, IndexCoverageState::Indexed, 'Submitted and indexed'),
+        $jobUrl => status($jobUrl, IndexCoverageState::Indexed, 'Submitted and indexed'),
+        $legacy => status($legacy, IndexCoverageState::Indexed, 'Indexed, not submitted in sitemap'),
+        // the category archive: no verdict (quota) → honest not_inspected, never fabricated
+    ]);
+
+    $r = app(IndexCoverage::class)->audit($site);
+    $kinds = array_column($r['findings'], 'kind');
+
+    expect($r['discovered'])->toBe(2)
+        ->and($r['total'])->toBe(4)
+        ->and($r['indexed'])->toBe(3)
+        // Submitted first (page, job), legacy last — the budget reaches our pages before anyone else's.
+        ->and($kinds)->toBe(['page', 'job', 'discovered', 'discovered'])
+        // Most impressions first among the legacy URLs; the un-inspected archive is reported, not invented.
+        ->and($r['findings'][2]['url'])->toBe($legacy)
+        ->and($r['findings'][2]['content_id'])->toBe('')
+        ->and($r['findings'][3]['state'])->toBe('not_inspected');
+});
+
+it('runs no legacy pass when the all-known capture is off', function () {
+    config()->set('launchpad.indexing.all_known_capture', false);
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+    coverageGscUrl($site, 'https://spg.example/legacy-post/', 500);
+    bindFakeInspector([]);
+
+    $r = app(IndexCoverage::class)->audit($site);
+
+    expect($r['discovered'])->toBe(0)->and($r['total'])->toBe(0);
+});
+
+it('carries the time Google answered on each finding', function () {
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::Published, 'wp_post_id' => 1, 'slug' => 'x', 'title' => 'X']);
+    $url = 'https://spg.example/x/';
+    $answered = Carbon::parse('2026-09-20T10:00:00Z');
+    bindFakeInspector([$url => new IndexStatus(url: $url, state: IndexCoverageState::Indexed, coverageState: 'Submitted and indexed', inspectedAt: $answered)]);
+
+    $finding = app(IndexCoverage::class)->audit($site)['findings'][0];
+
+    expect($finding['inspected_at'])->toBe($answered->toIso8601String());
 });
