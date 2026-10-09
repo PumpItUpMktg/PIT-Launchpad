@@ -18,6 +18,7 @@ use Illuminate\Console\Command;
 class ReviveLegacyContentCommand extends Command
 {
     protected $signature = 'launchpad:revive-legacy-content {--site= : Site id or brand name (required)} {--min-impressions= : Impression floor (default config, 5000)} {--limit= : Max candidates this run (default config, 100)} {--clean : Only the families launchpad:review-revivals passes as CLEAN (covered / shared / weak / not-an-article families are held back)}
+        {--family=* : Only these families, by key (e.g. /battery-backup-sump-pump-types); repeatable — the way a REBRIEF or DECIDE family is revived on purpose}
         {--apply : Create the candidates}';
 
     protected $description = 'Seed reviewable blog candidates from high-value unresolved legacy URLs (301 old→new on publish).';
