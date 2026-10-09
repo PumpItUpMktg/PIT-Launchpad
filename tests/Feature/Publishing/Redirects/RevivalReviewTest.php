@@ -232,7 +232,7 @@ it('--retarget sends a covered family to a different live post, and refuses a pa
 it('--family revives the named families only, titling a weak-briefed one from the old article\'s slug', function () {
     $site = reviewSite();
 
-    $this->artisan('launchpad:revive-legacy-content --site=SPG --apply --family=/does-your-home-need-a-second-sump-pump --family=/how-often-should-sump-pump-cycle --family=/not-in-the-plan')
+    $this->artisan('launchpad:revive-legacy-content --site=SPG --apply --family=/does-your-home-need-a-second-sump-pump --family=/how-seasonal-changes-affect-indoor-radon --family=/not-in-the-plan')
         ->expectsOutputToContain('--family=/not-in-the-plan is not in the revival plan')
         ->expectsOutputToContain('--family: 2 of 3 named family(ies) found in the plan.')
         ->expectsOutputToContain('/does-your-home-need-a-second-sump-pump: its top query “sump pump” is not a topic — titled from the old article\'s slug instead.')
@@ -250,18 +250,18 @@ it('--family revives the named families only, titling a weak-briefed one from th
         ->and($second->angle_hint)->toContain('owns the query “does your home need a second sump pump”');
 
     // A clean family keeps its query title.
-    $cycle = $created['/how-often-should-sump-pump-cycle'];
-    expect($cycle->title)->toBe('How Often Should A Sump Pump Run')
-        ->and($cycle->meta['revived_title_source'])->toBe('query');
+    $radon = $created['/how-seasonal-changes-affect-indoor-radon-2'];
+    expect($radon->title)->toBe('Does Weather Affect Radon Levels')
+        ->and($radon->meta['revived_title_source'])->toBe('query');
 });
 
 it('--family looks past the per-run cap so a small named family is found', function () {
     $site = reviewSite();
     config()->set('launchpad.legacy_revival.limit', 2); // the cap would otherwise hide everything but the two biggest
 
-    $this->artisan('launchpad:revive-legacy-content --site=SPG --apply --family=/when-to-schedule-sump-pump-maintenance')
+    $this->artisan('launchpad:revive-legacy-content --site=SPG --apply --family=/how-seasonal-changes-affect-indoor-radon')
         ->expectsOutputToContain('--family: 1 of 1 named family(ies) found in the plan.')
         ->expectsOutputToContain('Created 1 blog candidate(s)')
         ->assertSuccessful();
-    expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('status', ContentStatus::Candidate->value)->value('title'))->toBe('When To Schedule Sump Pump Maintenance');
+    expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('status', ContentStatus::Candidate->value)->value('title'))->toBe('Does Weather Affect Radon Levels');
 });
