@@ -18,6 +18,7 @@ use Illuminate\Console\Command;
 class ReviveLegacyContentCommand extends Command
 {
     protected $signature = 'launchpad:revive-legacy-content {--site= : Site id or brand name (required)} {--min-impressions= : Impression floor (default config, 5000)} {--limit= : Max candidates this run (default config, 100)} {--clean : Only the families launchpad:review-revivals passes as CLEAN (covered / shared / weak / not-an-article families are held back)}
+        {--family=* : Only these families, by key (e.g. /battery-backup-sump-pump-types); repeatable — the way a REBRIEF or DECIDE family is revived on purpose}
         {--apply : Create the candidates}';
 
     protected $description = 'Seed reviewable blog candidates from high-value unresolved legacy URLs (301 old→new on publish).';
@@ -39,6 +40,12 @@ class ReviveLegacyContentCommand extends Command
 
         $floor = $this->option('min-impressions') !== null ? max(0, (int) $this->option('min-impressions')) : null;
         $limit = $this->option('limit') !== null ? max(1, (int) $this->option('limit')) : null;
+        /** @var list<string> $families */
+        $families = array_values(array_filter(array_map(fn ($f): string => '/'.trim(mb_strtolower((string) $f), '/'), (array) $this->option('family')), fn (string $f): bool => $f !== '/'));
+        // A named family must be findable whatever its size, so --family looks past the per-run cap.
+        if ($families !== [] && $limit === null) {
+            $limit = PHP_INT_MAX;
+        }
 
         $plan = $reviver->plan($site, $floor, $limit);
 
@@ -59,16 +66,37 @@ class ReviveLegacyContentCommand extends Command
             return self::SUCCESS;
         }
 
+        // The review decides two things here: which families --clean applies, and which families' GSC top
+        // query is not a topic (REBRIEF) — those are titled from the old article's slug, never "Sump Pump".
+        $review = app(RevivalReview::class)->for($site, $floor, $limit);
+        $slugTitled = array_values(array_map(
+            fn (array $f): string => $f['key'],
+            array_filter($review['families'], fn (array $f): bool => $f['verdict'] === RevivalReview::REBRIEF),
+        ));
+
         $only = null;
-        if ($this->option('clean')) {
-            $only = app(RevivalReview::class)->cleanKeys($site, $floor, $limit);
+        if ($families !== []) {
+            $known = array_column($plan, 'key');
+            foreach (array_diff($families, $known) as $missing) {
+                $this->warn("--family={$missing} is not in the revival plan (already claimed, below the floor, or not an article) — ignored.");
+            }
+            $only = array_values(array_intersect($families, $known));
+            $this->newLine();
+            $this->line(sprintf('--family: %d of %d named family(ies) found in the plan.', count($only), count($families)));
+        } elseif ($this->option('clean')) {
+            $only = array_values(array_map(fn (array $f): string => $f['key'], array_filter($review['families'], fn (array $f): bool => $f['verdict'] === RevivalReview::CLEAN)));
             $held = count($plan) - count($only);
             $this->newLine();
             $this->line(sprintf('--clean: %d of %d family(ies) pass the review; %d held back (see launchpad:review-revivals).', count($only), count($plan), $held));
         }
+        foreach ($plan as $row) {
+            if (in_array($row['key'], $slugTitled, true) && ($only === null || in_array($row['key'], $only, true))) {
+                $this->line(sprintf('  %s: its top query “%s” is not a topic — titled from the old article\'s slug instead.', $row['key'], $row['query'] ?? '—'));
+            }
+        }
 
         if ($this->option('apply')) {
-            $created = $reviver->revive($site, $floor, $limit, $only);
+            $created = $reviver->revive($site, $floor, $limit, $only, $slugTitled);
             $this->newLine();
             $this->info(sprintf('Created %d blog candidate(s). Generate them from the Blog surface — each 301s its old URL on publish.', count($created)));
         } else {

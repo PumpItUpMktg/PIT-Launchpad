@@ -228,3 +228,40 @@ it('--retarget sends a covered family to a different live post, and refuses a pa
     expect($rows['/sump-pump-size-matters-choosing-right-one-for-home']->to_url)->toBe('/types-of-sump-pumps-how-to-choose-the-right-one')
         ->and($rows['/check-if-sump-pump-fits-drainage-pipe']->to_url)->toBe('/sump-pump-gpm-how-to-size-your-pump-for-your-home'); // the other families keep the review's match
 });
+
+it('--family revives the named families only, titling a weak-briefed one from the old article\'s slug', function () {
+    $site = reviewSite();
+
+    $this->artisan('launchpad:revive-legacy-content --site=SPG --apply --family=/does-your-home-need-a-second-sump-pump --family=/how-seasonal-changes-affect-indoor-radon --family=/not-in-the-plan')
+        ->expectsOutputToContain('--family=/not-in-the-plan is not in the revival plan')
+        ->expectsOutputToContain('--family: 2 of 3 named family(ies) found in the plan.')
+        ->expectsOutputToContain('/does-your-home-need-a-second-sump-pump: its top query “sump pump” is not a topic — titled from the old article\'s slug instead.')
+        ->expectsOutputToContain('Created 2 blog candidate(s)')
+        ->assertSuccessful();
+
+    $created = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('kind', ContentKind::Post->value)->where('status', ContentStatus::Candidate->value)->get()->keyBy(fn (Content $c): string => (string) $c->meta['revived_from_urls'][0]);
+    expect($created)->toHaveCount(2);
+
+    // The weak-briefed family: titled from the slug, the GSC query kept as a fact, the brief unchanged.
+    $second = $created['/does-your-home-need-a-second-sump-pump'];
+    expect($second->title)->toBe('Does Your Home Need A Second Sump Pump')
+        ->and($second->meta['revived_title_source'])->toBe('slug')
+        ->and($second->meta['revived_gsc_query'])->toBe('sump pump')
+        ->and($second->angle_hint)->toContain('owns the query “does your home need a second sump pump”');
+
+    // A clean family keeps its query title.
+    $radon = $created['/how-seasonal-changes-affect-indoor-radon-2'];
+    expect($radon->title)->toBe('Does Weather Affect Radon Levels')
+        ->and($radon->meta['revived_title_source'])->toBe('query');
+});
+
+it('--family looks past the per-run cap so a small named family is found', function () {
+    $site = reviewSite();
+    config()->set('launchpad.legacy_revival.limit', 2); // the cap would otherwise hide everything but the two biggest
+
+    $this->artisan('launchpad:revive-legacy-content --site=SPG --apply --family=/how-seasonal-changes-affect-indoor-radon')
+        ->expectsOutputToContain('--family: 1 of 1 named family(ies) found in the plan.')
+        ->expectsOutputToContain('Created 1 blog candidate(s)')
+        ->assertSuccessful();
+    expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('status', ContentStatus::Candidate->value)->value('title'))->toBe('Does Weather Affect Radon Levels');
+});

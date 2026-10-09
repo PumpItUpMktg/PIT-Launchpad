@@ -235,21 +235,26 @@ class LegacyContentReviver
 
     /**
      * Create one blog candidate per revival family (status `candidate`, gated for operator generation).
-     * `$only` restricts the run to those family keys — how `--clean` applies just what the review passed.
+     * `$only` restricts the run to those family keys — how `--clean` / `--family` apply a chosen set.
+     * `$titleFromSlug` names the families whose GSC top query is not a topic ("sump pump" for an article
+     * on second sump pumps — the review's REBRIEF verdict): their title and angle come from the old
+     * article's own slug, while the brief still carries every query the family earns.
      *
      * @param  list<string>|null  $only
+     * @param  list<string>  $titleFromSlug
      * @return list<Content>
      */
-    public function revive(Site $site, ?int $minImpressions = null, ?int $limit = null, ?array $only = null): array
+    public function revive(Site $site, ?int $minImpressions = null, ?int $limit = null, ?array $only = null, array $titleFromSlug = []): array
     {
         $created = [];
         foreach ($this->plan($site, $minImpressions, $limit) as $family) {
             if ($only !== null && ! in_array($family['key'], $only, true)) {
                 continue;
             }
-            $query = is_string($family['query']) && trim($family['query']) !== ''
+            $slugTitled = in_array($family['key'], $titleFromSlug, true);
+            $query = ! $slugTitled && is_string($family['query']) && trim($family['query']) !== ''
                 ? trim($family['query'])
-                : $this->titleFromSlug($family['from_urls'][0]);
+                : $this->titleFromSlug($family['key']);
             $title = Str::title($query);
             $count = count($family['from_urls']);
 
@@ -281,6 +286,8 @@ class LegacyContentReviver
                 'meta' => [
                     'revived_from_urls' => $family['from_urls'],
                     'revived_query' => $query,
+                    'revived_gsc_query' => $family['query'],
+                    'revived_title_source' => $slugTitled ? 'slug' : 'query',
                     'revived_queries' => $queries,
                     'revived_impressions' => $family['impressions'],
                 ],
