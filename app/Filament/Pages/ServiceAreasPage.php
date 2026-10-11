@@ -174,7 +174,7 @@ class ServiceAreasPage extends Page
         $card = collect($area['cards'])->firstWhere('keyword_id', $keywordId);
         $lagging = is_array($card) ? ($card['lagging'] ?? null) : null;
         if (! is_array($lagging) || $lagging['content_ids'] === []) {
-            Notification::make()->warning()->title('No towns to push')->body('Every town off page 1 here is already queued, below the tier, or has no page.')->send();
+            Notification::make()->warning()->title('No towns to push')->body('Every town off page 1 here already has its sections live (waiting on scans), is drafting now, is below the tier, or has no page.')->send();
 
             return;
         }

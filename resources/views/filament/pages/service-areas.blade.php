@@ -85,6 +85,7 @@
     /* A town whose priority sections are live: a ring inside its boundary (or around its dot), over the rank fill. */
     .sva .s-sections { fill:none; stroke:#b45309; stroke-width:.7; stroke-dasharray:1.2 .8; pointer-events:none; }
     .sva .s-key i.ring { background:none; border:1.5px dashed #b45309; }
+    .sva .s-lag-failed { display:block; width:100%; color:#B5731A; font-size:11.5px; }
     .sva .s-lag { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:11.5px; color:var(--s-muted); flex-wrap:wrap; }
     .sva .s-lag button { font-size:12px; border:1px solid #b45309; color:#b45309; background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; font-weight:600; }
     .sva .s-lag button:disabled { opacity:.55; cursor:default; }
@@ -275,11 +276,14 @@
                                     @if ($card['lagging'] !== null)
                                         @php($lag = $card['lagging'])
                                         <div class="s-lag">
-                                            <span><b>{{ $lag['off_page1'] }}</b> town(s) with a page off page 1 · <b>{{ $lag['eligible'] }}</b> can take sections now{{ $lag['ranking_elsewhere'] > 0 ? ' · '.$lag['ranking_elsewhere'].' rank page 1 for another priority keyword (kept)' : '' }}</span>
-                                            @if ($lag['eligible'] > 0)
+                                            <span><b>{{ $lag['off_page1'] }}</b> town(s) with a page off page 1 · <b>{{ $lag['need'] }}</b> need sections{{ $lag['live'] > 0 ? ' · '.$lag['live'].' live, awaiting scans' : '' }}{{ $lag['queued'] > 0 ? ' · '.$lag['queued'].' drafting now' : '' }}{{ $lag['ranking_elsewhere'] > 0 ? ' · '.$lag['ranking_elsewhere'].' rank page 1 for another priority keyword (kept)' : '' }}</span>
+                                            @if ($lag['failed'] > 0)
+                                                <span class="s-lag-failed" title="{{ $lag['failed_error'] }}"><b>{{ $lag['failed'] }}</b> failed on the last draft — {{ \Illuminate\Support\Str::limit((string) $lag['failed_error'], 90) }} · the button retries them</span>
+                                            @endif
+                                            @if ($lag['need'] > 0)
                                                 <button type="button" wire:click="pushLaggingTowns('{{ $card['keyword_id'] }}')" wire:loading.attr="disabled" wire:target="pushLaggingTowns"
-                                                        wire:confirm="Draft priority sections for {{ $lag['eligible'] }} town(s) off page 1 for “{{ $card['query'] }}” and push each page? Each town drafts only the priority keywords it lags for (one drafting call per town), largest first.{{ $lag['ranking_elsewhere'] > 0 ? ' WARNING — '.$lag['ranking_elsewhere'].' of them already rank page 1 for another priority keyword: those sections are kept as they are, but the page is re-pushed and those rankings can move.' : '' }}">
-                                                    Draft & push {{ $lag['eligible'] }} lagging town(s)
+                                                        wire:confirm="Draft priority sections for {{ $lag['need'] }} town(s) off page 1 for “{{ $card['query'] }}” and push each page? Each town drafts only the priority keywords it lags for (one drafting call per town), largest first.{{ $lag['failed'] > 0 ? ' '.$lag['failed'].' of them failed last time and are retried.' : '' }}{{ $lag['ranking_elsewhere'] > 0 ? ' WARNING — '.$lag['ranking_elsewhere'].' of them already rank page 1 for another priority keyword: those sections are kept as they are, but the page is re-pushed and those rankings can move.' : '' }}">
+                                                    Draft & push {{ $lag['need'] }} town(s) that need sections
                                                 </button>
                                             @endif
                                         </div>

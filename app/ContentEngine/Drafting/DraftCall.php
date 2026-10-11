@@ -2,7 +2,10 @@
 
 namespace App\ContentEngine\Drafting;
 
+use Anthropic\Core\Exceptions\APIConnectionException;
 use App\Integrations\Claude\ClaudeClient;
+use Closure;
+use Illuminate\Support\Facades\Log;
 
 /**
  * The single hardened drafting MECHANISM, shared by every draft kind (post,
@@ -17,7 +20,14 @@ use App\Integrations\Claude\ClaudeClient;
  *
  * The ClaudeClient call is intentionally NOT caught here — a transport/HTTP
  * failure propagates so the guard can record its cause; this only fails to parse
- * (yielding an empty payload), never silently swallows.
+ * (yielding an empty payload), never silently swallows. ONE exception to that: a
+ * DROPPED CONNECTION (the SDK's APIConnectionException with no HTTP response — the
+ * SDK itself retries only HTTP 408/409/429/5xx, never a transport failure) is
+ * retried once, and only when the first attempt failed FAST. A fast failure is a
+ * reset or a refused connection, a blip worth one more try; a slow one is the
+ * per-request timeout, and a second full request would not fit the job's budget.
+ * Sump Pump Gurus lost nine section drafts and two post drafts to single blips on
+ * one degraded afternoon — each a Sonnet call and a manual retry.
  */
 final class DraftCall
 {
@@ -37,13 +47,43 @@ final class DraftCall
         .'ONLY place an id appears, NEVER inline. If a fact cannot be written as a clean, natural sentence, omit that '
         .'sentence entirely rather than padding it.';
 
+    /** A connection failure inside this many seconds is a blip, not a timeout — retried once. */
+    public const FAST_FAILURE_SECONDS = 60;
+
+    /** The pause before the one retry — long enough for a reset to clear, short enough to be free. */
+    public const RETRY_DELAY_SECONDS = 3;
+
+    /** @var Closure(): float  monotonic seconds — injectable so a test can make a failure "slow" */
+    private readonly Closure $clock;
+
+    /** @var Closure(int): void  the pause — injectable so a test does not sleep */
+    private readonly Closure $pause;
+
     public function __construct(
         private readonly ClaudeClient $claude,
-    ) {}
+        ?Closure $clock = null,
+        ?Closure $pause = null,
+    ) {
+        $this->clock = $clock ?? static fn (): float => microtime(true);
+        $this->pause = $pause ?? static function (int $seconds): void {
+            sleep($seconds);
+        };
+    }
 
     public function attempt(string $system, string $prompt): DraftAttempt
     {
-        $result = $this->claude->completeDetailed($prompt, $system);
+        $started = ($this->clock)();
+        try {
+            $result = $this->claude->completeDetailed($prompt, $system);
+        } catch (APIConnectionException $e) {
+            $elapsed = ($this->clock)() - $started;
+            if ($elapsed > self::FAST_FAILURE_SECONDS) {
+                throw $e; // the request ran to its timeout — another one will not fit the job
+            }
+            Log::warning('Draft call: connection dropped — retrying once', ['after_seconds' => round($elapsed, 1), 'error' => $e->getMessage()]);
+            ($this->pause)(self::RETRY_DELAY_SECONDS);
+            $result = $this->claude->completeDetailed($prompt, $system);
+        }
 
         return new DraftAttempt($result->text, DraftPayload::fromArray(self::parse($result->text)), $result);
     }
