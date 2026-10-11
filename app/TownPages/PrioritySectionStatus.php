@@ -44,7 +44,7 @@ final class PrioritySectionStatus
      * The status of every town in a set, keyed by GEOID. Towns with no published page come back NO_PAGE.
      *
      * @param  array<string, int>  $populationByGeo  GEOID → population
-     * @return array<string, array{content_id: string|null, state: string, label: string, at: string|null, sections: int, expected: int, eligible: bool, draft: int, keep: list<array{query: string, rank: int}>, evaluation: list<array{keyword_id: string, query: string, rank: int|null, scanned: bool, action: string}>}>
+     * @return array<string, array{content_id: string|null, state: string, label: string, at: string|null, sections: int, expected: int, eligible: bool, draft: int, need: int, error: string|null, keep: list<array{query: string, rank: int}>, evaluation: list<array{keyword_id: string, query: string, rank: int|null, scanned: bool, action: string}>}>
      */
     public function forGeoIds(Site $site, array $populationByGeo): array
     {
@@ -76,7 +76,7 @@ final class PrioritySectionStatus
         foreach ($populationByGeo as $geoId => $population) {
             $page = $pages->get((string) $geoId);
             $out[(string) $geoId] = $page === null
-                ? ['content_id' => null, 'state' => self::NO_PAGE, 'label' => 'no page', 'at' => null, 'sections' => 0, 'expected' => 0, 'eligible' => false, 'draft' => 0, 'keep' => [], 'evaluation' => []]
+                ? ['content_id' => null, 'state' => self::NO_PAGE, 'label' => 'no page', 'at' => null, 'sections' => 0, 'expected' => 0, 'eligible' => false, 'draft' => 0, 'need' => 0, 'error' => null, 'keep' => [], 'evaluation' => []]
                 : $this->forPage($page, $priorities, $plans[(string) $page->id]);
         }
 
@@ -102,7 +102,7 @@ final class PrioritySectionStatus
 
     /**
      * @param  array{tier: list<Keyword>, draft: list<Keyword>, keep: list<array{keyword: Keyword, rank: int}>, expected: list<Keyword>, standing: array<string, array{rank: int|null, measured_at: string|null, scanned: bool}>, stored: list<string>, need: list<string>, extra: list<string>}  $plan
-     * @return array{content_id: string, state: string, label: string, at: string|null, sections: int, expected: int, eligible: bool, draft: int, keep: list<array{query: string, rank: int}>, evaluation: list<array{keyword_id: string, query: string, rank: int|null, scanned: bool, action: string}>}
+     * @return array{content_id: string, state: string, label: string, at: string|null, sections: int, expected: int, eligible: bool, draft: int, need: int, error: string|null, keep: list<array{query: string, rank: int}>, evaluation: list<array{keyword_id: string, query: string, rank: int|null, scanned: bool, action: string}>}
      */
     private function forPage(Content $page, int $priorities, array $plan): array
     {
@@ -147,6 +147,10 @@ final class PrioritySectionStatus
             'expected' => count($plan['expected']),
             'eligible' => $draft > 0 && $queuedAt === null,
             'draft' => $draft,
+            // What is still missing: lagging keywords with no stored section yet. A town whose sections are
+            // all live reads need=0 even while it lags — it is waiting on scans, not on a draft.
+            'need' => count($plan['need']),
+            'error' => $error,
             'keep' => array_map(fn (array $k): array => ['query' => (string) $k['keyword']->query, 'rank' => $k['rank']], $plan['keep']),
             'evaluation' => $evaluation,
         ];

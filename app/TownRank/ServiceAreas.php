@@ -289,18 +289,29 @@ final class ServiceAreas
     }
 
     /**
-     * The towns on a priority card's map that are OFF page 1 (page 2, beyond, or not found) and have a page:
-     * `eligible` are the ones whose page can carry sections now (at or above the tier, not already queued),
-     * with their content ids largest town first — what "Draft & push" on the card queues.
+     * The towns on a priority card's map that are OFF page 1 (page 2, beyond, or not found) and have a page,
+     * split by what each one is waiting on — so the card never counts a town as pressable when its draft is
+     * already live or its last draft failed:
+     *   `need`     — can take sections now and still lacks one for a lagging keyword (or its last draft
+     *                failed): what "Draft & push" queues, largest town first;
+     *   `failed`   — the subset of `need` whose last draft failed (the first error is quoted);
+     *   `live`     — sections already live for every lagging keyword: nothing to draft, waiting on scans;
+     *   `queued`   — drafting on the worker right now.
+     * Sump Pump Gurus: nine towns were pushed, every draft failed on a dropped connection, and the card
+     * read "9 can take sections now" again as if nothing had been pressed.
      *
      * @param  list<array{id: string, rank: int|null, page: bool, population: int, unreadable: bool}>  $markers
-     * @param  array<string, array{content_id: string|null, state: string, eligible: bool, keep: list<array{query: string, rank: int}>}|null>  $statusByTown
-     * @return array{off_page1: int, eligible: int, ranking_elsewhere: int, content_ids: list<string>}
+     * @param  array<string, array{content_id: string|null, state: string, eligible: bool, need: int, error: string|null, keep: list<array{query: string, rank: int}>}|null>  $statusByTown
+     * @return array{off_page1: int, eligible: int, need: int, failed: int, failed_error: string|null, live: int, queued: int, ranking_elsewhere: int, content_ids: list<string>}
      */
     private static function lagging(array $markers, array $statusByTown): array
     {
         $off = 0;
-        $eligible = [];
+        $need = [];
+        $failed = 0;
+        $failedError = null;
+        $live = 0;
+        $queued = 0;
         $ranking = 0;
         foreach ($markers as $m) {
             if (! $m['page'] || $m['unreadable'] || ($m['rank'] !== null && $m['rank'] <= 10)) {
@@ -308,17 +319,46 @@ final class ServiceAreas
             }
             $off++;
             $st = $statusByTown[$m['id']] ?? null;
-            if ($st !== null && $st['eligible'] && $st['content_id'] !== null) {
-                $eligible[] = ['id' => $st['content_id'], 'population' => (int) $m['population']];
-                // Off page 1 for THIS keyword, but page 1 for another priority keyword: that section is kept.
-                if ($st['keep'] !== []) {
-                    $ranking++;
-                }
+            if ($st === null || $st['content_id'] === null) {
+                continue;
+            }
+            if ($st['state'] === PrioritySectionStatus::QUEUED) {
+                $queued++;
+
+                continue;
+            }
+            if (! $st['eligible']) {
+                continue;
+            }
+            $isFailed = $st['state'] === PrioritySectionStatus::FAILED || $st['error'] !== null;
+            if ($st['need'] === 0 && ! $isFailed) {
+                $live++;   // every lagging keyword already has its section — waiting on scans, not a draft
+
+                continue;
+            }
+            $need[] = ['id' => $st['content_id'], 'population' => (int) $m['population']];
+            if ($isFailed) {
+                $failed++;
+                $failedError ??= $st['error'];
+            }
+            // Off page 1 for THIS keyword, but page 1 for another priority keyword: that section is kept.
+            if ($st['keep'] !== []) {
+                $ranking++;
             }
         }
-        usort($eligible, fn (array $a, array $b): int => $b['population'] <=> $a['population']);
+        usort($need, fn (array $a, array $b): int => $b['population'] <=> $a['population']);
 
-        return ['off_page1' => $off, 'eligible' => count($eligible), 'ranking_elsewhere' => $ranking, 'content_ids' => array_column($eligible, 'id')];
+        return [
+            'off_page1' => $off,
+            'eligible' => count($need), // kept for the callers that read it as "what the button queues"
+            'need' => count($need),
+            'failed' => $failed,
+            'failed_error' => $failedError,
+            'live' => $live,
+            'queued' => $queued,
+            'ranking_elsewhere' => $ranking,
+            'content_ids' => array_column($need, 'id'),
+        ];
     }
 
     /**

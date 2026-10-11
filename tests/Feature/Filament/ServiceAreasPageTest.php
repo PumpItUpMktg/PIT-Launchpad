@@ -264,8 +264,53 @@ it('groups the priority keywords at the top with their badge, rings the towns wi
         // One town (Washington) is ringed: its sections are live.
         ->and(substr_count($html, 'class="s-sections"'))->toBe(1)
         // Off page 1 with a page: Hackettstown (#15) and Allamuchy (not found) — only Hackettstown is big enough to take sections.
-        ->and($html)->toContain('<b>2</b> town(s) with a page off page 1 · <b>1</b> can take sections now')
-        ->toContain('Draft & push 1 lagging town(s)');
+        ->and($html)->toContain('<b>2</b> town(s) with a page off page 1 · <b>1</b> need sections')
+        ->toContain('Draft & push 1 town(s) that need sections');
+});
+
+it('a town whose sections are already live for every lagging keyword is "awaiting scans", not pressable again', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $f = priorityAreaFixture();
+    // Hackettstown (#15, off page 1) gets its section drafted and pushed — the rank will not move until the next scans.
+    app(PrioritySectionWriter::class)->write($f['towns']['Hackettstown']['page'], [[
+        'keyword_id' => $f['priority']->id, 'keyword' => $f['priority']->query, 'service_id' => null,
+        'heading' => 'Backup sump pump installation in Hackettstown', 'body' => 'Hackettstown basements flood from the Musconetcong.', 'faqs' => [],
+    ]], [$f['priority']]);
+
+    $test = Livewire::test(ServiceAreasPage::class)
+        ->set('siteId', $f['site']->id)
+        ->call('openArea', $f['loc']->id)
+        ->assertOk();
+    $html = $test->html();
+
+    expect($html)->toContain('<b>2</b> town(s) with a page off page 1 · <b>0</b> need sections · 1 live, awaiting scans')
+        ->not->toContain('that need sections');
+
+    // The push has nothing to queue and says why.
+    $test->call('pushLaggingTowns', $f['priority']->id)->assertOk();
+    Queue::assertNothingPushed();
+});
+
+it('a town whose last draft failed is counted, named with its error, and retried by the button', function () {
+    Queue::fake();
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $f = priorityAreaFixture();
+    app(PrioritySectionWriter::class)->fail($f['towns']['Hackettstown']['page'], 'Anthropic\\Core\\Exceptions\\APIConnectionException: Anthropic API Connection Error');
+
+    $test = Livewire::test(ServiceAreasPage::class)
+        ->set('siteId', $f['site']->id)
+        ->call('openArea', $f['loc']->id)
+        ->assertOk();
+    $html = $test->html();
+
+    expect($html)->toContain('<b>1</b> need sections')
+        ->toContain('<b>1</b> failed on the last draft')
+        ->toContain('Anthropic API Connection Error')
+        ->toContain('Draft & push 1 town(s) that need sections');
+
+    $test->call('pushLaggingTowns', $f['priority']->id)->assertOk();
+    Queue::assertPushed(DraftPrioritySections::class, fn ($job) => $job->contentId === $f['towns']['Hackettstown']['page']->id);
 });
 
 it('drafts and pushes ONE town from its panel, and the panel reads queued until the worker is done', function () {
