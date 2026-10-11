@@ -827,7 +827,17 @@ final class BlockContentAssembler
         // neighbour framing, and H1 formula-fallback below all read $city/$state.
         // `label` is the name to SHOW (qualified with its county when another town in the tenant shares the
         // name); `city` stays the bare name for the lookups keyed on it (neighbours, local posts).
-        ['city' => $city, 'state' => $state, 'label' => $cityLabel] = $this->locationSubject->resolve($content);
+        ['city' => $city, 'state' => $state, 'label' => $cityLabel, 'anchored' => $anchored] = $this->locationSubject->resolve($content);
+
+        // A drafted H1 that does not name this page's town is wrong prose, not a style choice — the drafter
+        // wrote it from the same unreliable title the deterministic subject replaced (Sump Pump Gurus: 13
+        // of 359 pages). It yields to the composer's "{Trade} in {City, ST}" formula; a drafted H1 that
+        // does name the town keeps overriding the formula as before.
+        $draftedH1 = $slots['hero_headline'] ?? null;
+        $draftedH1 = is_array($draftedH1) ? trim((string) ($draftedH1[0] ?? '')) : trim((string) $draftedH1);
+        if ($anchored && $city !== '' && $draftedH1 !== '' && mb_stripos($draftedH1, $city) === false) {
+            unset($slots['hero_headline']);
+        }
 
         // A TOWN page's NAP shows the PARENT office's contact info, so its heading names that office
         // ("Serving {town} from our {parentCity} office") rather than claiming an office in the town itself.

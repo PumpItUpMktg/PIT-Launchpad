@@ -259,3 +259,26 @@ it('two real towns with one name get county-qualified titles and H1s, so neither
     $markup = app(BlockContentAssembler::class)->compose($bucks->fresh(), [], []);
     expect($markup)->toBeString()->toContain('Newtown, Bucks County');
 });
+
+it('a drafted H1 that does not name the authoritative town yields to the formula; one that does is kept', function () {
+    $site = locTitleSite();
+    locTitlePillar($site);
+    $parent = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hudson office']);
+    locTitleCoverage($site, $parent, '3401799999', 'Neptune');
+
+    $page = fn (string $slug, string $h1): Content => Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => '3401799999',
+        'title' => 'Neptune, NJ', 'slug' => $slug, 'slot_payload' => ['hero_headline' => $h1],
+    ]);
+    $wrong = $page('neptune-nj', 'Sump Pump & Basement Water Services in Allentown, PA');
+    $right = $page('neptune-nj-2', 'Neptune Sump Pump Experts You Can Call Tonight');
+
+    $assembler = app(BlockContentAssembler::class);
+    $wrongMarkup = (string) $assembler->compose($wrong->fresh(), [], []);
+    $rightMarkup = (string) $assembler->compose($right->fresh(), [], []);
+
+    expect($wrongMarkup)->not->toContain('Allentown')
+        ->toContain('Neptune, NJ</h1>')                      // the formula H1 took over (no captured trade here → "Serving Neptune, NJ")
+        ->and($rightMarkup)->toContain('Neptune Sump Pump Experts You Can Call Tonight'); // a drafted H1 naming the town still wins
+});

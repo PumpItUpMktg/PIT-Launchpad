@@ -77,9 +77,9 @@ class RepushLocationTitlesCommand extends Command
         $this->newLine();
         $dispatched = 0;
         foreach ($sites as $entry) {
-            $dispatched += $this->backfillSite($entry['site'], $composer);
+            $dispatched += $this->backfillSite($entry['site'], $composer, $entry['pages']);
         }
-        $this->info(sprintf('Backfilled + queued %d PublishContent job(s) for anchored location pages (idempotent by ULID; un-anchored skipped).', $dispatched));
+        $this->info(sprintf('Backfilled + queued %d PublishContent job(s) — only the anchored location pages whose title or H1 changes (idempotent by ULID; un-anchored and already-correct pages skipped).', $dispatched));
 
         return self::SUCCESS;
     }
@@ -95,7 +95,7 @@ class RepushLocationTitlesCommand extends Command
         $this->newLine();
         $this->line("<info>{$entry['brand']}</info>  ({$site->id})");
         $this->line(sprintf(
-            '  %d published location page(s) · %d anchored / %d un-anchored · %d wrong-town · %d missing-town · %d H1-mismatch · %d render <title> over %d',
+            '  %d published location page(s) · %d anchored / %d un-anchored · %d wrong-town · %d missing-town · %d H1-mismatch · %d render <title> over %d · %d would be re-pushed',
             $entry['total'],
             $entry['anchored'],
             $entry['unanchored'],
@@ -104,16 +104,18 @@ class RepushLocationTitlesCommand extends Command
             $entry['h1_mismatch'],
             $entry['over'],
             LocationTitleReport::LIMIT,
+            $entry['needs_push'],
         ));
 
-        // The actionable rows: pages whose stored title names the wrong town or no town.
+        // The actionable rows: pages whose stored title names the wrong town or no town, and pages whose
+        // drafted H1 does not name the authoritative town (the render yields to the formula; a push applies it).
         $rows = [];
         foreach ($entry['pages'] as $p) {
-            if ($p['status'] !== 'wrong_town' && $p['status'] !== 'missing_town') {
+            if ($p['status'] !== 'wrong_town' && $p['status'] !== 'missing_town' && ! $p['h1_mismatch']) {
                 continue;
             }
             $rows[] = [
-                $p['status'] === 'wrong_town' ? 'WRONG' : 'MISSING',
+                $p['status'] === 'wrong_town' ? 'WRONG' : ($p['status'] === 'missing_town' ? 'MISSING' : 'H1'),
                 $p['slug'],
                 $p['stored_town'] !== '' ? $p['stored_town'] : '—',
                 $p['auth_town'],
@@ -133,8 +135,18 @@ class RepushLocationTitlesCommand extends Command
      * Backfill + re-push one site's ANCHORED published location pages. Writes only meta.seo.title (rest of
      * meta preserved), dispatched in throttled waves. Returns the number of pages touched.
      */
-    private function backfillSite(Site $site, LocationTitle $composer): int
+    /**
+     * @param  list<array{slug: string, needs_push: bool, ...}>  $pages  the site's census rows — only `needs_push` pages are touched
+     */
+    private function backfillSite(Site $site, LocationTitle $composer, array $pages): int
     {
+        $wanted = [];
+        foreach ($pages as $p) {
+            if ($p['needs_push']) {
+                $wanted[$p['slug']] = true;
+            }
+        }
+
         $rows = Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
@@ -146,6 +158,9 @@ class RepushLocationTitlesCommand extends Command
 
         $touched = 0;
         foreach ($rows as $content) {
+            if (! isset($wanted[(string) $content->slug])) {
+                continue; // already carries the deterministic title and a correct H1 — nothing to push
+            }
             $title = $composer->compose($content);
             if ($title === null) {
                 continue; // un-anchored — never launder a bad title through a name guess
