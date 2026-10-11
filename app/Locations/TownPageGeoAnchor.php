@@ -45,6 +45,7 @@ final class TownPageGeoAnchor
         $coverageByKey = $this->coverageByKey($site);
         $byPlan = $this->coverageByBuiltPage($site);
         $pages = $this->townPages($site);
+        $removedAnchors = $this->removedTwinAnchors($site);
 
         $out = ['total' => $pages->count(), 'already' => 0, 'anchorable' => [], 'ambiguous' => [], 'unreachable' => [], 'no_coverage' => []];
 
@@ -85,8 +86,22 @@ final class TownPageGeoAnchor
 
             $candidates = fn (array $set): array => array_map(fn (array $c): array => ['geo_id' => $c['geo_id'], 'name' => $c['name']], $set);
 
+            // Several reachable candidates, but a REMOVED numbered twin of this page (the duplicate
+            // resolver's loser, soft-deleted) carried one of them: that anchor was real, not a guess —
+            // inherit it. Bristol borough vs Bristol Township is undecidable by name; the twin knew.
+            $inherited = null;
+            if (count($reachable) > 1) {
+                $twinGeo = $removedAnchors[$parent.'|'.$key] ?? null;
+                foreach ($reachable as $c) {
+                    if ($twinGeo !== null && $c['geo_id'] === $twinGeo) {
+                        $inherited = $c;
+                    }
+                }
+            }
+
             match (true) {
                 count($reachable) === 1 => $out['anchorable'][] = ['page_id' => $pageId, 'title' => $title, 'geo_id' => $reachable[0]['geo_id'], 'coverage' => $reachable[0]['name'], 'via' => 'name'],
+                $inherited !== null => $out['anchorable'][] = ['page_id' => $pageId, 'title' => $title, 'geo_id' => $inherited['geo_id'], 'coverage' => $inherited['name'], 'via' => 'removed twin'],
                 count($reachable) > 1 => $out['ambiguous'][] = ['page_id' => $pageId, 'title' => $title, 'key' => $key, 'candidates' => $candidates($reachable)],
                 // Name matches coverage, but none is reachable from the page's parent — a mis-parent/drift
                 // signal, not a clean anchor. Surface with the matched-but-unreachable candidates.
@@ -109,6 +124,62 @@ final class TownPageGeoAnchor
         }
 
         return $anchored;
+    }
+
+    /**
+     * Pin one town page to a GEOID by hand — the way an AMBIGUOUS page (two real towns with one name,
+     * borough vs township) is settled. Refuses anything it cannot vouch for: the page must be a town page
+     * on this site, and the GEOID a coverage area reachable from the page's serving Location (a wrong pin
+     * would title and ground the page on a town the office does not serve).
+     *
+     * @return array{ok: bool, slug: string, geo_id: string, note: string}
+     */
+    public function pin(Site $site, string $slug, string $geoId, bool $write): array
+    {
+        $slug = trim($slug, '/');
+        $geoId = trim($geoId);
+        $page = $this->townPages($site)->first(fn (Content $c): bool => trim((string) $c->slug, '/') === $slug);
+        if ($page === null) {
+            return ['ok' => false, 'slug' => $slug, 'geo_id' => $geoId, 'note' => 'no town page with that slug on this site'];
+        }
+        $area = CoverageArea::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->where('geo_id', $geoId)->first(['geo_id', 'name', 'source_location_ids']);
+        if ($area === null) {
+            return ['ok' => false, 'slug' => $slug, 'geo_id' => $geoId, 'note' => 'no coverage area with that GEOID on this site'];
+        }
+        $sources = is_array($area->source_location_ids) ? $area->source_location_ids : [];
+        if (! in_array((string) $page->parent_location_id, $sources, true)) {
+            return ['ok' => false, 'slug' => $slug, 'geo_id' => $geoId, 'note' => "{$area->name} [{$geoId}] is not reachable from this page's serving location"];
+        }
+        if ($write) {
+            Content::withoutGlobalScope(SiteScope::class)->whereKey($page->id)->update(['geo_id' => $geoId]);
+        }
+
+        return ['ok' => true, 'slug' => $slug, 'geo_id' => $geoId, 'note' => ($write ? 'pinned to ' : 'would pin to ').$area->name." [{$geoId}]"];
+    }
+
+    /**
+     * The geo anchors of soft-deleted town pages (the duplicate resolver's losers), keyed by
+     * "{parent location}|{town key}" — so a surviving twin can inherit what its removed copy knew.
+     *
+     * @return array<string, string>
+     */
+    private function removedTwinAnchors(Site $site): array
+    {
+        $out = [];
+        $rows = Content::withoutGlobalScope(SiteScope::class)->onlyTrashed()
+            ->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)
+            ->where('page_type', PageType::Location->value)
+            ->whereNull('location_id')
+            ->whereNotNull('parent_location_id')
+            ->whereNotNull('geo_id')
+            ->get(['title', 'parent_location_id', 'geo_id']);
+        foreach ($rows as $row) {
+            $out[(string) $row->parent_location_id.'|'.TownName::key((string) $row->title)] = (string) $row->geo_id;
+        }
+
+        return $out;
     }
 
     /**
