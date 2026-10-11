@@ -4,6 +4,8 @@ use App\Enums\ContentKind;
 use App\Enums\MunicipalityType;
 use App\Enums\PageType;
 use App\Enums\ServiceSiloRole;
+use App\Integrations\Census\County;
+use App\Integrations\Census\MunicipalityGazetteer;
 use App\Jobs\PublishContent;
 use App\Models\Content;
 use App\Models\CoverageArea;
@@ -11,6 +13,7 @@ use App\Models\Location;
 use App\Models\Service;
 use App\Models\Site;
 use App\Publishing\Seo\LocationTitleReport;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 
 it('reports the wrong-town census read-only, then backfills + re-pushes only anchored pages on --execute', function () {
@@ -82,4 +85,59 @@ it('a place-only "{Town}, {ST}" stored title reads as the correct town, not miss
     expect($bayonne['status'])->toBe('correct')
         ->and($entry['missing_town'])->toBe(0)
         ->and($entry['wrong_town'])->toBe(0);
+});
+
+it('a county-qualified stored title is the correct town, and an already-correct page is not re-pushed; a wrong-town H1 is', function () {
+    Queue::fake();
+    $site = Site::factory()->create(['domain_url' => 'https://spg.test', 'brand_name' => 'Sump Pump Gurus']);
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Services', 'silo_role' => ServiceSiloRole::Pillar]);
+    $doylestown = Location::factory()->create(['site_id' => $site->id, 'name' => 'Doylestown office']);
+    $downingtown = Location::factory()->create(['site_id' => $site->id, 'name' => 'Downingtown office']);
+    // Two real Newtowns in PA → county-qualified labels; Chalfont stays plain.
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '4201753424', 'name' => 'Newtown', 'state' => 'PA', 'type' => MunicipalityType::CountySubdivision, 'source_location_ids' => [$doylestown->id]]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '4202953424', 'name' => 'Newtown', 'state' => 'PA', 'type' => MunicipalityType::CountySubdivision, 'source_location_ids' => [$downingtown->id]]);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'geo_id' => '4201718000', 'name' => 'Chalfont', 'state' => 'PA', 'type' => MunicipalityType::CountySubdivision, 'source_location_ids' => [$doylestown->id]]);
+    Cache::flush();
+    $gaz = Mockery::mock(MunicipalityGazetteer::class)->shouldIgnoreMissing([]);
+    $gaz->shouldReceive('countiesInState')->with('42')->andReturn([
+        new County('42017', 'Bucks', '42', '017'),
+        new County('42029', 'Chester County', '42', '029'),
+    ]);
+    app()->instance(MunicipalityGazetteer::class, $gaz);
+
+    $page = fn (Location $parent, string $geo, string $slug, string $storedTitle, array $slots = []): Content => Content::factory()->published()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'wp_post_id' => random_int(100, 999),
+        'location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => $geo, 'title' => 'Newtown, PA', 'slug' => $slug,
+        'meta' => ['seo' => ['title' => $storedTitle, 'meta_description' => 'x']], 'slot_payload' => $slots,
+    ]);
+    // Already backfilled: the stored title IS the county-qualified deterministic one (what SPG's 28 rows looked like).
+    $bucks = $page($doylestown, '4201753424', 'doylestown-pa/newtown-pa', 'Sump Pump Services in Newtown, Bucks County, PA');
+    // Correct plain title, but a drafted H1 naming another town → re-pushed for the H1.
+    $chalfont = $page($doylestown, '4201718000', 'doylestown-pa/chalfont-pa', 'Sump Pump Services in Chalfont, PA', ['hero_headline' => 'Sump Pump Services in Allentown, PA']);
+    // Genuinely wrong stored title → re-pushed.
+    $chester = $page($downingtown, '4202953424', 'downingtown-pa/newtown-pa', 'Sump Pump Services in Allentown, PA');
+
+    $census = app(LocationTitleReport::class)->forSite($site);
+    $bySlug = collect($census['pages'])->keyBy('slug');
+    expect($census['wrong_town'])->toBe(1)
+        ->and($census['h1_mismatch'])->toBe(1)
+        ->and($census['needs_push'])->toBe(2)
+        ->and($bySlug['doylestown-pa/newtown-pa']['status'])->toBe('correct')   // the county qualifier is the right town, not a wrong one
+        ->and($bySlug['doylestown-pa/newtown-pa']['needs_push'])->toBeFalse()
+        ->and($bySlug['doylestown-pa/chalfont-pa']['status'])->toBe('correct')
+        ->and($bySlug['doylestown-pa/chalfont-pa']['needs_push'])->toBeTrue()
+        ->and($bySlug['downingtown-pa/newtown-pa']['status'])->toBe('wrong_town');
+
+    $this->artisan('launchpad:repush-location-titles --site='.$site->id)
+        ->expectsOutputToContain('1 wrong-town · 0 missing-town · 1 H1-mismatch · 2 render <title> over 60 · 2 would be re-pushed')
+        ->assertSuccessful();
+
+    $this->artisan('launchpad:repush-location-titles --site='.$site->id.' --execute')
+        ->expectsOutputToContain('queued 2 PublishContent job(s)')
+        ->assertSuccessful();
+    Queue::assertPushed(PublishContent::class, 2);
+    Queue::assertPushed(PublishContent::class, fn (PublishContent $job) => $job->contentId === (string) $chester->id);
+    Queue::assertPushed(PublishContent::class, fn (PublishContent $job) => $job->contentId === (string) $chalfont->id);
+    expect($chester->fresh()->meta['seo']['title'])->toBe('Sump Pump Services in Newtown, Chester County, PA')
+        ->and($bucks->fresh()->meta['seo']['title'])->toBe('Sump Pump Services in Newtown, Bucks County, PA');
 });

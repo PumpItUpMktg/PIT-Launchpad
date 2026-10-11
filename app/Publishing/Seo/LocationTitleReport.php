@@ -32,6 +32,7 @@ final class LocationTitleReport
     public function __construct(
         private readonly LocationSubject $subject,
         private readonly MetaBlobAssembler $assembler,
+        private readonly LocationTitle $composer,
     ) {}
 
     /**
@@ -56,7 +57,7 @@ final class LocationTitleReport
      * One site's location-title census. `pages` is ordered wrong-town first, then longest, so the
      * corrections lead.
      *
-     * @return array{site: Site, brand: string, pages: list<array{slug: string, anchored: bool, stored_town: string, auth_town: string, status: string, title: string, len: int, over: bool, h1_mismatch: bool}>, total: int, anchored: int, unanchored: int, wrong_town: int, missing_town: int, over: int, h1_mismatch: int}
+     * @return array{site: Site, brand: string, pages: list<array{slug: string, anchored: bool, stored_town: string, auth_town: string, status: string, title: string, len: int, over: bool, h1_mismatch: bool, needs_push: bool}>, total: int, anchored: int, unanchored: int, wrong_town: int, missing_town: int, over: int, h1_mismatch: int, needs_push: int}
      */
     public function forSite(Site $site): array
     {
@@ -73,12 +74,15 @@ final class LocationTitleReport
         $missingTown = 0;
         $over = 0;
         $h1Mismatch = 0;
+        $needsPush = 0;
 
         foreach ($rows as $content) {
-            ['city' => $authCity, 'anchored' => $anchored] = $this->subject->resolve($content);
+            // `label` is the name the title SHOWS — county-qualified when two towns in the tenant share a name
+            // ("Newtown, Bucks County"). A stored title naming that label names the right town.
+            ['city' => $authCity, 'anchored' => $anchored, 'label' => $authLabel] = $this->subject->resolve($content);
             $storedTown = $this->townInTitle($this->storedTitle($content));
 
-            $status = $this->classify($anchored, $authCity, $storedTown);
+            $status = $this->classify($anchored, $authCity, $authLabel, $storedTown);
 
             $title = $this->assembler->documentTitle($content);
             $len = mb_strlen($title);
@@ -87,11 +91,18 @@ final class LocationTitleReport
             $h1 = $this->heroHeadline($content);
             $h1Miss = $anchored && $authCity !== '' && $h1 !== '' && mb_stripos($h1, $authCity) === false;
 
+            // What --execute would change on this page: the stored title is not yet the deterministic one,
+            // or the drafted H1 names the wrong town (the render now yields to the formula, which needs a
+            // push to reach the live page). Everything else is already right and is not re-pushed.
+            $deterministic = $anchored ? $this->composer->compose($content) : null;
+            $push = $deterministic !== null && ($this->storedTitle($content) !== $deterministic || $h1Miss);
+
             $anchoredCount += $anchored ? 1 : 0;
             $wrongTown += $status === 'wrong_town' ? 1 : 0;
             $missingTown += $status === 'missing_town' ? 1 : 0;
             $over += $isOver ? 1 : 0;
             $h1Mismatch += $h1Miss ? 1 : 0;
+            $needsPush += $push ? 1 : 0;
 
             $pages[] = [
                 'slug' => (string) $content->slug,
@@ -103,6 +114,7 @@ final class LocationTitleReport
                 'len' => $len,
                 'over' => $isOver,
                 'h1_mismatch' => $h1Miss,
+                'needs_push' => $push,
             ];
         }
 
@@ -123,6 +135,7 @@ final class LocationTitleReport
             'missing_town' => $missingTown,
             'over' => $over,
             'h1_mismatch' => $h1Mismatch,
+            'needs_push' => $needsPush,
         ];
     }
 
@@ -131,7 +144,7 @@ final class LocationTitleReport
      * `unanchored` (no authoritative subject — not the backfill's to touch), `wrong_town` (names a
      * different town), `missing_town` (names no town at all), else `correct`.
      */
-    private function classify(bool $anchored, string $authCity, string $storedTown): string
+    private function classify(bool $anchored, string $authCity, string $authLabel, string $storedTown): string
     {
         if (! $anchored || $authCity === '') {
             return 'unanchored';
@@ -140,7 +153,9 @@ final class LocationTitleReport
             return 'missing_town';
         }
 
-        return TownName::key($storedTown) === TownName::key($authCity) ? 'correct' : 'wrong_town';
+        $key = TownName::key($storedTown);
+
+        return $key === TownName::key($authCity) || $key === TownName::key($authLabel) ? 'correct' : 'wrong_town';
     }
 
     private function storedTitle(Content $content): string
