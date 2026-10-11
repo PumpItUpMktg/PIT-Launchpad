@@ -274,9 +274,10 @@ it('a drafted H1 that does not name the authoritative town yields to the formula
     $wrong = $page('neptune-nj', 'Sump Pump & Basement Water Services in Allentown, PA');
     $right = $page('neptune-nj-2', 'Neptune Sump Pump Experts You Can Call Tonight');
 
+    // compose() takes the slot payload explicitly (the publish path hands it the stored slots).
     $assembler = app(BlockContentAssembler::class);
-    $wrongMarkup = (string) $assembler->compose($wrong->fresh(), [], []);
-    $rightMarkup = (string) $assembler->compose($right->fresh(), [], []);
+    $wrongMarkup = (string) $assembler->compose($wrong->fresh(), ['hero_headline' => 'Sump Pump & Basement Water Services in Allentown, PA'], []);
+    $rightMarkup = (string) $assembler->compose($right->fresh(), ['hero_headline' => 'Neptune Sump Pump Experts You Can Call Tonight'], []);
 
     expect($wrongMarkup)->not->toContain('Allentown')
         ->toContain('Neptune, NJ</h1>')                      // the formula H1 took over (no captured trade here → "Serving Neptune, NJ")
