@@ -2,6 +2,7 @@
 
 use App\Enums\BuildSource;
 use App\Enums\PageType;
+use App\Enums\UserRole;
 use App\Locations\TownPageGeoAnchor;
 use App\Models\BuildPage;
 use App\Models\Content;
@@ -123,4 +124,64 @@ it('anchors a page the plan built from its manifest entry — exactly, not by na
 
     expect(app(TownPageGeoAnchor::class)->execute($site))->toBe(1);
     expect($page->fresh()->geo_id)->toBe('3400111111');
+});
+
+it('an ambiguous page inherits the anchor its removed numbered twin carried — and stays ambiguous without one', function () {
+    $site = Site::factory()->create();
+    $market = Location::factory()->create(['site_id' => $site->id]);
+    // Bristol borough and Bristol Township, both reachable from the same office: undecidable by name.
+    tpaCoverage($site, 'Bristol', '4201708760', [$market->id]);
+    tpaCoverage($site, 'Bristol', '4201708768', [$market->id]);
+    $survivor = tpaTown($site, 'Bristol, PA', $market->id);
+
+    $plan = app(TownPageGeoAnchor::class)->plan($site);
+    expect(collect($plan['ambiguous'])->pluck('page_id'))->toContain($survivor->id)
+        ->and($plan['anchorable'])->toBe([]);
+
+    // The duplicate resolver removed the "-2" twin, which carried the township anchor.
+    $twin = Content::factory()->page()->create([
+        'site_id' => $site->id, 'page_type' => PageType::Location, 'location_id' => null, 'parent_location_id' => $market->id,
+        'primary_service_id' => null, 'title' => 'Bristol, PA', 'slug' => 'doylestown-pa/bristol-pa-2', 'geo_id' => '4201708768',
+    ]);
+    $twin->delete();
+
+    $plan = app(TownPageGeoAnchor::class)->plan($site);
+    $row = collect($plan['anchorable'])->firstWhere('page_id', $survivor->id);
+    expect($row)->not->toBeNull()
+        ->and($row['geo_id'])->toBe('4201708768')
+        ->and($row['via'])->toBe('removed twin')
+        ->and($plan['ambiguous'])->toBe([]);
+
+    expect(app(TownPageGeoAnchor::class)->execute($site))->toBe(1)
+        ->and($survivor->fresh()->geo_id)->toBe('4201708768');
+});
+
+it('--pin settles an ambiguous page by hand, refuses an unreachable or unknown GEOID, and writes only with --execute', function () {
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = Site::factory()->create(['brand_name' => 'Pins']);
+    $market = Location::factory()->create(['site_id' => $site->id]);
+    $other = Location::factory()->create(['site_id' => $site->id]);
+    tpaCoverage($site, 'Bristol', '4201708760', [$market->id]);
+    tpaCoverage($site, 'Bristol', '4201708768', [$market->id]);
+    tpaCoverage($site, 'Elsewhere', '4299999999', [$other->id]);
+    $page = tpaTown($site, 'Bristol, PA', $market->id);
+    $page->forceFill(['slug' => 'doylestown-pa/bristol-pa'])->save();
+
+    $this->artisan('launchpad:anchor-town-pages --site='.$site->id.' --pin='.$page->slug.'=4201708760')
+        ->expectsOutputToContain('would pin to Bristol [4201708760]')
+        ->assertSuccessful();
+    expect($page->fresh()->geo_id)->toBeNull(); // report-only: nothing written
+
+    $this->artisan('launchpad:anchor-town-pages --site='.$site->id.' --pin='.$page->slug.'=4299999999 --execute')
+        ->expectsOutputToContain('not reachable from this page\'s serving location')
+        ->assertSuccessful();
+    $this->artisan('launchpad:anchor-town-pages --site='.$site->id.' --pin='.$page->slug.'=0000000000 --execute')
+        ->expectsOutputToContain('no coverage area with that GEOID')
+        ->assertSuccessful();
+    expect($page->fresh()->geo_id)->toBeNull();
+
+    $this->artisan('launchpad:anchor-town-pages --site='.$site->id.' --pin='.$page->slug.'=4201708760 --execute')
+        ->expectsOutputToContain('pinned to Bristol [4201708760]')
+        ->assertSuccessful();
+    expect($page->fresh()->geo_id)->toBe('4201708760');
 });

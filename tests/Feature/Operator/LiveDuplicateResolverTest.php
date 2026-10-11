@@ -140,3 +140,45 @@ it('command is report-only by default and writes nothing', function () {
         ->and(Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(0)
         ->and(Content::withoutGlobalScope(SiteScope::class)->find($town->id))->not->toBeNull();
 });
+
+it('carries the removed twin\'s geo anchor to an un-anchored keeper, so the survivor keeps the record', function () {
+    fakeWp();
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    $loc = Location::factory()->create(['site_id' => $site->id]);
+    // Bristol: the clean-slug keeper is un-anchored; the "-2" loser carries the census anchor.
+    $keeper = locPageR($site, 'Bristol, PA', 'doylestown-pa/bristol-pa', null, $loc->id, wpId: 300);
+    $loser = locPageR($site, 'Bristol, PA', 'doylestown-pa/bristol-pa-2', null, $loc->id, wpId: 301);
+    $loser->forceFill(['geo_id' => '4201708768'])->save();
+
+    Http::fake([
+        'spg.example/doylestown-pa/bristol-pa-2/*' => Http::response('', 301, ['Location' => 'https://spg.example/doylestown-pa/bristol-pa/']),
+        '*' => Http::response('', 200),
+    ]);
+
+    $out = app(LiveDuplicateResolver::class)->apply($site);
+
+    expect($out)->toHaveCount(1)
+        ->and($out[0]['removed'])->toBeTrue()
+        ->and($out[0]['note'])->toBe('redirected + removed (geo anchor carried to the keeper)')
+        ->and($keeper->fresh()->geo_id)->toBe('4201708768')
+        ->and(Content::withoutGlobalScope(SiteScope::class)->find($loser->id))->toBeNull();
+});
+
+it('never overwrites a keeper that already carries its own anchor', function () {
+    fakeWp();
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    $loc = Location::factory()->create(['site_id' => $site->id]);
+    $keeper = locPageR($site, 'Bristol, PA', 'doylestown-pa/bristol-pa', null, $loc->id, wpId: 300);
+    $keeper->forceFill(['geo_id' => '4201708760'])->save();
+    $loser = locPageR($site, 'Bristol, PA', 'doylestown-pa/bristol-pa-2', null, $loc->id, wpId: 301);
+    $loser->forceFill(['geo_id' => '4201708768'])->save();
+    Http::fake([
+        'spg.example/doylestown-pa/bristol-pa-2/*' => Http::response('', 301, ['Location' => 'https://spg.example/doylestown-pa/bristol-pa/']),
+        '*' => Http::response('', 200),
+    ]);
+
+    $out = app(LiveDuplicateResolver::class)->apply($site);
+
+    expect($out[0]['note'])->toBe('redirected + removed')
+        ->and($keeper->fresh()->geo_id)->toBe('4201708760');
+});

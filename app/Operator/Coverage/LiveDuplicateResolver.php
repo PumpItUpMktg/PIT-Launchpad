@@ -163,11 +163,15 @@ final class LiveDuplicateResolver
                 // 4. Only now remove the loser page from WordPress + soft-delete it (drop its plan row too).
                 $content = Content::withoutGlobalScope(SiteScope::class)->find($loser['content_id']);
                 if ($content !== null) {
+                    // The loser's census anchor is real knowledge about the town; a keeper chosen by slug
+                    // quality may carry none (Bristol: the clean-slug page was un-anchored, the "-2" twin
+                    // anchored). Carry it across so the survivor renders from the record, not a name guess.
+                    $carried = $this->carryAnchor($site, $group['keeper']['content_id'] ?? null, $content);
                     $this->deleteFromWordpress->delete($content);
                     BuildPage::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('content_id', $content->id)->delete();
                     $content->delete();
                     $result['removed'] = true;
-                    $result['note'] = 'redirected + removed';
+                    $result['note'] = 'redirected + removed'.($carried ? ' (geo anchor carried to the keeper)' : '');
                 }
 
                 $out[] = $result;
@@ -205,6 +209,24 @@ final class LiveDuplicateResolver
         $last = (string) (array_slice(explode('/', trim($slug, '/')), -1)[0] ?? '');
 
         return (bool) preg_match('/-\d+$/', $last);
+    }
+
+    /**
+     * Copy the loser's geo_id onto the keeper when the keeper has none. Returns true when written.
+     */
+    private function carryAnchor(Site $site, ?string $keeperId, Content $loser): bool
+    {
+        $geo = is_string($loser->geo_id) ? trim($loser->geo_id) : '';
+        if ($keeperId === null || $geo === '') {
+            return false;
+        }
+        $keeper = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->find($keeperId);
+        if ($keeper === null || (is_string($keeper->geo_id) && trim($keeper->geo_id) !== '')) {
+            return false;
+        }
+        $keeper->forceFill(['geo_id' => $geo])->save();
+
+        return true;
     }
 
     /** The shared origin-verified serving check ({@see ServingCheck}) — identical for every resolver. */

@@ -22,6 +22,7 @@ class AnchorTownPagesCommand extends Command
 {
     protected $signature = 'launchpad:anchor-town-pages
         {--site= : Limit to one site id or brand name}
+        {--pin=* : slug=GEOID — settle an AMBIGUOUS page by hand (repeatable; written only with --execute, refused unless the GEOID is coverage reachable from the page\'s location)}
         {--execute : Write geo_id for the unambiguous set (default: report only, write nothing)}';
 
     protected $description = 'Anchor town pages to their census GEOID from the name-match (report-first; --execute writes).';
@@ -83,6 +84,18 @@ class AnchorTownPagesCommand extends Command
             $this->surface('AMBIGUOUS — name matches several reachable coverage areas (pick the geo_id by hand)', $plan['ambiguous'], withCandidates: true);
             $this->surface('UNREACHABLE — name matches coverage the page\'s parent does not serve (mis-parent?)', $plan['unreachable'], withCandidates: true);
             $this->surface('NO COVERAGE — name matches no coverage area on this site', $plan['no_coverage'], withCandidates: false);
+
+            foreach ((array) $this->option('pin') as $spec) {
+                $spec = trim((string) $spec);
+                if (! str_contains($spec, '=')) {
+                    $this->error("  --pin expects slug=GEOID, got [{$spec}].");
+
+                    continue;
+                }
+                [$slug, $geo] = array_map('trim', explode('=', $spec, 2));
+                $r = $anchor->pin($site, $slug, $geo, write: $execute);
+                $this->line(sprintf('  %s --pin %s: %s', $r['ok'] ? '<fg=green>✓</>' : '<fg=red>✗</>', $r['slug'], $r['note']));
+            }
 
             if ($execute) {
                 $anchored = $anchor->execute($site);
