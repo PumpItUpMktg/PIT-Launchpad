@@ -821,9 +821,10 @@ final class BlockPageComposer
      *
      * @param  array<string, mixed>  $slots
      * @param  list<array{silo: string, pillar?: array{title: string, url: string}|null, posts: list<array{title: string, url: string, date: string, excerpt?: string}>}>  $groups
-     * @param  list<array{title: string, url: string, date: string, image: string, image_alt: string}>  $latest
+     * @param  list<array{title: string, url: string, date: string, image: string, image_alt: string, excerpt?: string}>  $latest
+     * @param  array{topics: int, articles: int, newest: string}|array{}  $summary
      */
-    public function composeBlogIndex(array $slots, PageContext $ctx, array $groups, bool $preview = false, array $latest = []): string
+    public function composeBlogIndex(array $slots, PageContext $ctx, array $groups, bool $preview = false, array $latest = [], array $summary = []): string
     {
         $hero = $this->sections->hero(
             eyebrow: 'From the blog',
@@ -846,7 +847,20 @@ final class BlockPageComposer
             posts: $latest,
         );
 
-        $index = $this->sections->postIndex('Every article', 'Browse by topic', $groups, $preview);
+        // The hub's own sentence about itself — facts no post carries: how many topics and articles, how
+        // recent, and how the page is organised. Each topic shows its newest articles; the full archive
+        // sits one click further.
+        $summaryBlock = '';
+        if ($summary !== [] && $summary['articles'] > 0) {
+            $summaryBlock = $this->sections->statement(sprintf(
+                '%d topic%s · %d article%s%s. Each topic opens with our guide and its newest articles; the complete archive for every topic is one click further.',
+                $summary['topics'], $summary['topics'] === 1 ? '' : 's',
+                $summary['articles'], $summary['articles'] === 1 ? '' : 's',
+                $summary['newest'] !== '' ? ' · newest '.$summary['newest'] : '',
+            ), 'lp-blog-summary');
+        }
+
+        $index = $this->sections->postIndex('By topic', 'Browse by topic', $groups, $preview);
 
         $cta = $this->sections->cta(
             heading: 'Have a question we haven’t answered?',
@@ -856,7 +870,7 @@ final class BlockPageComposer
             ctx: $ctx,
         );
 
-        return $this->join([$hero, $latestBlock, $index, $cta]);
+        return $this->join([$hero, $summaryBlock, $latestBlock, $index, $cta]);
     }
 
     /**

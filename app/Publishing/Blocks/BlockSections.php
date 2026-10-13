@@ -144,7 +144,7 @@ final class BlockSections
      * section drops), so it appears only once local editorial exists for the town. Feeds the areas-served
      * / location hub with fresh local content beside the reviews and jobs.
      *
-     * @param  list<array{title?: string, url?: string, date?: string, image?: string, image_alt?: string}>  $posts
+     * @param  list<array{title?: string, url?: string, date?: string, image?: string, image_alt?: string, excerpt?: string}>  $posts
      */
     public function localPosts(string $eyebrow, string $heading, array $posts): string
     {
@@ -175,6 +175,11 @@ final class BlockSections
             if ($date !== '') {
                 $children[] = $this->b->paragraph($this->text($date), ['textColor' => 'accent-ink', 'fontSize' => 'small', 'className' => 'lp-post-meta']);
             }
+            // What the article is about — a card of title + date alone is the thin strip the Blog hub had.
+            $excerpt = trim((string) ($p['excerpt'] ?? ''));
+            if ($excerpt !== '') {
+                $children[] = $this->b->paragraph($this->text($excerpt), ['fontSize' => 'small', 'className' => 'lp-post-excerpt']);
+            }
 
             return $this->b->column([$this->b->group($children, ['backgroundColor' => 'surface', 'className' => 'lp-card lp-post'])]);
         }, array_slice($posts, 0, 6));
@@ -186,11 +191,28 @@ final class BlockSections
     }
 
     /**
+     * One plain statement in a group of its own — a page's sentence about itself (the Blog hub's
+     * "9 topics · 480 articles · newest Oct 11"). Escaped text, no markup.
+     */
+    public function statement(string $text, string $className = ''): string
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+
+        return $this->b->group(
+            [$this->b->paragraph($this->text($text), ['className' => 'lp-statement'])],
+            ['align' => 'wide', 'className' => trim('lp-statement-wrap '.$className)],
+        );
+    }
+
+    /**
      * The Blog page's index: one sub-section per silo, each a plain linked list "Title · date". Crawlable
      * and complete on purpose — cards are for the six-post feeds; the index is the map of everything.
      * Empty (no posts yet) → a single honest line, never an empty section.
      *
-     * @param  list<array{silo: string, pillar?: array{title: string, url: string}|null, posts: list<array{title: string, url: string, date: string, excerpt?: string}>}>  $groups
+     * @param  list<array{silo: string, pillar?: array{title: string, url: string}|null, count?: int, archive?: string|null, posts: list<array{title: string, url: string, date: string, excerpt?: string}>}>  $groups
      */
     public function postIndex(string $eyebrow, string $heading, array $groups, bool $preview = false): string
     {
@@ -220,6 +242,13 @@ final class BlockSections
                 $children[] = $this->b->paragraph('Start with our guide: <a href="'.$this->attr($pillar['url']).'">'.$this->text($pillar['title']).'</a>', ['className' => 'lp-post-pillar']);
             }
             $children[] = $this->b->list($items, ['className' => 'lp-post-index']);
+            // The rest of the topic lives in its category archive — complete and paginated by WordPress —
+            // so the hub stays a map while every post remains two clicks from home.
+            $count = (int) ($group['count'] ?? count($items));
+            $archive = trim((string) ($group['archive'] ?? ''));
+            if ($archive !== '' && $count > count($items)) {
+                $children[] = $this->b->paragraph('<a href="'.$this->attr($archive).'">All '.$count.' '.$this->text(trim((string) $group['silo'])).' articles →</a>', ['className' => 'lp-post-all']);
+            }
         }
         if (! $any) {
             $children[] = $this->b->paragraph($preview ? '[Published articles will be listed here]' : 'Articles are on the way — check back soon.', ['textColor' => 'accent-ink']);
