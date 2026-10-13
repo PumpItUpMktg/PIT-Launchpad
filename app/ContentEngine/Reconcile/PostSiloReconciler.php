@@ -32,21 +32,28 @@ use Illuminate\Database\Eloquent\Collection;
  */
 final class PostSiloReconciler
 {
-    public function __construct(private readonly Bucketer $bucketer) {}
+    public function __construct(
+        private readonly Bucketer $bucketer,
+        private readonly AiSiloRouter $ai,
+    ) {}
 
     /** Words a silo name carries that say nothing about its topic. */
     private const TRADE_GENERIC = ['services', 'service', 'solutions', 'solution', 'installation', 'install', 'repair', 'repairs', 'replacement', 'maintenance', 'system', 'systems', 'company', 'local', 'and', 'the', 'for'];
 
     /**
-     * @return array{rerouted: list<string>, by_rule: int, by_name: int, orphaned: int, orphaned_published: int, unchanged: int}
+     * `$aiPublished` adds the opt-in Haiku rung ({@see AiSiloRouter}) for PUBLISHED posts the deterministic
+     * rungs could not place — one cheap call per such post, never for drafts or candidates.
+     *
+     * @return array{rerouted: list<string>, by_rule: int, by_name: int, by_ai: int, orphaned: int, orphaned_published: int, unchanged: int}
      */
-    public function reconcile(Site $site): array
+    public function reconcile(Site $site, bool $aiPublished = false): array
     {
         $silos = Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
         $liveIds = $silos->map(fn (Silo $s): string => (string) $s->id)->all();
         $nameTokens = $this->distinguishingTokens($silos);
         $byRule = 0;
         $byName = 0;
+        $byAi = 0;
         $orphanedPublished = 0;
 
         $posts = Content::withoutGlobalScope(SiteScope::class)
@@ -77,12 +84,19 @@ final class PostSiloReconciler
             } elseif (($hit = $this->byName($this->query($post).' '.$this->description($post), $nameTokens)) !== null) {
                 $target = $hit;
                 $via = 'name';
+            } elseif ($aiPublished && $post->status === ContentStatus::Published && ($hit = $this->ai->route($post, $this->query($post), $silos)) !== null) {
+                $target = $hit;
+                $via = 'ai';
             }
 
             if ($target !== null) {
                 $post->forceFill(['silo_id' => $target, 'matched_silo_id' => $target])->save();
                 $rerouted[] = (string) $post->id;
-                $via === 'rule' ? $byRule++ : $byName++;
+                match ($via) {
+                    'rule' => $byRule++,
+                    'name' => $byName++,
+                    default => $byAi++,
+                };
 
                 continue;
             }
@@ -98,6 +112,7 @@ final class PostSiloReconciler
             'rerouted' => $rerouted,
             'by_rule' => $byRule,
             'by_name' => $byName,
+            'by_ai' => $byAi,
             'orphaned' => $orphaned,
             'orphaned_published' => $orphanedPublished,
             'unchanged' => $unchanged,

@@ -7,6 +7,7 @@ use App\ContentEngine\Feeds\FeedFetcher;
 use App\ContentEngine\Feeds\FeedHealth;
 use App\ContentEngine\Feeds\FeedValidator;
 use App\ContentEngine\Feeds\GeneratedFeedReconciler;
+use App\ContentEngine\Reconcile\AiSiloRouter;
 use App\ContentEngine\RelevanceScorer;
 use App\Enums\AuditAction;
 use App\Enums\DataForSeoMode;
@@ -651,6 +652,12 @@ class AppServiceProvider extends ServiceProvider
         // thinking. Both clients come from the one factory so the probe can build
         // the identical client (see ClaudeClientFactory).
         $this->app->when(RelevanceScorer::class)
+            ->needs(ClaudeClient::class)
+            ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
+
+        // The post→silo reconcile's opt-in last rung files the leftover published posts — the same cheap
+        // scoring model, one call per post.
+        $this->app->when(AiSiloRouter::class)
             ->needs(ClaudeClient::class)
             ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
 
