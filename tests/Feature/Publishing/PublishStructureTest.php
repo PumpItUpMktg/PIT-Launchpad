@@ -78,7 +78,7 @@ test('publishSite pushes the whole tree roots-first and stores every wp_category
         ->and($sent->last()['parent_silo_id'])->toBe($root->id);
 });
 
-test('publishing redirects sends the active redirects in contract shape', function () {
+test('publishing redirects sends the active redirects in contract shape, targets in the one-hop trailing-slash form', function () {
     $site = PublishHarness::site();
     Redirect::factory()->create([
         'site_id' => $site->id, 'from_url' => '/old-page', 'to_url' => '/new-page', 'code' => 301, 'status' => 'active',
@@ -91,7 +91,7 @@ test('publishing redirects sends the active redirects in contract shape', functi
     Http::assertSent(function ($r) {
         return str_contains($r->url(), '/wp-json/launchpad/v1/redirects')
             && $r['redirects'][0]['from_url'] === '/old-page'
-            && $r['redirects'][0]['to_url'] === '/new-page'
+            && $r['redirects'][0]['to_url'] === '/new-page/' // the stored slash-less target gains WordPress's slash
             && $r['redirects'][0]['code'] === 301;
     });
 });

@@ -6,10 +6,15 @@ use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Models\Redirect;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Support\PublicUrl;
 
 /**
  * Pushes a site's active redirects to /redirects (slug changes, location-page
  * exceptions). The plugin upserts by from_url, so re-pushes never duplicate.
+ *
+ * Targets are sent in PublicUrl's trailing-slash form. Rows are stored slash-less ("/hub/town-pa") by every
+ * writer, and WordPress 301s that form to "/hub/town-pa/" — so every legacy redirect was two hops. The
+ * normalization lives here, at the one exit to the plugin, so no writer has to know the permalink shape.
  */
 class PublishRedirectsService
 {
@@ -28,7 +33,7 @@ class PublishRedirectsService
             ->get()
             ->map(fn (Redirect $r) => [
                 'from_url' => $r->from_url,
-                'to_url' => $r->to_url,
+                'to_url' => PublicUrl::redirectTarget((string) $r->to_url),
                 'code' => (int) $r->code,
             ])
             ->all();
