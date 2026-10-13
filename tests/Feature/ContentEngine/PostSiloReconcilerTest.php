@@ -82,7 +82,36 @@ it('the command re-routes and (with --repush) re-pushes the reconnected live pos
 
     Artisan::call('launchpad:reconcile-post-silos', ['site' => $site->id, '--repush' => true]);
 
-    expect(Artisan::output())->toContain('1 post(s) re-routed');
+    expect(Artisan::output())->toContain('1 post(s) re-routed to a current silo (1 by rule_set, 0 by silo name), 0 left unrouted (0 of them published');
     Queue::assertPushed(PublishContent::class);
     expect(Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('kind', ContentKind::Post->value)->first()->silo_id)->toBe($sewer->id);
+});
+
+it('routes an informational title by the silo NAME when no rule_set phrase matches — only when exactly one silo wins', function () {
+    $site = Site::factory()->create();
+    // Rule_sets carry commercial phrases only; the names carry the topics.
+    $backup = rcSilo($site, 'Backup Sump Pump Solutions', ['battery backup sump pump installation']);
+    $waterproofing = rcSilo($site, 'Basement Waterproofing', ['basement waterproofing service']);
+    $radon = rcSilo($site, 'Radon Mitigation', ['radon mitigation system']);
+    rcSilo($site, 'Sump Pump Installation', ['sump pump installation']);
+    rcSilo($site, 'Sump Pump Maintenance', ['sump pump maintenance']);
+
+    $flood = rcPost($site, 'Protect Your Basement Before Flash Floods Strike Bucks', ['silo_id' => null, 'matched_silo_id' => null]);
+    $radonPost = rcPost($site, 'Does Weather Affect Radon Levels in Your Home', ['silo_id' => null, 'matched_silo_id' => null]);
+    $battery = rcPost($site, 'What To Do When the Power Goes Out', ['silo_id' => null, 'matched_silo_id' => null, 'meta' => ['seo' => ['meta_description' => 'A battery backup keeps the sump pump running through an outage.']]]);
+    // "sump" and "pump" are shared by 3 of 5 silos → not distinguishing; nothing else in the title → unrouted, not guessed.
+    $tie = rcPost($site, 'How Often Should a Sump Pump Run', ['silo_id' => null, 'matched_silo_id' => null]);
+    $kittens = rcPost($site, 'A post about kittens', ['silo_id' => null, 'matched_silo_id' => null]);
+
+    $result = app(PostSiloReconciler::class)->reconcile($site);
+
+    expect($flood->fresh()->silo_id)->toBe($waterproofing->id)         // "basement"
+        ->and($radonPost->fresh()->silo_id)->toBe($radon->id)         // "radon"
+        ->and($battery->fresh()->silo_id)->toBe($backup->id)          // "backup", from the meta description
+        ->and($tie->fresh()->silo_id)->toBeNull()
+        ->and($kittens->fresh()->silo_id)->toBeNull()
+        ->and($result['by_rule'])->toBe(0)
+        ->and($result['by_name'])->toBe(3)
+        ->and($result['orphaned'])->toBe(2)
+        ->and($result['orphaned_published'])->toBe(2);
 });
