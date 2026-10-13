@@ -13,6 +13,7 @@ use App\Publishing\Links\InternalLinkGraph;
 use App\Publishing\MetaBlobAssembler;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * The ONE source of every "which posts does this page link to" answer — the silo feed on service and hub
@@ -116,7 +117,7 @@ class BlogFeeds
      * Each group also carries its silo's PILLAR page (title + path) when that page is live, so the index can
      * lead a topic with the guide that anchors it — the hub reads as a topic map, not a bare list.
      *
-     * @return list<array{silo: string, pillar: array{title: string, url: string}|null, posts: Collection<int, Content>}>
+     * @return list<array{silo: string, pillar: array{title: string, url: string}|null, archive_slug: string|null, posts: Collection<int, Content>}>
      */
     public function index(string $siteId): array
     {
@@ -141,6 +142,7 @@ class BlogFeeds
                 $groups[$key] = [
                     'silo' => $name !== '' ? $name : 'More articles',
                     'pillar' => $pillar !== null ? ['title' => (string) $pillar->title, 'url' => '/'.Permalinks::slugPath((string) $pillar->slug)] : null,
+                    'archive_slug' => $name !== '' ? Str::slug($name) : null,
                     'posts' => new Collection,
                 ];
             }

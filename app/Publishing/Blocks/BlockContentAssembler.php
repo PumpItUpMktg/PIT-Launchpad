@@ -127,7 +127,9 @@ final class BlockContentAssembler
         }
 
         if ($content->standard_type === StandardPageType::Blog) {
-            return $this->composer->composeBlogIndex($slots, $ctx, $this->blogIndex($content), $preview, $this->latestPosts($content));
+            $groups = $this->blogIndex($content);
+
+            return $this->composer->composeBlogIndex($slots, $ctx, $groups, $preview, $this->latestPosts($content), $this->blogSummary($groups));
         }
 
         if ($content->standard_type === StandardPageType::AreasWeServe) {
@@ -1330,22 +1332,54 @@ final class BlockContentAssembler
     }
 
     /**
-     * The Blog page's index — every published post as a linked row, grouped by silo ({@see BlogFeeds::index}).
+     * The Blog page's index — each silo's NEWEST posts as linked rows with excerpts, the topic's total, and
+     * the link to its complete category archive ({@see BlogFeeds::index} supplies everything; the cap is
+     * applied here). The hub is a topic map a reader and Google can use, not the whole inventory on one
+     * page: every post stays two clicks from home through "All N articles" → the archive (WordPress lists
+     * the category complete and paginated).
      *
-     * @return list<array{silo: string, posts: list<array{title: string, url: string, date: string}>}>
+     * @return list<array{silo: string, pillar: array{title: string, url: string}|null, count: int, archive: string|null, posts: list<array{title: string, url: string, date: string, excerpt: string}>}>
      */
     private function blogIndex(Content $content): array
     {
+        $cap = max(1, (int) config('launchpad.blog_hub.per_topic', 6));
+
         return array_map(fn (array $group): array => [
             'silo' => $group['silo'],
             'pillar' => $group['pillar'],
-            'posts' => $group['posts']->map(fn (Content $p): array => [
+            'count' => $group['posts']->count(),
+            // The category archive: the plugin creates the term from the silo name (WordPress slugs it the
+            // way Str::slug does); the routed-nowhere group has no archive.
+            'archive' => ($group['archive_slug'] ?? null) !== null ? '/category/'.$group['archive_slug'].'/' : null,
+            'posts' => $group['posts']->take($cap)->map(fn (Content $p): array => [
                 'title' => (string) $p->title,
                 'url' => '/'.Permalinks::slugPath((string) $p->slug),
                 'date' => $p->published_at?->format('M j, Y') ?? '',
                 'excerpt' => self::excerpt($p),
             ])->all(),
         ], $this->feeds->index((string) $content->site_id));
+    }
+
+    /**
+     * The facts the hub states about itself — its own text, not a snippet of anything else: how many
+     * topics, how many articles, how recent.
+     *
+     * @param  list<array{silo: string, count: int, archive: string|null, posts: list<array{date: string}>}>  $groups
+     * @return array{topics: int, articles: int, newest: string}
+     */
+    private function blogSummary(array $groups): array
+    {
+        $topics = count(array_filter($groups, fn (array $g): bool => $g['archive'] !== null));
+        $articles = array_sum(array_column($groups, 'count'));
+        $newest = '';
+        foreach ($groups as $g) {
+            $date = $g['posts'][0]['date'] ?? '';
+            if ($date !== '' && ($newest === '' || strtotime($date) > strtotime($newest))) {
+                $newest = $date;
+            }
+        }
+
+        return ['topics' => $topics, 'articles' => $articles, 'newest' => $newest];
     }
 
     /**
@@ -1399,7 +1433,7 @@ final class BlockContentAssembler
      * rendered image (the card degrades to text only).
      *
      * @param  Collection<int, Content>  $posts
-     * @return list<array{title: string, url: string, date: string, image: string, image_alt: string}>
+     * @return list<array{title: string, url: string, date: string, image: string, image_alt: string, excerpt: string}>
      */
     private function postFeed(Collection $posts): array
     {
@@ -1411,6 +1445,7 @@ final class BlockContentAssembler
             'date' => $p->published_at?->format('M j, Y') ?? '',
             'image' => (string) ($images[(string) $p->id]['url'] ?? ''),
             'image_alt' => (string) ($images[(string) $p->id]['alt'] ?? ''),
+            'excerpt' => self::excerpt($p),
         ])->all();
     }
 

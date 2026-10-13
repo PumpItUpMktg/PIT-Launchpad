@@ -49,8 +49,8 @@ class ReconcilePostSilosCommand extends Command
         $result = $reconciler->reconcile($site);
 
         $this->line(sprintf(
-            '<info>%s</info> — %d post(s) re-routed to a current silo, %d left unrouted, %d already correct.',
-            $site->brand_name, count($result['rerouted']), $result['orphaned'], $result['unchanged'],
+            '<info>%s</info> — %d post(s) re-routed to a current silo (%d by rule_set, %d by silo name), %d left unrouted (%d of them published — the blog hub\'s "More articles"), %d already correct.',
+            $site->brand_name, count($result['rerouted']), $result['by_rule'], $result['by_name'], $result['orphaned'], $result['orphaned_published'], $result['unchanged'],
         ));
 
         if ($this->option('towns')) {

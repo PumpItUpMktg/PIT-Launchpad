@@ -791,6 +791,13 @@ return [
     | The directed:reactive publishing mix — freshness stays news-led while the
     | queue closes gaps steadily. Per-tenant override: Site.directed_mix.
     */
+    'blog_hub' => [
+        // The Blog page lists each topic's NEWEST posts with excerpts and links "All N articles" to the
+        // topic's category archive — not every post on one page. Sump Pump Gurus' hub listed all 480 posts
+        // (18,500 words of meta descriptions Google already held on the posts) and was never indexed.
+        'per_topic' => (int) env('LAUNCHPAD_BLOG_HUB_PER_TOPIC', 6),
+    ],
+
     'blog_queue' => [
         'mix' => env('LAUNCHPAD_BLOG_MIX', '1:2'),
     ],
