@@ -39,4 +39,36 @@ final class PublicUrl
 
         return self::for($domain, $slug);
     }
+
+    /**
+     * A redirect TARGET in the same final form: a page path ("/hub/town-pa", or an absolute URL to one)
+     * gains the trailing slash so the 301 lands on WordPress's real permalink in ONE hop instead of
+     * bouncing through the slash-less form first. Anything that is not a page path is returned untouched:
+     * an empty target (a 410 row has no destination), a file ("/sitemap.xml", "/guide.pdf"), a query string
+     * or fragment (WordPress only canonicalizes a bare path), or the bare root.
+     */
+    public static function redirectTarget(string $target): string
+    {
+        $target = trim($target);
+        if ($target === '' || $target === '/' || str_contains($target, '?') || str_contains($target, '#')) {
+            return $target;
+        }
+
+        if (preg_match('~^(https?://[^/]+)(/.*)?$~i', $target, $m) === 1) {
+            $path = $m[2] ?? '';
+
+            return $m[1].($path === '' ? '/' : self::redirectTarget($path));
+        }
+
+        if (! str_starts_with($target, '/') || str_ends_with($target, '/')) {
+            return $target;
+        }
+
+        $last = substr($target, (int) strrpos($target, '/') + 1);
+        if (preg_match('/\\.[a-z0-9]{1,5}$/i', $last) === 1) {
+            return $target; // a file, not a page
+        }
+
+        return $target.'/';
+    }
 }

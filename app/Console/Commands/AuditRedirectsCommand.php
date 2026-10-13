@@ -65,6 +65,14 @@ class AuditRedirectsCommand extends Command
             $this->newLine();
             $this->info('No legacy location redirects to add or fix.');
 
+            // Nothing to write, but a push is still a push: the plugin receives the current map in its current
+            // form (the one-hop trailing-slash targets), so a site whose rows were written before that form
+            // can be re-sent without inventing a change.
+            if ($apply && $this->option('push')) {
+                PublishRedirects::dispatch((string) $site->id);
+                $this->info('Queued the redirect push to WordPress anyway (the plugin upserts by from_url, overriding stale rules).');
+            }
+
             return self::SUCCESS;
         }
 
