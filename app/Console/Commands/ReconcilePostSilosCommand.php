@@ -26,7 +26,8 @@ class ReconcilePostSilosCommand extends Command
     protected $signature = 'launchpad:reconcile-post-silos {site : Site id or brand name}
         {--repush : Re-push the reconnected LIVE posts so WordPress re-assigns their category}
         {--sync-categories : Ensure every silo has its WordPress category term first}
-        {--towns : Also (re)tag posts with the coverage towns they mention (§B lp_area taxonomy)}';
+        {--towns : Also (re)tag posts with the coverage towns they mention (§B lp_area taxonomy)}
+        {--ai : For PUBLISHED posts the rules cannot place, ask the scoring model (one cheap call per post; never for drafts)}';
 
     protected $description = 'Re-point blog posts at the current silo tree (fixes Uncategorized after a §4 rebuild).';
 
@@ -46,11 +47,11 @@ class ReconcilePostSilosCommand extends Command
             $this->line('Queued silo → WordPress category sync.');
         }
 
-        $result = $reconciler->reconcile($site);
+        $result = $reconciler->reconcile($site, aiPublished: (bool) $this->option('ai'));
 
         $this->line(sprintf(
-            '<info>%s</info> — %d post(s) re-routed to a current silo (%d by rule_set, %d by silo name), %d left unrouted (%d of them published — the blog hub\'s "More articles"), %d already correct.',
-            $site->brand_name, count($result['rerouted']), $result['by_rule'], $result['by_name'], $result['orphaned'], $result['orphaned_published'], $result['unchanged'],
+            '<info>%s</info> — %d post(s) re-routed to a current silo (%d by rule_set, %d by silo name, %d by the model), %d left unrouted (%d of them published — the blog hub\'s "More articles"), %d already correct.',
+            $site->brand_name, count($result['rerouted']), $result['by_rule'], $result['by_name'], $result['by_ai'], $result['orphaned'], $result['orphaned_published'], $result['unchanged'],
         ));
 
         if ($this->option('towns')) {

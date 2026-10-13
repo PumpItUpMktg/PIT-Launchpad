@@ -3,6 +3,7 @@
 namespace App\Locations;
 
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\RedirectSource;
 use App\Models\Content;
@@ -25,6 +26,14 @@ use Illuminate\Support\Str;
  *
  * `audit($site, apply: false)` computes the plan and touches nothing; `apply: true` upserts the rows in one
  * transaction. It NEVER shadows a live page (a legacy slug that is itself a published page slug is skipped).
+ *
+ * Two guards, both learned on Sump Pump Gurus' 213-row preview:
+ *   - only a PUBLISHED, live page is a target — an unpublished town page produced "/queens → /roslyn-ny/
+ *     queens-ny" rows into pages nobody serves;
+ *   - a bare slug that several live pages claim (Middletown NJ and PA, Bethlehem PA and NJ, the Bedminster
+ *     OFFICE and a Bedminster PA town) is settled only when exactly one claimant is an office landing (the
+ *     bare `/bedminster` is the office); otherwise it is AMBIGUOUS — an existing redirect to any claimant is
+ *     left alone, a missing one is surfaced, and nothing is written. The last page in the loop used to win.
  */
 class LegacyRedirectAuditor
 {
@@ -33,6 +42,7 @@ class LegacyRedirectAuditor
      *   create: list<array{from: string, to: string}>,
      *   fix: list<array{from: string, to: string, was: string}>,
      *   ok: list<array{from: string, to: string}>,
+     *   ambiguous: list<array{from: string, candidates: list<string>, current: string|null}>,
      *   skipped_live: list<string>,
      * }
      */
@@ -42,8 +52,10 @@ class LegacyRedirectAuditor
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Page->value)
             ->where('page_type', PageType::Location->value)
+            ->where('status', ContentStatus::Published->value)
+            ->whereNotNull('wp_post_id')
             ->whereNotNull('slug')
-            ->get(['id', 'title', 'slug']);
+            ->get(['id', 'title', 'slug', 'location_id']);
 
         // Every published page slug — so a legacy redirect never shadows a live page.
         $liveSlugs = Content::withoutGlobalScope(SiteScope::class)
@@ -61,9 +73,14 @@ class LegacyRedirectAuditor
         $create = [];
         $fix = [];
         $ok = [];
+        $ambiguous = [];
         $skippedLive = [];
         $toApply = [];
 
+        // Every live page that claims a bare-town slug, grouped — so a shared name is decided once, not
+        // once per page with the last one winning.
+        /** @var array<string, list<array{to: string, landing: bool}>> $claims */
+        $claims = [];
         foreach ($pages as $page) {
             $canonical = $this->path((string) $page->slug);
             $town = $this->townName((string) $page->title);
@@ -77,12 +94,36 @@ class LegacyRedirectAuditor
 
                 continue;
             }
+            $claims[$legacy][] = ['to' => $canonical, 'landing' => $page->location_id !== null];
+        }
 
+        foreach ($claims as $legacy => $claimants) {
             $current = $existing->get($legacy);
+            $currentTo = $current !== null ? $this->path((string) $current->to_url) : null;
+            $targets = array_values(array_unique(array_column($claimants, 'to')));
+
+            // One claimant, or exactly one office landing among several: the bare slug is that page's.
+            $canonical = count($targets) === 1 ? $targets[0] : null;
+            if ($canonical === null) {
+                $landings = array_values(array_unique(array_column(array_filter($claimants, fn (array $c): bool => $c['landing']), 'to')));
+                $canonical = count($landings) === 1 ? $landings[0] : null;
+            }
+            if ($canonical === null) {
+                // Several towns share the name and none is the office: never guess. An existing redirect to
+                // any of them stays; a missing one is surfaced for a hand decision.
+                if ($currentTo !== null && in_array($currentTo, $targets, true)) {
+                    $ok[] = ['from' => $legacy, 'to' => $currentTo];
+                } else {
+                    $ambiguous[] = ['from' => $legacy, 'candidates' => $targets, 'current' => $current !== null ? (string) $current->to_url : null];
+                }
+
+                continue;
+            }
+
             if ($current === null) {
                 $create[] = ['from' => $legacy, 'to' => $canonical];
                 $toApply[] = ['from' => $legacy, 'to' => $canonical];
-            } elseif ($this->path((string) $current->to_url) !== $canonical) {
+            } elseif ($currentTo !== $canonical) {
                 $fix[] = ['from' => $legacy, 'to' => $canonical, 'was' => (string) $current->to_url];
                 $toApply[] = ['from' => $legacy, 'to' => $canonical];
             } else {
@@ -101,7 +142,7 @@ class LegacyRedirectAuditor
             });
         }
 
-        return ['create' => $create, 'fix' => $fix, 'ok' => $ok, 'skipped_live' => array_values(array_unique($skippedLive))];
+        return ['create' => $create, 'fix' => $fix, 'ok' => $ok, 'ambiguous' => $ambiguous, 'skipped_live' => array_values(array_unique($skippedLive))];
     }
 
     /** The town label without a trailing ", ST" state suffix ("Hoboken, NJ" → "Hoboken"). */

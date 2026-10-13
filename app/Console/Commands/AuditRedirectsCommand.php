@@ -53,6 +53,9 @@ class AuditRedirectsCommand extends Command
         foreach ($r['ok'] as $row) {
             $this->line("  • ok   {$row['from']} → {$row['to']}");
         }
+        foreach ($r['ambiguous'] as $row) {
+            $this->line("  • <fg=yellow>ambiguous</>  {$row['from']} — ".count($row['candidates']).' live towns share the name ('.implode(', ', $row['candidates']).')'.($row['current'] !== null ? " · currently → {$row['current']}" : ' · no redirect').' — settle by hand with launchpad:fix-redirect');
+        }
         if ($r['skipped_live'] !== []) {
             $this->line('  • skipped (a live page owns the slug): '.implode(', ', $r['skipped_live']));
         }
