@@ -41,10 +41,31 @@ final class DraftFailure
         return new self(
             reason: 'The drafter call threw before returning content.',
             exceptionClass: $e::class,
-            exceptionMessage: Str::limit(self::oneLine($e->getMessage()), self::MESSAGE_LIMIT),
+            exceptionMessage: Str::limit(self::causeChain($e), self::MESSAGE_LIMIT),
             httpStatus: self::httpStatusFrom($e),
             rawResponseExcerpt: null,
         );
+    }
+
+    /**
+     * The exception's message followed by every wrapped cause ("Anthropic API Connection Error ←
+     * cURL error 56: OpenSSL SSL_read: Connection reset by peer"). The SDK's connection exception is a
+     * fixed class description; the reason the connection failed — DNS, TLS, a reset, a mid-generation
+     * cut — lives only in the wrapped transport exception, which the marker and log used to drop.
+     */
+    public static function causeChain(Throwable $e): string
+    {
+        $parts = [];
+        $seen = [];
+        for ($cur = $e; $cur !== null && ! in_array(spl_object_id($cur), $seen, true) && count($parts) < 5; $cur = $cur->getPrevious()) {
+            $seen[] = spl_object_id($cur);
+            $message = self::oneLine($cur->getMessage());
+            if ($message !== '' && ! in_array($message, $parts, true)) {
+                $parts[] = $message;
+            }
+        }
+
+        return implode(' ← ', $parts);
     }
 
     /**

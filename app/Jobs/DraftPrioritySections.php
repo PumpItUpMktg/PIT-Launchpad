@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\ContentEngine\Drafting\DraftFailure;
 use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Scopes\SiteScope;
@@ -28,9 +29,10 @@ class DraftPrioritySections implements ShouldBeUnique, ShouldQueue
 
     public int $tries = 1;
 
-    public int $timeout = 300;
+    /** Held at the shared drafting budget (launchpad.drafting.job_budget_seconds) — DraftCall sizes its one retry against it. */
+    public int $timeout = 600;
 
-    public int $uniqueFor = 600;
+    public int $uniqueFor = 900;
 
     public function __construct(
         public readonly string $contentId,
@@ -74,8 +76,9 @@ class DraftPrioritySections implements ShouldBeUnique, ShouldQueue
             $drafted = $draft === [] ? [] : $drafter->parse($drafter->attempt($page, $draft), $draft);
             $result = $writer->write($page, $drafted, $expected);
         } catch (Throwable $e) {
-            $writer->fail($page, $e::class.': '.$e->getMessage());
-            Log::warning('Priority sections: draft failed', ['content_id' => $page->id, 'error' => $e->getMessage()]);
+            $cause = DraftFailure::causeChain($e);
+            $writer->fail($page, class_basename($e).': '.$cause);
+            Log::warning('Priority sections: draft failed', ['content_id' => $page->id, 'exception' => $e::class, 'cause' => $cause]);
 
             return;
         }
