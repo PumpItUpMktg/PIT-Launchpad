@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\JobCapture\Publishing\JobPublisher;
+use App\Jobs\Concerns\OnPublishLane;
 use App\Models\Job;
 use App\Models\Scopes\SiteScope;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -15,11 +16,15 @@ use Illuminate\Foundation\Queue\Queueable;
  */
 class UnpublishJob implements ShouldQueue
 {
+    use OnPublishLane;
     use Queueable;
 
     public int $tries = 3;
 
-    public function __construct(public readonly string $jobId) {}
+    public function __construct(public readonly string $jobId)
+    {
+        $this->onPublishLane();
+    }
 
     public function handle(JobPublisher $publisher): void
     {

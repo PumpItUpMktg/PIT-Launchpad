@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\JobCapture\Publishing\JobPublisher;
+use App\Jobs\Concerns\OnPublishLane;
 use App\Models\Job;
 use App\Models\Scopes\SiteScope;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -17,6 +18,7 @@ use Illuminate\Foundation\Queue\Queueable;
  */
 class PublishJob implements ShouldBeUnique, ShouldQueue
 {
+    use OnPublishLane;
     use Queueable;
 
     public int $tries = 3;
@@ -29,7 +31,10 @@ class PublishJob implements ShouldBeUnique, ShouldQueue
         return [10, 30, 60];
     }
 
-    public function __construct(public readonly string $jobId) {}
+    public function __construct(public readonly string $jobId)
+    {
+        $this->onPublishLane();
+    }
 
     public function uniqueId(): string
     {

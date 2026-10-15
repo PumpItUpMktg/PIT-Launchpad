@@ -113,7 +113,7 @@
             </tbody>
         </table>
         <div class="qb-note">
-            One process per lane keeps a slow lane from starving a fast one: <code>php artisan queue:work --queue=high --tries=3</code> and <code>php artisan queue:work --queue=default --tries=3</code>, each as its own background process, plus <code>php artisan schedule:work</code>. A lane that shows jobs and no listener needs its name added to a worker's <code>--queue</code> list; the metric-sync lanes fold into <code>default</code> with <code>LAUNCHPAD_METRICS_QUEUE=default</code>.
+            One process per lane keeps a slow lane from starving a fast one: <code>php artisan queue:work --queue=high --tries=3</code> and <code>php artisan queue:work --queue=default --tries=3</code>, each as its own background process, plus <code>php artisan schedule:work</code>. A lane that shows jobs and no listener needs its name added to a worker's <code>--queue</code> list; the metric-sync lanes fold into <code>default</code> with <code>LAUNCHPAD_METRICS_QUEUE=default</code>. The WordPress-push jobs take their own lane with <code>LAUNCHPAD_PUBLISH_QUEUE=publish</code> + <code>php artisan queue:work --queue=publish --tries=3</code>, so a minutes-long draft never holds a seconds-long push.
         </div>
 
         <div class="qb-h">Workers</div>
