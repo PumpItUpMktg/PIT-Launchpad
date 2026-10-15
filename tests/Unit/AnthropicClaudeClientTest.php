@@ -1,6 +1,8 @@
 <?php
 
+use Anthropic\Core\BaseClient;
 use App\Integrations\Claude\AnthropicClaudeClient;
+use Symfony\Component\HttpClient\Psr18Client;
 
 test('the scoring call site sends no thinking param (Haiku has none)', function () {
     $client = new AnthropicClaudeClient('test-key', 'claude-haiku-4-5', 4096, thinking: null);
@@ -30,4 +32,26 @@ test('every request ends with the user message (no assistant prefill)', function
     expect($payload['messages'])->toHaveCount(1)
         ->and($payload['messages'][0]['role'])->toBe('user')
         ->and($payload['maxTokens'])->toBe(16000);
+});
+
+test('the SDK transport carries the configured timeout — idle and total — instead of PHP\'s 60s socket default', function () {
+    $transporter = AnthropicClaudeClient::transporter(240);
+
+    expect($transporter)->toBeInstanceOf(Psr18Client::class);
+
+    $http = (new ReflectionProperty($transporter, 'client'))->getValue($transporter);
+    $options = (new ReflectionProperty($http, 'defaultOptions'))->getValue($http);
+
+    expect($options['timeout'])->toBe(240.0)
+        ->and($options['max_duration'])->toBe(240.0);
+});
+
+test('the SDK client is built on that transport, not the discovered default', function () {
+    $client = (new AnthropicClaudeClient('test-key', 'claude-sonnet-4-6', timeout: 240))->sdk();
+
+    $options = (new ReflectionProperty(BaseClient::class, 'options'))->getValue($client);
+
+    expect($options->transporter)->toBeInstanceOf(Psr18Client::class)
+        ->and($options->timeout)->toBe(240.0)
+        ->and($options->maxRetries)->toBe(1);
 });

@@ -51,6 +51,8 @@ return [
         // retry_after (630s). The SDK defaults are timeout=600 × maxRetries=2 → up to 1800s per call,
         // which lets a slow API response run past retry_after: the worker re-reserves the still-running
         // job and it dies with MaxAttemptsExceeded. timeout×(1+retries) must stay under 600s.
+        // Applied through AnthropicClaudeClient::transporter() — the SDK accepts the option but never
+        // passes it to its HTTP client, which otherwise runs on PHP's 60s default_socket_timeout.
         'timeout' => (int) env('ANTHROPIC_TIMEOUT', 240),
         'max_retries' => (int) env('ANTHROPIC_MAX_RETRIES', 1),
         // Drafting writes a full HTML post + SEO JSON and runs extended thinking,
