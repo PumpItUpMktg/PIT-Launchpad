@@ -928,6 +928,14 @@ return [
         'job_budget_seconds' => (int) env('LAUNCHPAD_DRAFT_JOB_BUDGET_SECONDS', 600),
     ],
 
+    // Queue for the WordPress-push jobs (PublishContent / PublishSilo / PublishRedirects / PublishJob /
+    // UnpublishJob). Blank ⇒ the default queue. Set it (e.g. "publish") so a seconds-long push never waits
+    // behind minutes-long drafts on `default` — the worker for that lane must then be started
+    // (`queue:work --queue=publish`), or the Queue board shows the lane silent and nothing publishes.
+    'publish' => [
+        'queue' => env('LAUNCHPAD_PUBLISH_QUEUE'),
+    ],
+
     'legacy_redirect' => [
         'max_collision_suffix' => (int) env('LAUNCHPAD_MAX_COLLISION_SUFFIX', 30),
     ],

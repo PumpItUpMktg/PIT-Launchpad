@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\OnPublishLane;
 use App\Models\Site;
 use App\Publishing\PublishRedirectsService;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -13,13 +14,16 @@ use Illuminate\Foundation\Queue\Queueable;
  */
 class PublishRedirects implements ShouldQueue
 {
+    use OnPublishLane;
     use Queueable;
 
     public int $tries = 3;
 
     public function __construct(
         public readonly string $siteId,
-    ) {}
+    ) {
+        $this->onPublishLane();
+    }
 
     public function handle(PublishRedirectsService $service): void
     {

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\OnPublishLane;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Publishing\PublishContentService;
@@ -23,6 +24,7 @@ use Illuminate\Foundation\Queue\Queueable;
  */
 class PublishContent implements ShouldBeUnique, ShouldQueue
 {
+    use OnPublishLane;
     use Queueable;
 
     public int $tries = 3;
@@ -45,7 +47,9 @@ class PublishContent implements ShouldBeUnique, ShouldQueue
     public function __construct(
         public readonly string $contentId,
         public readonly ?string $actorId = null,
-    ) {}
+    ) {
+        $this->onPublishLane();
+    }
 
     /** Dedupe key: one in-flight publish per page (ULID) — the guard against stacked re-push waves. */
     public function uniqueId(): string

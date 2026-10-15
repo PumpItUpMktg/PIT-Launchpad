@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\OnPublishLane;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Publishing\PublishSiloService;
@@ -13,13 +14,16 @@ use Illuminate\Foundation\Queue\Queueable;
  */
 class PublishSilo implements ShouldQueue
 {
+    use OnPublishLane;
     use Queueable;
 
     public int $tries = 3;
 
     public function __construct(
         public readonly string $siloId,
-    ) {}
+    ) {
+        $this->onPublishLane();
+    }
 
     public function handle(PublishSiloService $service): void
     {
