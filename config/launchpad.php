@@ -920,6 +920,14 @@ return [
     // WordPress appends -2, -3, -10 to a colliding slug, contiguously from 2 — so a LARGE trailing number
     // is a title, not a copy ("Maintenance 101", "Best Pumps 2025"). Above this ceiling a suffix is left
     // alone rather than collapsed onto a base that was never its original.
+    // The drafting jobs' shared $timeout (GeneratePost / GeneratePage / DraftPrioritySections). DraftCall
+    // sizes its one dropped-connection retry against it: elapsed + pause + one more request timeout
+    // (services.anthropic.timeout) + a margin must fit, or the drop surfaces without a retry. Must stay
+    // below the queue connection's retry_after.
+    'drafting' => [
+        'job_budget_seconds' => (int) env('LAUNCHPAD_DRAFT_JOB_BUDGET_SECONDS', 600),
+    ],
+
     'legacy_redirect' => [
         'max_collision_suffix' => (int) env('LAUNCHPAD_MAX_COLLISION_SUFFIX', 30),
     ],
