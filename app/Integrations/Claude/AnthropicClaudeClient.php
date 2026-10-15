@@ -6,6 +6,9 @@ use Anthropic\Client;
 use Anthropic\Messages\TextBlock;
 use Anthropic\Messages\Usage;
 use Anthropic\RequestOptions;
+use Psr\Http\Client\ClientInterface;
+use Symfony\Component\HttpClient\HttpClient;
+use Symfony\Component\HttpClient\Psr18Client;
 
 /**
  * Anthropic-backed ClaudeClient using the official PHP SDK. The model and the
@@ -39,6 +42,36 @@ class AnthropicClaudeClient implements ClaudeClient
     ) {}
 
     /**
+     * The SDK client this call site runs on: our transport (the timeout applied for real) + the SDK's
+     * own retry count.
+     */
+    public function sdk(): Client
+    {
+        return new Client(
+            apiKey: $this->apiKey,
+            requestOptions: RequestOptions::with(
+                timeout: (float) $this->timeout,
+                maxRetries: $this->maxRetries,
+                transporter: self::transporter($this->timeout),
+            ),
+        );
+    }
+
+    /**
+     * The HTTP transport the SDK sends through, with the per-request timeout ACTUALLY applied. The SDK
+     * accepts a `timeout` request option but never hands it to the PSR-18 client it discovers, so every
+     * call ran on that client's own default — Symfony's, an IDLE timeout of PHP's default_socket_timeout
+     * (60s). A non-streaming draft receives nothing while the model writes, so any generation past a
+     * minute died as "Idle timeout reached": the APIConnectionException Sump Pump Gurus' bigger towns
+     * hit on every attempt, retry included, while the configured 240s was never in force. Symfony's
+     * `timeout` is idle time between bytes; `max_duration` caps the whole request — both at the budget.
+     */
+    public static function transporter(int $timeout): ClientInterface
+    {
+        return new Psr18Client(HttpClient::create(['timeout' => (float) $timeout, 'max_duration' => (float) $timeout]));
+    }
+
+    /**
      * The resolved call-site config (model, token budget, thinking mode) — for
      * diagnostics that need to report what client a path actually runs with.
      *
@@ -63,12 +96,7 @@ class AnthropicClaudeClient implements ClaudeClient
 
     public function completeDetailed(string $prompt, ?string $system = null): CompletionResult
     {
-        $client = new Client(
-            apiKey: $this->apiKey,
-            requestOptions: RequestOptions::with(timeout: (float) $this->timeout, maxRetries: $this->maxRetries),
-        );
-
-        $message = $client->messages->create(...$this->payload($prompt, $system));
+        $message = $this->sdk()->messages->create(...$this->payload($prompt, $system));
 
         $text = '';
         foreach ($message->content as $block) {
