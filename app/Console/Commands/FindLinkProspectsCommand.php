@@ -43,6 +43,10 @@ class FindLinkProspectsCommand extends Command
         // Said BEFORE the index call, so a failed call still shows what was asked.
         $this->line("<info>{$site->brand_name}</info> — competitors asked about: ".implode(', ', array_map(
             fn (array $t): string => "{$t['domain']} (above us in {$t['appearances']} results)", $targets)));
+        if ($targetsFor->dropped !== []) {
+            $this->line('  • excluded as territory-wide (not a local company): '.implode(', ', array_map(
+                fn (array $d): string => sprintf('%s (above us in %d%% of one scan\'s towns)', $d['domain'], (int) round($d['share'] * 100)), $targetsFor->dropped)));
+        }
 
         try {
             $r = $prospector->run($site);
@@ -53,8 +57,8 @@ class FindLinkProspectsCommand extends Command
             return self::FAILURE;
         }
 
-        $this->line(sprintf('  • the index returned %d linking domains; %d kept after the spam / authority floor — %d new prospect(s), %d refreshed, %d untouched prospect(s) from an earlier run dropped.',
-            $r['returned'], $r['kept'], $r['new'], $r['refreshed'], $r['pruned']));
+        $this->line(sprintf('  • the index returned %d linking domains; %d kept (%d dropped as spam, %d below the authority floor) — %d new prospect(s), %d refreshed, %d untouched prospect(s) from an earlier run dropped.',
+            $r['returned'], $r['kept'], $r['dropped_spam'], $r['dropped_rank'], $r['new'], $r['refreshed'], $r['pruned']));
 
         return self::SUCCESS;
     }

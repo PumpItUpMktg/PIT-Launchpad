@@ -32,8 +32,16 @@ final class CompetitorTargets
         'bing', 'apple', 'yahoo', 'craigslist', 'indeed', 'glassdoor', 'reddit', 'quora',
     ];
 
-    /** Town results needed before a competitor's footprint share means anything. */
+    /** Town results in one scan needed before a competitor's footprint share means anything. */
     public const FOOTPRINT_SAMPLE = 20;
+
+    /**
+     * The domains the last call dropped as territory-wide, with the worst per-scan share — so the command
+     * can say who was excluded and why.
+     *
+     * @var list<array{domain: string, appearances: int, share: float}>
+     */
+    public array $dropped = [];
 
     public function __construct(
         private readonly PriorityKeywords $priorities,
@@ -53,7 +61,10 @@ final class CompetitorTargets
         }
 
         $counts = [];
-        $points = 0;
+        /** @var array<string, array<string, int>> $perScan  scan id => domain => appearances */
+        $perScan = [];
+        /** @var array<string, int> $scanSize */
+        $scanSize = [];
         foreach ($keywords as $keyword) {
             foreach (TownRankScan::MODES as $mode) {
                 $scanId = TownRankScan::withoutGlobalScope(SiteScope::class)
@@ -63,8 +74,8 @@ final class CompetitorTargets
                     continue;
                 }
                 $scanPoints = TownRankPoint::withoutGlobalScope(SiteScope::class)->where('scan_id', $scanId)->get(['rank', 'top_results']);
+                $scanSize[$scanId] = $scanPoints->count();
                 foreach ($scanPoints as $point) {
-                    $points++;
                     $ours = $point->rank;
                     foreach (is_array($point->top_results) ? $point->top_results : [] as $item) {
                         // One competitor per business: the registrable domain (m.yelp.com and yelp.com are one).
@@ -79,19 +90,31 @@ final class CompetitorTargets
                             continue;
                         }
                         $counts[$domain] = ($counts[$domain] ?? 0) + 1;
+                        $perScan[$scanId][$domain] = ($perScan[$scanId][$domain] ?? 0) + 1;
                     }
                 }
             }
         }
 
         // A local company's footprint is a county, not the territory: a domain above us in more than
-        // `max_footprint` of ALL town results (a Florida restoration site "winning" 1,307 of them) is a
-        // national or junk site the lists do not know, and its links are not ours to copy.
-        // Judged only on a real sample: a site with a handful of town results has no footprint to read.
+        // `max_footprint` of the towns of ANY one scan (a Florida restoration site "winning" 1,307 town
+        // results) is a national or junk site the lists do not know, and its links are not ours to copy.
+        // Per scan, not across all of them — a site that owns one keyword everywhere still averages low
+        // over five keywords. Judged only on a real sample: a scan of a handful of towns has no footprint.
         $cap = (float) config('launchpad.links.max_footprint', 0.5);
+        $this->dropped = [];
         $out = [];
         foreach ($counts as $domain => $n) {
-            if ($points >= self::FOOTPRINT_SAMPLE && $n / $points > $cap) {
+            $worst = 0.0;
+            foreach ($perScan as $scanId => $domains) {
+                $size = $scanSize[$scanId] ?? 0;
+                if ($size >= self::FOOTPRINT_SAMPLE && isset($domains[$domain])) {
+                    $worst = max($worst, $domains[$domain] / $size);
+                }
+            }
+            if ($worst > $cap) {
+                $this->dropped[] = ['domain' => (string) $domain, 'appearances' => $n, 'share' => round($worst, 2)];
+
                 continue;
             }
             $out[] = ['domain' => (string) $domain, 'appearances' => $n];

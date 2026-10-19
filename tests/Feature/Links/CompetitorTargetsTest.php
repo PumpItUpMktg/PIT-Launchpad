@@ -93,3 +93,18 @@ it('drops a domain whose footprint is the whole territory — no local company b
     ctScan($small, $kw2, 'town_query', Carbon::parse('2026-10-01'), [[null, [[1, 'everywhere.com']]], [null, [[1, 'everywhere.com']]]]);
     expect(array_column(app(CompetitorTargets::class)->for($small, 10), 'domain'))->toBe(['everywhere.com']);
 });
+
+it('judges the footprint per scan — a site that owns one keyword everywhere is dropped even when five other keywords dilute it', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sumppumpgurus.com']);
+    $owned = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'emergency restoration', 'town_priority_rank' => 1]);
+    $other = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump repair', 'town_priority_rank' => 2]);
+    $fl = fn (): array => [null, [[1, 'barbaraemergencyrestorationpompanobeachfl.com']]];
+    $local = fn (): array => [null, [[1, 'oriolebw.com']]];
+    ctScan($site, $owned, 'town_query', Carbon::parse('2026-10-01'), array_fill(0, 24, $fl()));         // 24/24 for this keyword
+    ctScan($site, $other, 'town_query', Carbon::parse('2026-10-01'), array_merge(array_fill(0, 10, $local()), array_fill(0, 86, [null, []]))); // 96 results the Florida site is absent from; the rival in 10
+
+    $targets = app(CompetitorTargets::class);
+    expect(array_column($targets->for($site, 10), 'domain'))->toBe(['oriolebw.com'])
+        ->and($targets->dropped)->toBe([['domain' => 'barbaraemergencyrestorationpompanobeachfl.com', 'appearances' => 24, 'share' => 1.0]])
+        ->and($targets->for($site, 10)[0]['appearances'])->toBe(10);
+});
