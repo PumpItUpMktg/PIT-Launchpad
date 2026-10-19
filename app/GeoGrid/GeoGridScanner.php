@@ -471,7 +471,7 @@ final class GeoGridScanner
      * The business's rank at a cell (matched by place_id/CID, never name) + the top-3 competitors present.
      *
      * @param  list<array{rank: int|null, name: string, domain: string|null, place_id: string|null, cid: string|null}>  $items
-     * @return array{rank: int|null, competitors: list<array{name: string, place_id: string|null, rank: int|null}>}
+     * @return array{rank: int|null, competitors: list<array{name: string, place_id: string|null, rank: int|null, domain: string|null}>}
      */
     private function extract(array $items, string $placeId, string $cid): array
     {
@@ -491,7 +491,9 @@ final class GeoGridScanner
                 && ! ($cid !== '' && (string) $i['cid'] === $cid))
             ->sortBy('rank')
             ->take(3)
-            ->map(fn (array $i): array => ['name' => $i['name'], 'place_id' => $i['place_id'], 'rank' => $i['rank']])
+            // The domain rides along: a map-pack competitor is a local business by definition, and the
+            // competitor link intersect (§ Links) needs its domain, not its name.
+            ->map(fn (array $i): array => ['name' => $i['name'], 'place_id' => $i['place_id'], 'rank' => $i['rank'], 'domain' => $i['domain']])
             ->values()
             ->all();
 

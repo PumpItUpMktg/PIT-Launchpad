@@ -58,7 +58,8 @@ it('scans a grid and matches the business rank by place_id, never by name', func
     $point = $scan->points()->first();
     expect($point->competitors)->toHaveCount(2)                  // the two others, us excluded
         ->and($point->competitors[0]['rank'])->toBe(1)
-        ->and($point->competitors[0]['name'])->toBe('Sump Pump Gurus');
+        ->and($point->competitors[0]['name'])->toBe('Sump Pump Gurus')
+        ->and($point->competitors[0]['domain'])->toBe('impostor.com'); // kept for the competitor link intersect
 });
 
 it('records a null rank where the business does not appear within depth', function () {

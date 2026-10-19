@@ -24,7 +24,7 @@ use Illuminate\Support\Carbon;
  * @property float $lat
  * @property float $lng
  * @property int|null $rank
- * @property list<array{name: string, place_id: string|null, rank: int|null}>|null $competitors
+ * @property list<array{name: string, place_id: string|null, rank: int|null, domain?: string|null}>|null $competitors
  * @property string|null $provider_task_id
  * @property int $read_attempts reads that produced no answer; at the ceiling the point is closed unreadable
  * @property string|null $read_error why it could never be read — set means "no data", never "not found"
