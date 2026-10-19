@@ -16,4 +16,14 @@ interface BacklinkProvider
      * previous page's `nextToken` to continue.
      */
     public function referringDomains(string $target, int $limit = 1000, ?string $after = null): BacklinkPage;
+
+    /**
+     * Referring domains that link to at least one of `$targets` and to none of `$exclude` — the competitor
+     * intersect. Each row says which targets it links to.
+     *
+     * @param  list<string>  $targets  up to 20 domains
+     * @param  list<string>  $exclude  up to 10 domains
+     * @return list<IntersectRow>
+     */
+    public function domainIntersection(array $targets, array $exclude, int $limit = 300): array;
 }

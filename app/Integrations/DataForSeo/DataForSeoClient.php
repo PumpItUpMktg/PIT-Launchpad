@@ -284,6 +284,82 @@ class DataForSeoClient
         ];
     }
 
+    /**
+     * Referring domains that link to at least one of `$targets` and to none of `$exclude`
+     * (`backlinks/domain_intersection/live`, partial mode). Targets are keyed "1".."20" on the wire; the
+     * result names each domain's linked targets by the strings passed in.
+     *
+     * @param  list<string>  $targets
+     * @param  list<string>  $exclude
+     * @return list<array{domain: string, rank: int|null, spam_score: int|null, linked_targets: list<string>, first_seen: string|null}>
+     */
+    public function backlinksDomainIntersection(array $targets, array $exclude, int $limit = 300): array
+    {
+        $targets = array_slice(array_values(array_unique(array_filter($targets))), 0, 20);
+        if ($targets === []) {
+            return [];
+        }
+        $keyed = [];
+        foreach ($targets as $i => $t) {
+            $keyed[$i + 1] = $t; // 1-based int keys encode as the {"1": …} object the API wants
+        }
+        $task = [
+            'targets' => $keyed,
+            'intersection_mode' => 'partial',
+            'backlinks_status_type' => 'live',
+            'include_subdomains' => true,
+            'exclude_internal_backlinks' => true,
+            'rank_scale' => 'one_hundred',
+            'limit' => max(1, min(1000, $limit)),
+            'order_by' => ['1.rank,desc'],
+        ];
+        $exclude = array_slice(array_values(array_unique(array_filter($exclude))), 0, 10);
+        if ($exclude !== []) {
+            $task['exclude_targets'] = $exclude;
+        }
+
+        return self::parseDomainIntersection($this->requestLiveTask('/v3/backlinks/domain_intersection/live', $task), $keyed);
+    }
+
+    /**
+     * @param  array<int, mixed>  $result
+     * @param  array<int, string>  $keyed  the wire keys (1-based) → target strings
+     * @return list<array{domain: string, rank: int|null, spam_score: int|null, linked_targets: list<string>, first_seen: string|null}>
+     */
+    public static function parseDomainIntersection(array $result, array $keyed): array
+    {
+        $page = is_array($result[0] ?? null) ? $result[0] : [];
+        $out = [];
+        foreach (is_array($page['items'] ?? null) ? $page['items'] : [] as $item) {
+            $per = is_array($item['domain_intersection'] ?? null) ? $item['domain_intersection'] : [];
+            $domain = null;
+            $rank = null;
+            $spam = null;
+            $first = null;
+            $linked = [];
+            foreach ($per as $key => $entry) {
+                if (! is_array($entry)) {
+                    continue;
+                }
+                $linked[] = $keyed[(int) $key] ?? (string) $key;
+                $domain ??= isset($entry['target']) && is_string($entry['target']) ? strtolower((string) preg_replace('/^www\\./i', '', $entry['target'])) : null;
+                $rank = max($rank ?? 0, is_numeric($entry['rank'] ?? null) ? (int) $entry['rank'] : 0);
+                $spam = max($spam ?? 0, is_numeric($entry['backlinks_spam_score'] ?? null) ? (int) $entry['backlinks_spam_score'] : 0);
+                $seen = isset($entry['first_seen']) && is_string($entry['first_seen']) ? substr($entry['first_seen'], 0, 10) : null;
+                $first = $seen !== null && ($first === null || $seen < $first) ? $seen : $first;
+            }
+            if ($domain === null && isset($item['domain']) && is_string($item['domain'])) {
+                $domain = strtolower((string) preg_replace('/^www\\./i', '', $item['domain']));
+            }
+            if ($domain === null || $domain === '' || $linked === []) {
+                continue;
+            }
+            $out[] = ['domain' => $domain, 'rank' => $rank, 'spam_score' => $spam, 'linked_targets' => array_values(array_unique($linked)), 'first_seen' => $first];
+        }
+
+        return $out;
+    }
+
     // --- Standard-mode task lifecycle (generic over an endpoint family) ---
 
     /**

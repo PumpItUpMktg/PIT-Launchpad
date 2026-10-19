@@ -32,6 +32,11 @@ function scriptedBacklinks(array $pages, array &$calls, ?Throwable $fail = null)
 
             return $this->pages[$after ?? 'first'];
         }
+
+        public function domainIntersection(array $targets, array $exclude, int $limit = 300): array
+        {
+            return [];
+        }
     };
 }
 

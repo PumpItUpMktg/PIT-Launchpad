@@ -331,3 +331,42 @@ it('pages backlinks one per referring domain, strongest first, and carries the c
             && $body['rank_scale'] === 'one_hundred';
     });
 });
+
+it('asks the domain intersection for domains linking to any competitor and not to us, and names each domain\'s linked targets', function () {
+    HttpFacade::fake([
+        '*/backlinks/domain_intersection/live' => HttpFacade::response(dfsEnvelope([[
+            'total_count' => 2, 'items_count' => 2,
+            'items' => [
+                ['domain_intersection' => [
+                    '1' => ['target' => 'www.bucks-chamber.org', 'rank' => 41, 'backlinks' => 3, 'first_seen' => '2024-03-01 00:00:00 +00:00', 'backlinks_spam_score' => 0],
+                    '3' => ['target' => 'www.bucks-chamber.org', 'rank' => 41, 'backlinks' => 1, 'first_seen' => '2023-01-05 00:00:00 +00:00', 'backlinks_spam_score' => 5],
+                ], 'summary' => ['intersections_count' => 2]],
+                ['domain_intersection' => [
+                    '2' => ['target' => 'spamdir.example', 'rank' => 8, 'backlinks' => 40, 'first_seen' => null, 'backlinks_spam_score' => 45],
+                ], 'summary' => ['intersections_count' => 1]],
+                ['domain_intersection' => [], 'summary' => ['intersections_count' => 0]],
+            ],
+        ]])),
+    ]);
+
+    $out = dfsClient()->backlinksDomainIntersection(['rivalplumbing.com', 'dryguys.com', 'basementpros.com'], ['sumppumpgurus.com'], 300);
+
+    expect($out)->toHaveCount(2)
+        ->and($out[0]['domain'])->toBe('bucks-chamber.org')
+        ->and($out[0]['linked_targets'])->toBe(['rivalplumbing.com', 'basementpros.com'])
+        ->and($out[0]['rank'])->toBe(41)
+        ->and($out[0]['spam_score'])->toBe(5)      // the worst of its links
+        ->and($out[0]['first_seen'])->toBe('2023-01-05') // the earliest
+        ->and($out[1]['linked_targets'])->toBe(['dryguys.com']);
+
+    HttpFacade::assertSent(function ($request) {
+        $body = $request->data()[0];
+
+        return str_contains($request->url(), 'backlinks/domain_intersection/live')
+            && $body['targets'] === [1 => 'rivalplumbing.com', 2 => 'dryguys.com', 3 => 'basementpros.com']
+            && $body['exclude_targets'] === ['sumppumpgurus.com']
+            && $body['intersection_mode'] === 'partial'
+            && $body['rank_scale'] === 'one_hundred'
+            && $body['limit'] === 300;
+    });
+});

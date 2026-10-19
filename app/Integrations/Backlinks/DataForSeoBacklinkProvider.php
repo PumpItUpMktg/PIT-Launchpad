@@ -46,4 +46,17 @@ final class DataForSeoBacklinkProvider implements BacklinkProvider
             nextToken: $page['search_after_token'],
         );
     }
+
+    public function domainIntersection(array $targets, array $exclude, int $limit = 300): array
+    {
+        $rows = $this->client->backlinksDomainIntersection($targets, $exclude, $limit);
+
+        return array_map(fn (array $r): IntersectRow => new IntersectRow(
+            domain: $r['domain'],
+            rank: $r['rank'],
+            spamScore: $r['spam_score'],
+            linkedTargets: $r['linked_targets'],
+            firstSeen: $r['first_seen'],
+        ), $rows);
+    }
 }
