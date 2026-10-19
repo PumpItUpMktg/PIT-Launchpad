@@ -370,3 +370,27 @@ it('asks the domain intersection for domains linking to any competitor and not t
             && $body['limit'] === 300;
     });
 });
+
+it('surfaces the vendor\'s own message on a persistent HTTP 5xx, after the transport\'s three tries', function () {
+    $refusal = ['status_code' => 50000, 'status_message' => 'Internal Error: targets is invalid'];
+    HttpFacade::fake([
+        '*/backlinks/domain_intersection/live' => HttpFacade::sequence()->push($refusal, 500)->push($refusal, 500)->push($refusal, 500),
+    ]);
+
+    expect(fn () => dfsClient()->backlinksDomainIntersection(['rival.com'], ['us.com']))
+        ->toThrow(DataForSeoException::class, 'DataForSEO HTTP 500: Internal Error: targets is invalid');
+    HttpFacade::assertSentCount(3);
+});
+
+it('a transient 5xx followed by a good answer goes through', function () {
+    HttpFacade::fake([
+        '*/backlinks/domain_intersection/live' => HttpFacade::sequence()
+            ->push('edge hiccup', 502)
+            ->push(dfsEnvelope([['total_count' => 1, 'items_count' => 1, 'items' => [['domain_intersection' => ['1' => ['target' => 'chamber.org', 'rank' => 30, 'backlinks_spam_score' => 0]], 'summary' => ['intersections_count' => 1]]]]])),
+    ]);
+
+    $out = dfsClient()->backlinksDomainIntersection(['rival.com'], ['us.com']);
+
+    expect($out)->toHaveCount(1)->and($out[0]['domain'])->toBe('chamber.org');
+    HttpFacade::assertSent(fn ($request) => ! array_key_exists('order_by', $request->data()[0])); // ranked client-side
+});

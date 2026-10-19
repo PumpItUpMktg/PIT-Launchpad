@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Integrations\DataForSeo\DataForSeoException;
+use App\Links\CompetitorTargets;
 use App\Links\LinkProspector;
 use App\Models\Site;
 use Illuminate\Console\Command;
@@ -17,7 +19,7 @@ class FindLinkProspectsCommand extends Command
 
     protected $description = 'Find domains that link to the site\'s local competitors but not to the site, and keep them as link prospects.';
 
-    public function handle(LinkProspector $prospector): int
+    public function handle(LinkProspector $prospector, CompetitorTargets $targetsFor): int
     {
         $arg = trim((string) $this->option('site'));
         if ($arg === '') {
@@ -32,15 +34,25 @@ class FindLinkProspectsCommand extends Command
             return self::FAILURE;
         }
 
-        $r = $prospector->run($site);
-        if ($r['targets'] === []) {
+        $targets = $targetsFor->for($site, max(1, (int) config('launchpad.links.competitor_targets', 10)));
+        if ($targets === []) {
             $this->warn("{$site->brand_name} — no local competitors in Town Rank yet; run a town-rank scan first.");
 
             return self::SUCCESS;
         }
-
+        // Said BEFORE the index call, so a failed call still shows what was asked.
         $this->line("<info>{$site->brand_name}</info> — competitors asked about: ".implode(', ', array_map(
-            fn (array $t): string => "{$t['domain']} (above us in {$t['appearances']} results)", $r['targets'])));
+            fn (array $t): string => "{$t['domain']} (above us in {$t['appearances']} results)", $targets)));
+
+        try {
+            $r = $prospector->run($site);
+        } catch (DataForSeoException $e) {
+            $this->error('The backlink index refused the intersect: '.$e->getMessage());
+            $this->comment('Nothing was written. If a competitor above looks wrong (a platform, not a business), say so and it will be excluded; a 5xx is their edge — run again in a minute.');
+
+            return self::FAILURE;
+        }
+
         $this->line(sprintf('  • the index returned %d linking domains; %d kept after the spam / authority floor — %d new prospect(s), %d refreshed.',
             $r['returned'], $r['kept'], $r['new'], $r['refreshed']));
 
