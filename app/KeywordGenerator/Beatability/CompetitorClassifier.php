@@ -19,18 +19,39 @@ class CompetitorClassifier
     private const NATIONAL = [
         'homedepot', 'lowes', 'amazon', 'walmart', 'target', 'sears',
         'rotorooter', 'mrrooter', 'rooterman', 'benjaminfranklinplumbing',
-        'arsrescuerooter', 'americanresidential',
+        'arsrescuerooter', 'americanresidential', 'mrhandyman', 'servicemaster', 'neighborly',
+        'servpro', 'basementsystems', 'jackery',
     ];
 
     private const EDITORIAL = [
         'wikipedia', 'forbes', 'nytimes', 'thisoldhouse', 'familyhandyman',
-        'bobvila', 'hgtv', 'consumerreports',
+        'bobvila', 'hgtv', 'consumerreports', 'doityourself', 'thespruce', 'fixr', 'homeguide',
+        'reddit', 'quora', 'youtube',
     ];
+
+    /**
+     * The registrable part of a host — the last two labels, or three under a two-level public suffix
+     * (co.uk, com.au): "m.yelp.com" → "yelp.com", "ca.jackery.com" → "jackery.com".
+     */
+    public static function registrable(string $host): string
+    {
+        $labels = array_values(array_filter(explode('.', strtolower(trim($host)))));
+        $n = count($labels);
+        if ($n <= 2) {
+            return implode('.', $labels);
+        }
+        $second = $labels[$n - 2];
+        $tld = $labels[$n - 1];
+        $take = strlen($tld) === 2 && in_array($second, ['co', 'com', 'net', 'org', 'gov', 'edu', 'ac'], true) ? 3 : 2;
+
+        return implode('.', array_slice($labels, -$take));
+    }
 
     public function classify(string $domain): CompetitorClass
     {
         $domain = strtolower(preg_replace('/^www\./', '', trim($domain)) ?? $domain);
-        $stem = explode('.', $domain)[0];
+        // The registrable name, not the first label: m.yelp.com is Yelp, ca.jackery.com is Jackery.
+        $stem = explode('.', self::registrable($domain))[0];
 
         if (str_ends_with($domain, '.gov') || str_ends_with($domain, '.edu') || in_array($stem, self::EDITORIAL, true)) {
             return CompetitorClass::EditorialGov;

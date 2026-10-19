@@ -122,7 +122,7 @@ it('the command reports the competitors asked about and what the list gained', f
 
     $this->artisan('launchpad:find-link-prospects', ['--site' => $site->id])
         ->expectsOutputToContain('dryguys.com (above us in 1 results), rivalplumbing.com (above us in 1 results)')
-        ->expectsOutputToContain('the index returned 1 linking domains; 1 kept after the spam / authority floor — 1 new prospect(s), 0 refreshed.')
+        ->expectsOutputToContain('the index returned 1 linking domains; 1 kept after the spam / authority floor — 1 new prospect(s), 0 refreshed, 0 untouched prospect(s) from an earlier run dropped.')
         ->assertSuccessful();
 });
 
@@ -152,4 +152,18 @@ it('the command names the competitors before the index call, so a refused inters
         ->assertFailed();
 
     expect(LinkProspect::withoutGlobalScope(SiteScope::class)->count())->toBe(0);
+});
+
+it('drops the untouched prospects an earlier run produced when the latest run no longer returns them, and keeps the worked ones', function () {
+    $site = prospectSite();
+    $asked = [];
+    $mk = fn (array $rows): LinkProspector => new LinkProspector(intersectProvider($rows, $asked), app(CompetitorTargets::class), app(CompetitorClassifier::class));
+    $mk([new IntersectRow('stale-forum.example', 50, 0, ['rivalplumbing.com'], null), new IntersectRow('worked.example', 50, 0, ['rivalplumbing.com'], null), new IntersectRow('bucks-chamber.org', 41, 0, ['rivalplumbing.com'], null)])->run($site);
+    LinkProspect::withoutGlobalScope(SiteScope::class)->where('domain', 'worked.example')->first()->forceFill(['status' => LinkProspectStatus::Contacted])->save();
+    $this->travel(1)->minutes();
+
+    $r = $mk([new IntersectRow('bucks-chamber.org', 41, 0, ['rivalplumbing.com'], null)])->run($site);
+
+    expect($r['pruned'])->toBe(1)
+        ->and(LinkProspect::withoutGlobalScope(SiteScope::class)->pluck('domain')->sort()->values()->all())->toBe(['bucks-chamber.org', 'worked.example']);
 });

@@ -30,13 +30,13 @@ final class LinkProspector
     ) {}
 
     /**
-     * @return array{targets: list<array{domain: string, appearances: int}>, returned: int, kept: int, new: int, refreshed: int}
+     * @return array{targets: list<array{domain: string, appearances: int}>, returned: int, kept: int, new: int, refreshed: int, pruned: int}
      */
     public function run(Site $site): array
     {
         $targets = $this->targets->for($site, max(1, (int) config('launchpad.links.competitor_targets', 10)));
         if ($targets === []) {
-            return ['targets' => [], 'returned' => 0, 'kept' => 0, 'new' => 0, 'refreshed' => 0];
+            return ['targets' => [], 'returned' => 0, 'kept' => 0, 'new' => 0, 'refreshed' => 0, 'pruned' => 0];
         }
 
         $host = BacklinkSyncer::target((string) $site->domain_url);
@@ -81,7 +81,12 @@ final class LinkProspector
             $new++;
         }
 
-        return ['targets' => $targets, 'returned' => count($rows), 'kept' => $kept, 'new' => $new, 'refreshed' => $refreshed];
+        // A prospect nobody has touched (still `new`) that this run did not return was an artefact of an
+        // earlier, worse competitor set: drop it. Contacted / acquired / dismissed rows are the operator's.
+        $pruned = LinkProspect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)
+            ->where('status', LinkProspectStatus::New->value)->where('found_at', '<', $now)->delete();
+
+        return ['targets' => $targets, 'returned' => count($rows), 'kept' => $kept, 'new' => $new, 'refreshed' => $refreshed, 'pruned' => $pruned];
     }
 
     /** @param  list<string>  $directoryDomains */

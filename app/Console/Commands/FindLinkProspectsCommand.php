@@ -53,8 +53,8 @@ class FindLinkProspectsCommand extends Command
             return self::FAILURE;
         }
 
-        $this->line(sprintf('  • the index returned %d linking domains; %d kept after the spam / authority floor — %d new prospect(s), %d refreshed.',
-            $r['returned'], $r['kept'], $r['new'], $r['refreshed']));
+        $this->line(sprintf('  • the index returned %d linking domains; %d kept after the spam / authority floor — %d new prospect(s), %d refreshed, %d untouched prospect(s) from an earlier run dropped.',
+            $r['returned'], $r['kept'], $r['new'], $r['refreshed'], $r['pruned']));
 
         return self::SUCCESS;
     }

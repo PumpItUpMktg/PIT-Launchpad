@@ -1,5 +1,6 @@
 <?php
 
+use App\KeywordGenerator\Beatability\CompetitorClassifier;
 use App\Links\CompetitorTargets;
 use App\Models\Keyword;
 use App\Models\Site;
@@ -51,4 +52,24 @@ it('never treats a platform host as a competitor — a Facebook page or a Google
     ctScan($site, $kw, 'town_query', Carbon::parse('2026-10-01'), [[null, [[1, 'www.facebook.com'], [2, 'rival-pumps.business.site'], [3, 'localrival.com'], [4, 'smith-plumbing.wixsite.com']]]]);
 
     expect(array_column(app(CompetitorTargets::class)->for($site, 10), 'domain'))->toBe(['localrival.com']);
+});
+
+it('reads the registrable domain, drops foreign country-code sites, forums and franchises — what Sump Pump Gurus\' first run let through', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sumppumpgurus.com']);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump installation', 'town_priority_rank' => 1]);
+    ctScan($site, $kw, 'town_query', Carbon::parse('2026-10-01'), [[null, [
+        [1, 'doityourself.com'], [2, 'm.yelp.com'], [3, 'harrisplumbing.ca'], [4, 'ca.jackery.com'], [5, 'mrhandyman.com'],
+        [6, 'www.oriolebw.com'], [7, 'blog.oriolebw.com'], [8, 'patriotpumpservice.com'],
+    ]]]);
+
+    expect(app(CompetitorTargets::class)->for($site, 10))->toBe([
+        ['domain' => 'oriolebw.com', 'appearances' => 2],   // www. and blog. are one business
+        ['domain' => 'patriotpumpservice.com', 'appearances' => 1],
+    ]);
+});
+
+it('the registrable domain keeps a two-level public suffix', function () {
+    expect(CompetitorClassifier::registrable('m.yelp.com'))->toBe('yelp.com')
+        ->and(CompetitorClassifier::registrable('shop.example.co.uk'))->toBe('example.co.uk')
+        ->and(CompetitorClassifier::registrable('rival-pumps.business.site'))->toBe('business.site');
 });
