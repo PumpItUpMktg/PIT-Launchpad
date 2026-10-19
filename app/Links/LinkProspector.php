@@ -11,8 +11,11 @@ use App\Integrations\Backlinks\BacklinkProvider;
 use App\KeywordGenerator\Beatability\CompetitorClassifier;
 use App\Models\Directory;
 use App\Models\LinkProspect;
+use App\Models\LinkProspectRun;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * The competitor link intersect (§ Links): ask the backlink index for every domain that links to the site's
@@ -35,16 +38,24 @@ final class LinkProspector
     public function run(Site $site): array
     {
         $targets = $this->targets->for($site, max(1, (int) config('launchpad.links.competitor_targets', 10)));
+        $empty = ['targets' => $targets, 'returned' => 0, 'kept' => 0, 'new' => 0, 'refreshed' => 0, 'pruned' => 0, 'dropped_spam' => 0, 'dropped_rank' => 0, 'excluded_competitors' => $this->targets->dropped];
         if ($targets === []) {
-            return ['targets' => [], 'returned' => 0, 'kept' => 0, 'new' => 0, 'refreshed' => 0, 'pruned' => 0, 'dropped_spam' => 0, 'dropped_rank' => 0, 'excluded_competitors' => $this->targets->dropped];
+            return $empty;
         }
 
         $host = BacklinkSyncer::target((string) $site->domain_url);
-        $rows = $this->provider->domainIntersection(
-            array_column($targets, 'domain'),
-            $host !== '' ? [$host] : [],
-            max(1, (int) config('launchpad.links.intersect_limit', 300)),
-        );
+        try {
+            $rows = $this->provider->domainIntersection(
+                array_column($targets, 'domain'),
+                $host !== '' ? [$host] : [],
+                max(1, (int) config('launchpad.links.intersect_limit', 300)),
+            );
+        } catch (Throwable $e) {
+            // The ledger keeps the refusal beside what was asked, then the caller sees the exception.
+            $this->record($site, array_merge($empty, ['status' => LinkProspectRun::FAILED, 'error' => Str::limit($e->getMessage(), 500)]));
+
+            throw $e;
+        }
 
         $minRank = (int) config('launchpad.links.min_rank', 10);
         $spamCap = (int) config('launchpad.links.spam_cap', 30);
@@ -96,8 +107,31 @@ final class LinkProspector
         $pruned = LinkProspect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)
             ->where('status', LinkProspectStatus::New->value)->where('found_at', '<', $now)->delete();
 
-        return ['targets' => $targets, 'returned' => count($rows), 'kept' => $kept, 'new' => $new, 'refreshed' => $refreshed, 'pruned' => $pruned,
+        $result = ['targets' => $targets, 'returned' => count($rows), 'kept' => $kept, 'new' => $new, 'refreshed' => $refreshed, 'pruned' => $pruned,
             'dropped_spam' => $droppedSpam, 'dropped_rank' => $droppedRank, 'excluded_competitors' => $this->targets->dropped];
+        $this->record($site, $result);
+
+        return $result;
+    }
+
+    /** @param  array<string, mixed>  $r */
+    private function record(Site $site, array $r): void
+    {
+        LinkProspectRun::withoutGlobalScope(SiteScope::class)->create([
+            'site_id' => $site->id,
+            'status' => $r['status'] ?? LinkProspectRun::COMPLETE,
+            'targets' => $r['targets'],
+            'excluded' => $r['excluded_competitors'],
+            'returned' => $r['returned'],
+            'kept' => $r['kept'],
+            'new' => $r['new'],
+            'refreshed' => $r['refreshed'],
+            'pruned' => $r['pruned'],
+            'dropped_spam' => $r['dropped_spam'],
+            'dropped_rank' => $r['dropped_rank'],
+            'error' => $r['error'] ?? null,
+            'ran_at' => now(),
+        ]);
     }
 
     /** @param  list<string>  $directoryDomains */

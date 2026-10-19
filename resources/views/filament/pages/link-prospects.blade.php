@@ -28,6 +28,30 @@
                     </div>
                     <x-filament::button size="sm" wire:click="findProspects" wire:confirm="Run the competitor intersect for this site? One backlink-index call.">Find prospects</x-filament::button>
                 </div>
+                @php($run = $this->lastRun)
+                @if ($run !== null)
+                    <div style="margin-top:.75rem;padding:.6rem .75rem;border-radius:.5rem;background:var(--gray-50);font-size:.78rem;line-height:1.5">
+                        <div><strong>Last run</strong> {{ $run->ran_at->diffForHumans() }}
+                            @if ($run->status === \App\Models\LinkProspectRun::FAILED)
+                                · <span style="color:#b91c1c">failed: {{ $run->error }}</span>
+                            @else
+                                · the index returned <strong>{{ $run->returned }}</strong> linking domains · <strong>{{ $run->kept }}</strong> kept ({{ $run->dropped_spam }} dropped as spam, {{ $run->dropped_rank }} below the authority floor) · {{ $run->new }} new, {{ $run->refreshed }} refreshed, {{ $run->pruned }} untouched from an earlier run dropped
+                            @endif
+                        </div>
+                        <div style="color:var(--gray-500)">Competitors asked about:
+                            @forelse ($run->targets as $t)
+                                <span style="white-space:nowrap">{{ $t['domain'] }} <em>({{ $t['source'] === 'map_pack' ? 'map pack, '.$t['appearances'].' cells' : 'organic, above you in '.$t['appearances'].' town results' }})</em></span>@if (! $loop->last), @endif
+                            @empty
+                                none — Town Rank has not found a local competitor yet
+                            @endforelse
+                        </div>
+                        @if ($run->excluded !== [])
+                            <div style="color:var(--gray-500)">Excluded as territory-wide (not a local company):
+                                @foreach ($run->excluded as $d)<span style="white-space:nowrap">{{ $d['domain'] }} <em>({{ (int) round($d['share'] * 100) }}% of one scan's towns)</em></span>@if (! $loop->last), @endif @endforeach
+                            </div>
+                        @endif
+                    </div>
+                @endif
                 <div style="display:flex;gap:.4rem;margin-top:.75rem;flex-wrap:wrap">
                     @foreach (['open' => 'Open', 'new' => 'New', 'contacted' => 'Contacted', 'acquired' => 'Acquired', 'dismissed' => 'Dismissed', 'all' => 'All'] as $key => $label)
                         <x-filament::button size="xs" wire:click="$set('status', '{{ $key }}')" :color="$this->status === $key ? 'primary' : 'gray'">{{ $label }}</x-filament::button>
