@@ -65,13 +65,13 @@ it('keeps the linking domains worth a human\'s time as prospects, classified, an
         new IntersectRow('yelp.com', 93, 0, ['rivalplumbing.com'], null),         // aggregator, not in the catalog
         new IntersectRow('patch.com', 70, 0, ['rivalplumbing.com'], null),        // editorial? (not in the classifier lists → local)
         new IntersectRow('spamdir.example', 60, 45, ['dryguys.com'], null),       // at the spam cap — dropped
-        new IntersectRow('tiny.example', 3, 0, ['dryguys.com'], null),            // below the authority floor — dropped
+        new IntersectRow('tiny.example', 1, 0, ['dryguys.com'], null),            // below the authority floor — dropped
         new IntersectRow('sumppumpgurus.com', 57, 0, ['dryguys.com'], null),      // us — dropped
     ];
 
     $r = (new LinkProspector(intersectProvider($rows, $asked), app(CompetitorTargets::class), app(CompetitorClassifier::class)))->run($site);
 
-    expect($asked)->toBe([[['dryguys.com', 'rivalplumbing.com'], ['sumppumpgurus.com'], 300]])
+    expect($asked)->toBe([[['dryguys.com', 'rivalplumbing.com'], ['sumppumpgurus.com'], 1000]])
         ->and($r['returned'])->toBe(7)->and($r['kept'])->toBe(4)->and($r['new'])->toBe(4)->and($r['refreshed'])->toBe(0);
 
     $p = LinkProspect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()->keyBy('domain');

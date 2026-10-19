@@ -1080,9 +1080,13 @@ return [
     // floor or at the spam cap is dropped before it becomes a prospect.
     'links' => [
         'competitor_targets' => (int) env('LAUNCHPAD_LINKS_COMPETITOR_TARGETS', 10),
-        'intersect_limit' => (int) env('LAUNCHPAD_LINKS_INTERSECT_LIMIT', 300),
-        'min_rank' => (int) env('LAUNCHPAD_LINKS_MIN_RANK', 10),
+        'intersect_limit' => (int) env('LAUNCHPAD_LINKS_INTERSECT_LIMIT', 1000),
+        // The authority floor is LOW on purpose: a local company's referrers — the county chamber, a
+        // township vendor page — sit at 3-15. A floor of 10 kept 3 of 300 on Sump Pump Gurus.
+        'min_rank' => (int) env('LAUNCHPAD_LINKS_MIN_RANK', 2),
         'spam_cap' => (int) env('LAUNCHPAD_LINKS_SPAM_CAP', 30),
+        // A competitor above us in more than this share of all town results is not local (see CompetitorTargets).
+        'max_footprint' => (float) env('LAUNCHPAD_LINKS_MAX_FOOTPRINT', 0.5),
         // Country-code TLDs that still count as local competitors (a .ca site does not serve New Jersey).
         'country_tlds' => array_values(array_filter(array_map('trim', explode(',', (string) env('LAUNCHPAD_LINKS_COUNTRY_TLDS', 'us'))))),
     ],

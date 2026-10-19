@@ -71,5 +71,25 @@ it('reads the registrable domain, drops foreign country-code sites, forums and f
 it('the registrable domain keeps a two-level public suffix', function () {
     expect(CompetitorClassifier::registrable('m.yelp.com'))->toBe('yelp.com')
         ->and(CompetitorClassifier::registrable('shop.example.co.uk'))->toBe('example.co.uk')
-        ->and(CompetitorClassifier::registrable('rival-pumps.business.site'))->toBe('business.site');
+        ->and(CompetitorClassifier::registrable('rival-pumps.business.site'))->toBe('business.site')
+        ->and(CompetitorClassifier::registrable('rivalplumbing.us.com'))->toBe('rivalplumbing.us.com'); // a reseller domain, not "us.com"
+});
+
+it('drops a domain whose footprint is the whole territory — no local company beats us in most town results', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sumppumpgurus.com']);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'emergency sump pump', 'town_priority_rank' => 1]);
+    // 24 towns: the Florida site is above us in every one; the local rival in three.
+    $towns = [];
+    for ($i = 0; $i < 24; $i++) {
+        $towns[] = [null, $i < 3 ? [[1, 'barbaraemergencyrestorationpompanobeachfl.com'], [2, 'oriolebw.com']] : [[1, 'barbaraemergencyrestorationpompanobeachfl.com']]];
+    }
+    ctScan($site, $kw, 'town_query', Carbon::parse('2026-10-01'), $towns);
+
+    expect(array_column(app(CompetitorTargets::class)->for($site, 10), 'domain'))->toBe(['oriolebw.com']);
+
+    // Below the sample size nothing is judged on footprint.
+    $small = Site::factory()->create(['domain_url' => 'https://other.example']);
+    $kw2 = Keyword::factory()->create(['site_id' => $small->id, 'query' => 'q', 'town_priority_rank' => 1]);
+    ctScan($small, $kw2, 'town_query', Carbon::parse('2026-10-01'), [[null, [[1, 'everywhere.com']]], [null, [[1, 'everywhere.com']]]]);
+    expect(array_column(app(CompetitorTargets::class)->for($small, 10), 'domain'))->toBe(['everywhere.com']);
 });

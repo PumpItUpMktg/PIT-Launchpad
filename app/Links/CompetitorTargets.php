@@ -32,6 +32,9 @@ final class CompetitorTargets
         'bing', 'apple', 'yahoo', 'craigslist', 'indeed', 'glassdoor', 'reddit', 'quora',
     ];
 
+    /** Town results needed before a competitor's footprint share means anything. */
+    public const FOOTPRINT_SAMPLE = 20;
+
     public function __construct(
         private readonly PriorityKeywords $priorities,
         private readonly CompetitorClassifier $classifier,
@@ -50,6 +53,7 @@ final class CompetitorTargets
         }
 
         $counts = [];
+        $points = 0;
         foreach ($keywords as $keyword) {
             foreach (TownRankScan::MODES as $mode) {
                 $scanId = TownRankScan::withoutGlobalScope(SiteScope::class)
@@ -58,8 +62,9 @@ final class CompetitorTargets
                 if ($scanId === null) {
                     continue;
                 }
-                $points = TownRankPoint::withoutGlobalScope(SiteScope::class)->where('scan_id', $scanId)->get(['rank', 'top_results']);
-                foreach ($points as $point) {
+                $scanPoints = TownRankPoint::withoutGlobalScope(SiteScope::class)->where('scan_id', $scanId)->get(['rank', 'top_results']);
+                foreach ($scanPoints as $point) {
+                    $points++;
                     $ours = $point->rank;
                     foreach (is_array($point->top_results) ? $point->top_results : [] as $item) {
                         // One competitor per business: the registrable domain (m.yelp.com and yelp.com are one).
@@ -79,8 +84,16 @@ final class CompetitorTargets
             }
         }
 
+        // A local company's footprint is a county, not the territory: a domain above us in more than
+        // `max_footprint` of ALL town results (a Florida restoration site "winning" 1,307 of them) is a
+        // national or junk site the lists do not know, and its links are not ours to copy.
+        // Judged only on a real sample: a site with a handful of town results has no footprint to read.
+        $cap = (float) config('launchpad.links.max_footprint', 0.5);
         $out = [];
         foreach ($counts as $domain => $n) {
+            if ($points >= self::FOOTPRINT_SAMPLE && $n / $points > $cap) {
+                continue;
+            }
             $out[] = ['domain' => (string) $domain, 'appearances' => $n];
         }
         usort($out, fn (array $a, array $b): int => [$b['appearances'], $a['domain']] <=> [$a['appearances'], $b['domain']]);
