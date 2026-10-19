@@ -3,12 +3,18 @@
 use App\Citations\Ui\LocationWorkspace;
 use App\Enums\CitationLifecycleState;
 use App\Enums\CitationPresence;
+use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Enums\DirectoryScope;
+use App\Enums\PageType;
 use App\Models\CitationStatus;
+use App\Models\Content;
 use App\Models\Directory;
 use App\Models\Location;
 use App\Models\LocationNapProfile;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Models\SiteBacklink;
 use App\Models\TenantDirectoryExclusion;
 use App\Support\CurrentSite;
 
@@ -73,4 +79,32 @@ test('within the missing group, submittable and local sort first', function (): 
 
     // Both submittable + missing; local (ZZ) sorts before national (AA) despite the name order.
     expect($rows)->toBe(['ZZ Local', 'AA National']);
+});
+
+test('a missing row carries the directory\'s sign-up link, else its home page, and the index link shows beside the scan verdict', function (): void {
+    $signup = wsDir('Yelp', ['domain' => 'yelp.com', 'submission_url' => 'https://biz.yelp.com/signup', 'homepage_url' => 'https://yelp.com']);
+    $homeOnly = wsDir('MapQuest', ['domain' => 'mapquest.com', 'submission_url' => null, 'homepage_url' => 'https://mapquest.com']);
+    $live = wsDir('BBB', ['domain' => 'bbb.org', 'submission_url' => 'https://bbb.org/apply', 'homepage_url' => 'https://bbb.org']);
+    wsStatus($this, $signup, CitationPresence::Absent);
+    wsStatus($this, $homeOnly, CitationPresence::Absent);
+    wsStatus($this, $live, CitationPresence::PresentMatch);
+    // The index: BBB links to this office; MapQuest links to the home page.
+    Content::factory()->create(['site_id' => $this->site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::Published, 'slug' => 'office-nj', 'location_id' => $this->location->id]);
+    foreach ([['bbb.org', '/office-nj'], ['mapquest.com', '/']] as [$domain, $path]) {
+        SiteBacklink::withoutGlobalScope(SiteScope::class)->create(['site_id' => $this->site->id, 'domain_from' => $domain, 'url_from' => "https://{$domain}/x", 'url_to' => "https://e.example{$path}", 'target_path' => $path, 'dofollow' => true, 'synced_at' => now()]);
+    }
+
+    $result = $this->workspace->forLocation($this->location);
+    $rows = collect($result['rows'])->keyBy('directoryName');
+
+    expect($rows['Yelp']->createUrl)->toBe('https://biz.yelp.com/signup')
+        ->and($rows['Yelp']->createLabel)->toBe('Create listing')
+        ->and($rows['Yelp']->link)->toBeNull()
+        ->and($rows['MapQuest']->createUrl)->toBe('https://mapquest.com')
+        ->and($rows['MapQuest']->createLabel)->toBe('Open site')
+        ->and($rows['MapQuest']->link['state'])->toBe('home')
+        ->and($rows['BBB']->createUrl)->toBeNull() // live: nothing to create
+        ->and($rows['BBB']->link['state'])->toBe('this')
+        ->and($result['stats']['linked'])->toBe(1)
+        ->and($result['stats']['linked_elsewhere'])->toBe(1);
 });

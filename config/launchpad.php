@@ -1066,6 +1066,14 @@ return [
     | in a work-order state (not_listed / needs_fix / submitted / pending) before
     | the differ raises a `stalled` event for the operator to escalate.
     */
+    // Backlink index sync (§ Links). The index returns referring domains strongest first, 1,000 a page;
+    // `max_pages` caps a sync (5 pages = the 5,000 strongest referring domains), which bounds the spend on
+    // a site with a bulk-bought profile without losing anything that carries weight.
+    'backlinks' => [
+        'page_size' => (int) env('LAUNCHPAD_BACKLINKS_PAGE_SIZE', 1000),
+        'max_pages' => (int) env('LAUNCHPAD_BACKLINKS_MAX_PAGES', 5),
+    ],
+
     'citations' => [
         'stalled_scan_threshold' => (int) env('LAUNCHPAD_CITATIONS_STALLED_THRESHOLD', 3),
         // A paid directory is "worth paying" only when its cost per SEO-value point is at or below this

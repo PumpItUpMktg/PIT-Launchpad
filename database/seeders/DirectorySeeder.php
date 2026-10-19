@@ -28,6 +28,31 @@ class DirectorySeeder extends Seeder
     }
 
     /**
+     * Where a business creates or claims its listing, per directory — the link the workspace shows on a
+     * missing row. Only directories whose sign-up page is known; the rest fall back to the home page (the
+     * row then reads "Open site"). Correct or add one in the Directories admin when a directory moves it.
+     *
+     * @var array<string, string>
+     */
+    private const SUBMISSION_URLS = [
+        'google.com' => 'https://business.google.com/create',
+        'yelp.com' => 'https://biz.yelp.com/signup',
+        'facebook.com' => 'https://www.facebook.com/pages/create',
+        'maps.apple.com' => 'https://businessconnect.apple.com/',
+        'bingplaces.com' => 'https://www.bingplaces.com/',
+        'homeadvisor.com' => 'https://pro.homeadvisor.com/',
+        'thumbtack.com' => 'https://www.thumbtack.com/pro',
+        'foursquare.com' => 'https://business.foursquare.com/',
+        'nextdoor.com' => 'https://business.nextdoor.com/',
+        'houzz.com' => 'https://www.houzz.com/pro',
+        'hotfrog.com' => 'https://www.hotfrog.com/add-your-business',
+        'manta.com' => 'https://www.manta.com/claim',
+        'angi.com' => 'https://www.angi.com/companyaccount/',
+        'yellowpages.com' => 'https://accounts.yellowpages.com/',
+        'brownbook.net' => 'https://www.brownbook.net/business/add',
+    ];
+
+    /**
      * @return list<array<string, mixed>>
      */
     private function directories(): array
@@ -64,6 +89,7 @@ class DirectorySeeder extends Seeder
 
         return array_map(fn (array $r): array => [
             'domain' => $r[0],
+            'submission_url' => self::SUBMISSION_URLS[$r[0]] ?? null,
             'slug' => trim((string) preg_replace('/[^a-z0-9]+/', '-', mb_strtolower((string) $r[0])), '-'),
             'homepage_url' => 'https://'.$r[0],
             'name' => $r[1],

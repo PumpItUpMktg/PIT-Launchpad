@@ -3,6 +3,7 @@
 namespace App\Citations\Ui;
 
 use App\Citations\CitationApplicability;
+use App\Citations\LinkEvidence;
 use App\Enums\CitationLifecycleState;
 use App\Enums\CitationPresence;
 use App\Models\CitationScanRun;
@@ -21,7 +22,10 @@ use Illuminate\Support\Carbon;
  */
 final class TenantCitationBoard
 {
-    public function __construct(private readonly CitationApplicability $applicability = new CitationApplicability) {}
+    public function __construct(
+        private readonly CitationApplicability $applicability = new CitationApplicability,
+        private readonly LinkEvidence $links = new LinkEvidence,
+    ) {}
 
     /**
      * @return list<LocationCitationCard>
@@ -61,6 +65,15 @@ final class TenantCitationBoard
             }
 
             $eligibleCount = $eligible->count();
+            $evidence = $this->links->forLocation($location);
+            $eligibleIds = $eligible->pluck('id')->map('strval')->flip();
+            $linked = $linkedElsewhere = 0;
+            foreach ($evidence as $dirId => $e) {
+                if (! $eligibleIds->has($dirId)) {
+                    continue;
+                }
+                $e['state'] === LinkEvidence::THIS ? $linked++ : $linkedElsewhere++;
+            }
 
             return new LocationCitationCard(
                 locationId: (string) $location->id,
@@ -79,6 +92,8 @@ final class TenantCitationBoard
                 lastScannedAt: $this->lastScannedAt($location),
                 lastError: $this->lastError($location),
                 unchecked: $this->unchecked($location),
+                linked: $linked,
+                linkedElsewhere: $linkedElsewhere,
             );
         })->all();
     }

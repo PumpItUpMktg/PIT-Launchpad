@@ -75,6 +75,9 @@
                                     <span style="color:#2563eb">● Submitted {{ $card->submitted }}</span>
                                     <span>● Missing {{ $card->missing }}</span>
                                 </div>
+                                @if ($card->linked + $card->linkedElsewhere > 0)
+                                    <div style="font-size:.72rem;color:var(--gray-500);margin-top:.35rem">Backlink index: <strong>{{ $card->linked }}</strong> directories link to this office's page{{ $card->linkedElsewhere > 0 ? ', '.$card->linkedElsewhere.' link to the home page or another page' : '' }}</div>
+                                @endif
                             </div>
                         @endif
 

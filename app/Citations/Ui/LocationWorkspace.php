@@ -3,6 +3,7 @@
 namespace App\Citations\Ui;
 
 use App\Citations\CitationApplicability;
+use App\Citations\LinkEvidence;
 use App\Enums\DirectoryScope;
 use App\Models\CitationStatus;
 use App\Models\Directory;
@@ -24,10 +25,13 @@ final class LocationWorkspace
         'submitted' => 4, 'live' => 5, 'not_scanned' => 6, 'not_relevant' => 7,
     ];
 
-    public function __construct(private readonly CitationApplicability $applicability = new CitationApplicability) {}
+    public function __construct(
+        private readonly CitationApplicability $applicability = new CitationApplicability,
+        private readonly LinkEvidence $links = new LinkEvidence,
+    ) {}
 
     /**
-     * @return array{stats: array{live: int, mismatch: int, in_flight: int, missing: int, submittable_missing: int, needs_review: int}, rows: list<WorkspaceRow>}
+     * @return array{stats: array{live: int, mismatch: int, in_flight: int, missing: int, submittable_missing: int, needs_review: int, linked: int, linked_elsewhere: int}, rows: list<WorkspaceRow>}
      */
     public function forLocation(Location $location, bool $includeNotRelevant = false): array
     {
@@ -43,8 +47,10 @@ final class LocationWorkspace
         $siblingNames = Location::query()->withoutGlobalScope(SiteScope::class)
             ->where('site_id', $location->site_id)->pluck('name', 'id')->map('strval')->all();
 
+        $evidence = $this->links->forLocation($location);
+
         $rows = [];
-        $stats = ['live' => 0, 'mismatch' => 0, 'in_flight' => 0, 'missing' => 0, 'submittable_missing' => 0, 'needs_review' => 0];
+        $stats = ['live' => 0, 'mismatch' => 0, 'in_flight' => 0, 'missing' => 0, 'submittable_missing' => 0, 'needs_review' => 0, 'linked' => 0, 'linked_elsewhere' => 0];
 
         foreach ($universe as $dir) {
             $eligible = ! $excluded->has((string) $dir->id);
@@ -52,6 +58,12 @@ final class LocationWorkspace
             $chip = CitationChip::for($status, $eligible);
 
             $submittable = $eligible && (bool) $dir->is_submittable && in_array($chip['key'], ['missing', 'mismatch'], true);
+            $link = $evidence[(string) $dir->id] ?? null;
+            // The way in: the directory's own "add your business" page when the catalog knows it, else its
+            // home page — on every row the user still has to create (missing, never scanned).
+            $createUrl = $eligible && in_array($chip['key'], ['missing', 'not_scanned'], true)
+                ? (filled($dir->submission_url) ? (string) $dir->submission_url : (filled($dir->homepage_url) ? (string) $dir->homepage_url : null))
+                : null;
             $rows[] = new WorkspaceRow(
                 statusId: $status !== null ? (string) $status->id : null,
                 directoryId: (string) $dir->id,
@@ -69,7 +81,13 @@ final class LocationWorkspace
                 listedFor: $status !== null && $status->attributed_location_id !== null && $status->attributed_location_id !== (string) $location->id
                     ? ($siblingNames[$status->attributed_location_id] ?? 'another location')
                     : null,
+                link: $link,
+                createUrl: $createUrl,
+                createLabel: $createUrl === null ? null : (filled($dir->submission_url) ? 'Create listing' : 'Open site'),
             );
+            if ($eligible && $link !== null) {
+                $link['state'] === LinkEvidence::THIS ? $stats['linked']++ : $stats['linked_elsewhere']++;
+            }
 
             match ($chip['key']) {
                 'live' => $stats['live']++,

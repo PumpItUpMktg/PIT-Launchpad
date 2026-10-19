@@ -26,6 +26,8 @@ use App\Integrations\Analytics\Ga4PageTraffic;
 use App\Integrations\Analytics\Ga4SiteTraffic;
 use App\Integrations\Analytics\PageTrafficProvider;
 use App\Integrations\Analytics\SiteTrafficProvider;
+use App\Integrations\Backlinks\BacklinkProvider;
+use App\Integrations\Backlinks\DataForSeoBacklinkProvider;
 use App\Integrations\BingWebmaster\BingWebmaster;
 use App\Integrations\BingWebmaster\BingWebmasterProvider;
 use App\Integrations\BingWebmaster\NullBingWebmaster;
@@ -305,6 +307,12 @@ class AppServiceProvider extends ServiceProvider
                 ? new HttpCloudflareClient($token, (int) config('services.cloudflare.timeout', 20))
                 : new MockCloudflareClient;
         });
+
+        // § Links — the backlink index rides the same DataForSEO account (Backlinks API). Tests fake the
+        // HTTP layer like every other DataForSEO call.
+        $this->app->singleton(BacklinkProvider::class, fn () => new DataForSeoBacklinkProvider(
+            $this->app->make(DataForSeoClient::class),
+        ));
 
         $this->app->singleton(SerpProvider::class, fn () => new DataForSeoSerpProvider(
             $this->app->make(DataForSeoClient::class),

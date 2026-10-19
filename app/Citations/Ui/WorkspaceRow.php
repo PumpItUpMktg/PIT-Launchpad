@@ -2,6 +2,7 @@
 
 namespace App\Citations\Ui;
 
+use App\Citations\LinkEvidence;
 use Illuminate\Support\Carbon;
 
 /**
@@ -30,5 +31,16 @@ final readonly class WorkspaceRow
         public int $sortRank,
         /** The sibling location this directory's found page belongs to (the URL is theirs, not this location's). */
         public ?string $listedFor = null,
+        /**
+         * What the backlink index says: the directory's strongest link to the site and where it lands
+         * (see {@see LinkEvidence}); null when the index holds no link from it.
+         *
+         * @var array{state: string, label: string, listing_url: string, target_path: string, dofollow: bool, rank: int|null, last_seen: string|null, index_broken: bool}|null
+         */
+        public ?array $link = null,
+        /** Where the user creates the listing: the directory's submission URL, else its home page. Set on missing / unscanned rows. */
+        public ?string $createUrl = null,
+        /** 'Create listing' when the directory has a submission URL, 'Open site' when only its home page is known. */
+        public ?string $createLabel = null,
     ) {}
 }
