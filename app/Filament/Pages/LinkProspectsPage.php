@@ -4,7 +4,10 @@ namespace App\Filament\Pages;
 
 use App\Enums\LinkProspectStatus;
 use App\Jobs\FindLinkProspects;
+use App\Links\OutreachKitDrafter;
 use App\Models\LinkProspect;
+use App\Models\Location;
+use App\Models\OutreachKit;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Operator\ActiveTenant;
@@ -22,6 +25,8 @@ use Livewire\Attributes\Url;
  * on the worker. Nothing here contacts anyone or submits anything.
  *
  * @property-read list<LinkProspect> $prospects
+ * @property-read list<array{id: string, name: string}> $offices
+ * @property-read array{prospect: LinkProspect, kit: ?OutreachKit}|null $activeKit
  * @property-read array{count: int, last_found_at: Carbon|null, by_status: array<string, int>} $summary
  */
 class LinkProspectsPage extends Page
@@ -42,6 +47,12 @@ class LinkProspectsPage extends Page
 
     #[Url]
     public string $status = 'open';
+
+    /** The prospect whose kit is open in the side panel. */
+    public ?string $activeProspectId = null;
+
+    /** The office the open kit speaks for ('' = the brand, linking to the home page). */
+    public string $kitLocationId = '';
 
     public static function menuTag(): string
     {
@@ -121,6 +132,62 @@ class LinkProspectsPage extends Page
             return;
         }
         $prospect->forceFill(['notes' => trim($notes) !== '' ? mb_substr(trim($notes), 0, 1000) : null])->save();
+    }
+
+    public function openKit(string $prospectId): void
+    {
+        $this->activeProspectId = $prospectId;
+    }
+
+    public function closeKit(): void
+    {
+        $this->activeProspectId = null;
+    }
+
+    /** @return list<array{id: string, name: string}> */
+    public function getOfficesProperty(): array
+    {
+        if ($this->siteId === null) {
+            return [];
+        }
+
+        return Location::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->orderBy('name')->get(['id', 'name'])
+            ->map(fn (Location $l): array => ['id' => (string) $l->id, 'name' => (string) $l->name])->all();
+    }
+
+    /** @return array{prospect: LinkProspect, kit: ?OutreachKit}|null */
+    public function getActiveKitProperty(): ?array
+    {
+        $prospect = $this->activeProspect();
+        if ($prospect === null) {
+            return null;
+        }
+        $kit = OutreachKit::withoutGlobalScope(SiteScope::class)->where('site_id', $prospect->site_id)
+            ->where('location_id', $this->kitLocationId !== '' ? $this->kitLocationId : null)->where('target_domain', $prospect->domain)->first();
+
+        return ['prospect' => $prospect, 'kit' => $kit];
+    }
+
+    /** Draft (or redraft) the pitch for the open prospect, speaking for the chosen office — one cheap model call, kept. */
+    public function draftKit(bool $redraft = false): void
+    {
+        $prospect = $this->activeProspect();
+        if ($prospect === null) {
+            return;
+        }
+        $location = $this->kitLocationId !== ''
+            ? Location::withoutGlobalScope(SiteScope::class)->where('site_id', $prospect->site_id)->find($this->kitLocationId)
+            : null;
+        $kit = app(OutreachKitDrafter::class)->forProspect($prospect, $location, $redraft);
+        Notification::make()->{$kit->model_ok ? 'success' : 'warning'}()
+            ->title($kit->model_ok ? "Pitch ready for {$prospect->domain}" : "Pitch for {$prospect->domain} uses the plain fallback copy")
+            ->send();
+    }
+
+    private function activeProspect(): ?LinkProspect
+    {
+        return $this->siteId === null || $this->activeProspectId === null ? null
+            : LinkProspect::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->find($this->activeProspectId);
     }
 
     private function site(): ?Site

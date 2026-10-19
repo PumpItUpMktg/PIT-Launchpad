@@ -1,11 +1,15 @@
 <?php
 
+use App\ContentEngine\Drafting\VoiceResolver;
 use App\Enums\LinkProspectKind;
 use App\Enums\LinkProspectStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\LinkProspectsPage;
 use App\Jobs\FindLinkProspects;
+use App\Links\OutreachKitDrafter;
 use App\Models\LinkProspect;
+use App\Models\Location;
+use App\Models\OutreachKit;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
@@ -13,6 +17,7 @@ use App\Operator\ActiveTenant;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
+use Tests\Support\FakeClaudeClient;
 
 beforeEach(function (): void {
     Queue::fake();
@@ -49,4 +54,20 @@ it('find prospects queues one intersect for the working tenant', function () {
     Livewire::test(LinkProspectsPage::class)->call('findProspects');
 
     Queue::assertPushed(FindLinkProspects::class, fn (FindLinkProspects $job): bool => $job->siteId === (string) $this->site->id);
+});
+
+it('opens a prospect\'s pitch panel and drafts the kit for the chosen office', function () {
+    app()->instance(OutreachKitDrafter::class, new OutreachKitDrafter(claude: new FakeClaudeClient('{"short_description":"s","long_description":"l","categories":[],"pitch_subject":"Subject here","pitch_body":"Body here"}'), voices: app(VoiceResolver::class)));
+    $office = Location::factory()->create(['site_id' => $this->site->id, 'name' => 'Hoboken']);
+    $p = LinkProspect::withoutGlobalScope(SiteScope::class)->create(['site_id' => $this->site->id, 'domain' => 'hudson-chamber.org', 'rank' => 40, 'competitors' => ['rivalplumbing.com'], 'competitor_count' => 1, 'kind' => LinkProspectKind::Local, 'status' => LinkProspectStatus::New, 'found_at' => now()]);
+
+    Livewire::test(LinkProspectsPage::class)
+        ->call('openKit', $p->id)
+        ->assertSee('Draft pitch')
+        ->set('kitLocationId', $office->id)
+        ->call('draftKit', false)
+        ->assertSee('Subject here')
+        ->assertSee('Body here');
+
+    expect(OutreachKit::withoutGlobalScope(SiteScope::class)->where('target_domain', 'hudson-chamber.org')->value('location_id'))->toBe((string) $office->id);
 });

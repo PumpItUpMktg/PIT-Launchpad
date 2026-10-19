@@ -110,6 +110,7 @@ use App\KeywordGenerator\Discovery\SiloKeywordGenerator;
 use App\KeywordGenerator\Pipeline\KeywordPipeline;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\KeywordGenerator\Tracking\PositionTracker;
+use App\Links\OutreachKitDrafter;
 use App\Listeners\SyncWireframeKitsOnMigrate;
 use App\Local\Proof\JobCaptureLocalJobs;
 use App\Local\Proof\LocalJobProvider;
@@ -665,6 +666,11 @@ class AppServiceProvider extends ServiceProvider
 
         // The post→silo reconcile's opt-in last rung files the leftover published posts — the same cheap
         // scoring model, one call per post.
+        // § Links — the outreach kit writes short copy; the cheap scoring model is enough.
+        $this->app->when(OutreachKitDrafter::class)
+            ->needs(ClaudeClient::class)
+            ->give(fn () => $this->app->make(ClaudeClientFactory::class)->scoring());
+
         $this->app->when(AiSiloRouter::class)
             ->needs(ClaudeClient::class)
             ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());

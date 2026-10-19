@@ -5,9 +5,12 @@ namespace App\Filament\Pages\Citations;
 use App\Citations\CitationLifecycle;
 use App\Citations\Ui\LocationWorkspace;
 use App\Citations\Ui\WorkspaceRow;
+use App\Links\OutreachKitDrafter;
 use App\Models\CitationEvent;
 use App\Models\CitationStatus;
+use App\Models\Directory;
 use App\Models\Location;
+use App\Models\OutreachKit;
 use App\Models\Scopes\SiteScope;
 use App\Models\TenantDirectoryExclusion;
 use App\Operator\ActiveTenant;
@@ -112,7 +115,7 @@ class CitationsWorkspace extends Page
         $this->activeDirectoryId = null;
     }
 
-    /** @return array{status: ?CitationStatus, events: Collection<int, CitationEvent>}|null */
+    /** @return array{status: ?CitationStatus, events: Collection<int, CitationEvent>, directory: ?Directory, kit: ?OutreachKit}|null */
     public function getActiveDetailProperty(): ?array
     {
         $location = $this->getLocation();
@@ -127,7 +130,29 @@ class CitationsWorkspace extends Page
             ->where('location_id', $location->id)->where('directory_id', $this->activeDirectoryId)
             ->latest('occurred_at')->get();
 
-        return ['status' => $status, 'events' => $events];
+        $directory = Directory::query()->find($this->activeDirectoryId);
+        $kit = $directory === null ? null : OutreachKit::query()->withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $location->site_id)->where('location_id', $location->id)->where('target_domain', $directory->domain)->first();
+
+        return ['status' => $status, 'events' => $events, 'directory' => $directory, 'kit' => $kit];
+    }
+
+    /**
+     * Draft (or redraft) the listing kit for the open directory × this office: the NAP verbatim, the page to
+     * link, and the descriptions / categories / note in the tenant's voice — one cheap model call, kept.
+     */
+    public function draftKit(bool $redraft = false): void
+    {
+        $location = $this->getLocation();
+        $directory = $this->activeDirectoryId !== null ? Directory::query()->find($this->activeDirectoryId) : null;
+        if ($location === null || $directory === null) {
+            return;
+        }
+        $kit = app(OutreachKitDrafter::class)->forDirectory($location, $directory, $redraft);
+        Notification::make()->{$kit->model_ok ? 'success' : 'warning'}()
+            ->title($kit->model_ok ? "Listing kit ready for {$directory->name}" : "Listing kit for {$directory->name} uses the plain fallback copy")
+            ->body($kit->model_ok ? 'Copy the fields below into the directory form.' : 'The model did not answer; the descriptions are written from the NAP. Redraft to try again.')
+            ->send();
     }
 
     /**

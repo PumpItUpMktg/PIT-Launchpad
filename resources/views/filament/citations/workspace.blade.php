@@ -107,6 +107,35 @@
                         <button wire:click="closeRow" style="border:0;background:none;font-size:1.4rem;cursor:pointer;color:var(--gray-500)">&times;</button>
                     </div>
 
+                    @php($kit = $detail['kit'] ?? null)
+                    <div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
+                            <h3 style="font-size:.8rem;text-transform:uppercase;color:var(--gray-500)">Listing kit</h3>
+                            <x-filament::button size="xs" :color="$kit ? 'gray' : 'primary'" wire:click="draftKit({{ $kit ? 'true' : 'false' }})">{{ $kit ? 'Redraft' : 'Draft listing kit' }}</x-filament::button>
+                        </div>
+                        @if ($kit)
+                            @php($k = $kit->payload)
+                            @if (! $kit->model_ok)
+                                <p style="font-size:.75rem;color:#b45309;margin-bottom:.4rem">Plain fallback copy — the model did not answer. Redraft to try again.</p>
+                            @endif
+                            <div style="display:flex;flex-direction:column;gap:.5rem;font-size:.8rem">
+                                <label style="display:block"><span style="color:var(--gray-500)">Business name</span><input readonly value="{{ $k['nap']['business_name'] ?? '' }}" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff"></label>
+                                <label style="display:block"><span style="color:var(--gray-500)">Address · phone</span><input readonly value="{{ trim(($k['nap']['address'] ?? '').', '.($k['nap']['city'] ?? '').', '.($k['nap']['state'] ?? '').' '.($k['nap']['postal'] ?? '')) }} · {{ $k['nap']['phone'] ?? '' }}" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff"></label>
+                                <label style="display:block"><span style="color:var(--gray-500)">Website (link to this page)</span><input readonly value="{{ $k['link_url'] ?? '' }}" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff"></label>
+                                <label style="display:block"><span style="color:var(--gray-500)">Categories</span><input readonly value="{{ implode(' · ', $k['categories'] ?? []) }}" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff"></label>
+                                <label style="display:block"><span style="color:var(--gray-500)">Short description</span><textarea readonly rows="2" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff">{{ $k['short_description'] ?? '' }}</textarea></label>
+                                <label style="display:block"><span style="color:var(--gray-500)">Long description</span><textarea readonly rows="5" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff">{{ $k['long_description'] ?? '' }}</textarea></label>
+                                <label style="display:block"><span style="color:var(--gray-500)">Note for the form</span><textarea readonly rows="3" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff">{{ $k['pitch_body'] ?? '' }}</textarea></label>
+                                @if (! empty($k['target']['submission_url']))
+                                    <a href="{{ $k['target']['submission_url'] }}" target="_blank" rel="noopener" style="font-size:.78rem;color:#2563eb;text-decoration:underline">Open {{ $detail['directory']?->name }} to create the listing ↗</a>
+                                @endif
+                            </div>
+                            <p style="font-size:.7rem;color:var(--gray-400);margin-top:.4rem">Drafted {{ $kit->drafted_at->diffForHumans() }}. Click a field to select it.</p>
+                        @else
+                            <p style="font-size:.8rem;color:var(--gray-400)">Name, address, phone, the page to link, and descriptions in your voice — ready to paste into the directory form.</p>
+                        @endif
+                    </div>
+
                     @if ($detail['status'])
                         @php($mm = $detail['status']->mismatch_fields ?? [])
                         @if (! empty($mm))
