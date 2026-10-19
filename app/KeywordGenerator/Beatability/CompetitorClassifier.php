@@ -20,7 +20,7 @@ class CompetitorClassifier
         'homedepot', 'lowes', 'amazon', 'walmart', 'target', 'sears',
         'rotorooter', 'mrrooter', 'rooterman', 'benjaminfranklinplumbing',
         'arsrescuerooter', 'americanresidential', 'mrhandyman', 'servicemaster', 'neighborly',
-        'servpro', 'basementsystems', 'jackery',
+        'servpro', 'basementsystems', 'jackery', 'zoomdrain',
     ];
 
     private const EDITORIAL = [
@@ -42,7 +42,10 @@ class CompetitorClassifier
         }
         $second = $labels[$n - 2];
         $tld = $labels[$n - 1];
-        $take = strlen($tld) === 2 && in_array($second, ['co', 'com', 'net', 'org', 'gov', 'edu', 'ac'], true) ? 3 : 2;
+        // co.uk / com.au style, and the two-letter resellers under a generic TLD (us.com, uk.com, eu.com).
+        $take = (strlen($tld) === 2 && in_array($second, ['co', 'com', 'net', 'org', 'gov', 'edu', 'ac'], true))
+            || (strlen($second) === 2 && in_array($tld, ['com', 'net', 'org'], true))
+            ? 3 : 2;
 
         return implode('.', array_slice($labels, -$take));
     }
