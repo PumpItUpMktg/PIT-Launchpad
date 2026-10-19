@@ -30,13 +30,13 @@ final class LinkProspector
     ) {}
 
     /**
-     * @return array{targets: list<array{domain: string, appearances: int}>, returned: int, kept: int, new: int, refreshed: int, pruned: int}
+     * @return array{targets: list<array{domain: string, appearances: int}>, returned: int, kept: int, new: int, refreshed: int, pruned: int, dropped_spam: int, dropped_rank: int, excluded_competitors: list<array{domain: string, appearances: int, share: float}>}
      */
     public function run(Site $site): array
     {
         $targets = $this->targets->for($site, max(1, (int) config('launchpad.links.competitor_targets', 10)));
         if ($targets === []) {
-            return ['targets' => [], 'returned' => 0, 'kept' => 0, 'new' => 0, 'refreshed' => 0, 'pruned' => 0];
+            return ['targets' => [], 'returned' => 0, 'kept' => 0, 'new' => 0, 'refreshed' => 0, 'pruned' => 0, 'dropped_spam' => 0, 'dropped_rank' => 0, 'excluded_competitors' => $this->targets->dropped];
         }
 
         $host = BacklinkSyncer::target((string) $site->domain_url);
@@ -51,10 +51,20 @@ final class LinkProspector
         $directoryDomains = Directory::query()->where('is_active', true)->pluck('domain')->map('strval')->all();
         $existing = LinkProspect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()->keyBy('domain');
 
-        $kept = $new = $refreshed = 0;
+        $kept = $new = $refreshed = $droppedSpam = $droppedRank = 0;
         $now = now();
         foreach ($rows as $row) {
-            if ($row->domain === $host || ($row->rank !== null && $row->rank < $minRank) || ($row->spamScore !== null && $row->spamScore >= $spamCap)) {
+            if ($row->domain === $host) {
+                continue;
+            }
+            if ($row->spamScore !== null && $row->spamScore >= $spamCap) {
+                $droppedSpam++;
+
+                continue;
+            }
+            if ($row->rank !== null && $row->rank < $minRank) {
+                $droppedRank++;
+
                 continue;
             }
             $kept++;
@@ -86,7 +96,8 @@ final class LinkProspector
         $pruned = LinkProspect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)
             ->where('status', LinkProspectStatus::New->value)->where('found_at', '<', $now)->delete();
 
-        return ['targets' => $targets, 'returned' => count($rows), 'kept' => $kept, 'new' => $new, 'refreshed' => $refreshed, 'pruned' => $pruned];
+        return ['targets' => $targets, 'returned' => count($rows), 'kept' => $kept, 'new' => $new, 'refreshed' => $refreshed, 'pruned' => $pruned,
+            'dropped_spam' => $droppedSpam, 'dropped_rank' => $droppedRank, 'excluded_competitors' => $this->targets->dropped];
     }
 
     /** @param  list<string>  $directoryDomains */

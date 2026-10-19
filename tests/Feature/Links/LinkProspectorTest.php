@@ -72,7 +72,8 @@ it('keeps the linking domains worth a human\'s time as prospects, classified, an
     $r = (new LinkProspector(intersectProvider($rows, $asked), app(CompetitorTargets::class), app(CompetitorClassifier::class)))->run($site);
 
     expect($asked)->toBe([[['dryguys.com', 'rivalplumbing.com'], ['sumppumpgurus.com'], 1000]])
-        ->and($r['returned'])->toBe(7)->and($r['kept'])->toBe(4)->and($r['new'])->toBe(4)->and($r['refreshed'])->toBe(0);
+        ->and($r['returned'])->toBe(7)->and($r['kept'])->toBe(4)->and($r['new'])->toBe(4)->and($r['refreshed'])->toBe(0)
+        ->and($r['dropped_spam'])->toBe(1)->and($r['dropped_rank'])->toBe(1);
 
     $p = LinkProspect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()->keyBy('domain');
     expect($p)->toHaveCount(4)
@@ -122,7 +123,7 @@ it('the command reports the competitors asked about and what the list gained', f
 
     $this->artisan('launchpad:find-link-prospects', ['--site' => $site->id])
         ->expectsOutputToContain('dryguys.com (above us in 1 results), rivalplumbing.com (above us in 1 results)')
-        ->expectsOutputToContain('the index returned 1 linking domains; 1 kept after the spam / authority floor — 1 new prospect(s), 0 refreshed, 0 untouched prospect(s) from an earlier run dropped.')
+        ->expectsOutputToContain('the index returned 1 linking domains; 1 kept (0 dropped as spam, 0 below the authority floor) — 1 new prospect(s), 0 refreshed, 0 untouched prospect(s) from an earlier run dropped.')
         ->assertSuccessful();
 });
 
