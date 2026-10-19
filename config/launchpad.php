@@ -1066,6 +1066,25 @@ return [
     | in a work-order state (not_listed / needs_fix / submitted / pending) before
     | the differ raises a `stalled` event for the operator to escalate.
     */
+    // Backlink index sync (§ Links). The index returns referring domains strongest first, 1,000 a page;
+    // `max_pages` caps a sync (5 pages = the 5,000 strongest referring domains), which bounds the spend on
+    // a site with a bulk-bought profile without losing anything that carries weight.
+    'backlinks' => [
+        'page_size' => (int) env('LAUNCHPAD_BACKLINKS_PAGE_SIZE', 1000),
+        'max_pages' => (int) env('LAUNCHPAD_BACKLINKS_MAX_PAGES', 5),
+    ],
+
+    // Competitor link intersect (§ Links). `competitor_targets` = how many local competitors (strongest
+    // first, by how often Town Rank finds them above us) are asked about per run — the index takes up to 20.
+    // `intersect_limit` = rows asked for; `min_rank` / `spam_cap` = the door: a domain below the authority
+    // floor or at the spam cap is dropped before it becomes a prospect.
+    'links' => [
+        'competitor_targets' => (int) env('LAUNCHPAD_LINKS_COMPETITOR_TARGETS', 10),
+        'intersect_limit' => (int) env('LAUNCHPAD_LINKS_INTERSECT_LIMIT', 300),
+        'min_rank' => (int) env('LAUNCHPAD_LINKS_MIN_RANK', 10),
+        'spam_cap' => (int) env('LAUNCHPAD_LINKS_SPAM_CAP', 30),
+    ],
+
     'citations' => [
         'stalled_scan_threshold' => (int) env('LAUNCHPAD_CITATIONS_STALLED_THRESHOLD', 3),
         // A paid directory is "worth paying" only when its cost per SEO-value point is at or below this

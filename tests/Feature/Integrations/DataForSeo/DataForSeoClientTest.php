@@ -278,3 +278,95 @@ it('surfaces a 40101 that persists past its one retry', function () {
     expect(fn () => dfsClient()->liveOrganic('site:a.com "x"', 2840, 'en', 10))->toThrow(DataForSeoException::class);
     HttpFacade::assertSentCount(2);
 });
+
+it('reads a backlink summary on the 0-100 rank scale', function () {
+    HttpFacade::fake([
+        '*/backlinks/summary/live' => HttpFacade::response(dfsEnvelope([
+            ['target' => 'sumppumpgurus.com', 'rank' => 57, 'backlinks' => 20147, 'referring_domains' => 3482, 'broken_backlinks' => 1864],
+        ])),
+    ]);
+
+    $out = dfsClient()->backlinksSummary('sumppumpgurus.com');
+
+    expect($out)->toBe(['backlinks' => 20147, 'referring_domains' => 3482, 'broken_backlinks' => 1864, 'rank' => 57]);
+
+    HttpFacade::assertSent(fn ($request) => str_contains($request->url(), 'backlinks/summary/live')
+        && $request->data()[0]['target'] === 'sumppumpgurus.com'
+        && $request->data()[0]['rank_scale'] === 'one_hundred');
+});
+
+it('pages backlinks one per referring domain, strongest first, and carries the continuation token', function () {
+    HttpFacade::fake([
+        '*/backlinks/backlinks/live' => HttpFacade::response(dfsEnvelope([[
+            'total_count' => 2, 'items_count' => 2, 'search_after_token' => 'tok-2',
+            'items' => [
+                ['domain_from' => 'www.yelp.com', 'url_from' => 'https://www.yelp.com/biz/spg', 'url_to' => 'https://sumppumpgurus.com/hoboken-nj/', 'domain_from_rank' => 93, 'page_from_rank' => 40, 'backlink_spam_score' => 0, 'dofollow' => false, 'is_broken' => false, 'anchor' => 'Website', 'first_seen' => '2025-10-04 10:06:05 +00:00', 'last_seen' => '2026-01-29 16:48:23 +00:00'],
+                ['domain_from' => 'xpr.media', 'url_from' => 'https://xpr.media/story/1/', 'url_to' => 'https://sumppumpgurus.com/', 'domain_from_rank' => 90, 'dofollow' => true, 'is_broken' => false, 'anchor' => '', 'first_seen' => null],
+                ['type' => 'noise', 'domain_from' => ''],
+            ],
+        ]])),
+    ]);
+
+    $out = dfsClient()->backlinksLive('sumppumpgurus.com', 'one_per_domain', 1000, 'tok-1');
+
+    expect($out['total_count'])->toBe(2)
+        ->and($out['search_after_token'])->toBe('tok-2')
+        ->and($out['items'])->toHaveCount(2)
+        ->and($out['items'][0]['domain_from'])->toBe('yelp.com') // www stripped
+        ->and($out['items'][0]['dofollow'])->toBeFalse()
+        ->and($out['items'][0]['spam_score'])->toBe(0)
+        ->and($out['items'][0]['first_seen'])->toBe('2025-10-04')
+        ->and($out['items'][1]['anchor'])->toBeNull()
+        ->and($out['items'][1]['page_from_rank'])->toBeNull();
+
+    HttpFacade::assertSent(function ($request) {
+        $body = $request->data()[0];
+
+        return str_contains($request->url(), 'backlinks/backlinks/live')
+            && $body['target'] === 'sumppumpgurus.com'
+            && $body['mode'] === 'one_per_domain'
+            && $body['limit'] === 1000
+            && $body['search_after_token'] === 'tok-1'
+            && $body['backlinks_status_type'] === 'live'
+            && $body['rank_scale'] === 'one_hundred';
+    });
+});
+
+it('asks the domain intersection for domains linking to any competitor and not to us, and names each domain\'s linked targets', function () {
+    HttpFacade::fake([
+        '*/backlinks/domain_intersection/live' => HttpFacade::response(dfsEnvelope([[
+            'total_count' => 2, 'items_count' => 2,
+            'items' => [
+                ['domain_intersection' => [
+                    '1' => ['target' => 'www.bucks-chamber.org', 'rank' => 41, 'backlinks' => 3, 'first_seen' => '2024-03-01 00:00:00 +00:00', 'backlinks_spam_score' => 0],
+                    '3' => ['target' => 'www.bucks-chamber.org', 'rank' => 41, 'backlinks' => 1, 'first_seen' => '2023-01-05 00:00:00 +00:00', 'backlinks_spam_score' => 5],
+                ], 'summary' => ['intersections_count' => 2]],
+                ['domain_intersection' => [
+                    '2' => ['target' => 'spamdir.example', 'rank' => 8, 'backlinks' => 40, 'first_seen' => null, 'backlinks_spam_score' => 45],
+                ], 'summary' => ['intersections_count' => 1]],
+                ['domain_intersection' => [], 'summary' => ['intersections_count' => 0]],
+            ],
+        ]])),
+    ]);
+
+    $out = dfsClient()->backlinksDomainIntersection(['rivalplumbing.com', 'dryguys.com', 'basementpros.com'], ['sumppumpgurus.com'], 300);
+
+    expect($out)->toHaveCount(2)
+        ->and($out[0]['domain'])->toBe('bucks-chamber.org')
+        ->and($out[0]['linked_targets'])->toBe(['rivalplumbing.com', 'basementpros.com'])
+        ->and($out[0]['rank'])->toBe(41)
+        ->and($out[0]['spam_score'])->toBe(5)      // the worst of its links
+        ->and($out[0]['first_seen'])->toBe('2023-01-05') // the earliest
+        ->and($out[1]['linked_targets'])->toBe(['dryguys.com']);
+
+    HttpFacade::assertSent(function ($request) {
+        $body = $request->data()[0];
+
+        return str_contains($request->url(), 'backlinks/domain_intersection/live')
+            && $body['targets'] === [1 => 'rivalplumbing.com', 2 => 'dryguys.com', 3 => 'basementpros.com']
+            && $body['exclude_targets'] === ['sumppumpgurus.com']
+            && $body['intersection_mode'] === 'partial'
+            && $body['rank_scale'] === 'one_hundred'
+            && $body['limit'] === 300;
+    });
+});

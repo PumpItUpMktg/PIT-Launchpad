@@ -171,6 +171,11 @@ Schedule::command('launchpad:send-monthly-reports')->monthlyOn(1, '08:00')->with
 // action on a location.
 Schedule::command('launchpad:refresh-places --all')->weeklyOn(4, '02:00')->withoutOverlapping()->onOneServer(); // Thu
 
+// Backlink sync — monthly pull of every site's referring domains from the backlink index, the day after
+// the citation scan reads it: the workspace's link column, the dead-URL ledger and the competitor intersect
+// all read `site_backlinks`. One summary call + one call per 1,000 referring domains per site.
+Schedule::command('launchpad:sync-backlinks --all')->monthlyOn(2, '05:00')->withoutOverlapping()->onOneServer();
+
 // Citation scan — monthly directory-listing sweep for every NAP-profiled location. Queues one scan per
 // location; the run records what changed (new/fixed/regressed/lost), verifies in-flight submissions, and
 // refreshes the Local Presence Score. withoutOverlapping so a slow month can't stack.

@@ -26,6 +26,8 @@ use App\Integrations\Analytics\Ga4PageTraffic;
 use App\Integrations\Analytics\Ga4SiteTraffic;
 use App\Integrations\Analytics\PageTrafficProvider;
 use App\Integrations\Analytics\SiteTrafficProvider;
+use App\Integrations\Backlinks\BacklinkProvider;
+use App\Integrations\Backlinks\DataForSeoBacklinkProvider;
 use App\Integrations\BingWebmaster\BingWebmaster;
 use App\Integrations\BingWebmaster\BingWebmasterProvider;
 use App\Integrations\BingWebmaster\NullBingWebmaster;
@@ -108,6 +110,7 @@ use App\KeywordGenerator\Discovery\SiloKeywordGenerator;
 use App\KeywordGenerator\Pipeline\KeywordPipeline;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\KeywordGenerator\Tracking\PositionTracker;
+use App\Links\OutreachKitDrafter;
 use App\Listeners\SyncWireframeKitsOnMigrate;
 use App\Local\Proof\JobCaptureLocalJobs;
 use App\Local\Proof\LocalJobProvider;
@@ -305,6 +308,12 @@ class AppServiceProvider extends ServiceProvider
                 ? new HttpCloudflareClient($token, (int) config('services.cloudflare.timeout', 20))
                 : new MockCloudflareClient;
         });
+
+        // § Links — the backlink index rides the same DataForSEO account (Backlinks API). Tests fake the
+        // HTTP layer like every other DataForSEO call.
+        $this->app->singleton(BacklinkProvider::class, fn () => new DataForSeoBacklinkProvider(
+            $this->app->make(DataForSeoClient::class),
+        ));
 
         $this->app->singleton(SerpProvider::class, fn () => new DataForSeoSerpProvider(
             $this->app->make(DataForSeoClient::class),
@@ -657,6 +666,11 @@ class AppServiceProvider extends ServiceProvider
 
         // The post→silo reconcile's opt-in last rung files the leftover published posts — the same cheap
         // scoring model, one call per post.
+        // § Links — the outreach kit writes short copy; the cheap scoring model is enough.
+        $this->app->when(OutreachKitDrafter::class)
+            ->needs(ClaudeClient::class)
+            ->give(fn () => $this->app->make(ClaudeClientFactory::class)->scoring());
+
         $this->app->when(AiSiloRouter::class)
             ->needs(ClaudeClient::class)
             ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());

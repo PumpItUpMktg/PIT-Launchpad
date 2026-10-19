@@ -16,6 +16,7 @@
             <x-filament::section><div style="font-size:.72rem;text-transform:uppercase;color:var(--gray-500)">Wrong NAP</div><div style="font-size:1.5rem;font-weight:600;color:#b45309">{{ $stats['mismatch'] ?? 0 }}</div></x-filament::section>
             <x-filament::section><div style="font-size:.72rem;text-transform:uppercase;color:var(--gray-500)">In flight</div><div style="font-size:1.5rem;font-weight:600">{{ $stats['in_flight'] ?? 0 }}</div></x-filament::section>
             <x-filament::section><div style="font-size:.72rem;text-transform:uppercase;color:var(--gray-500)">Missing</div><div style="font-size:1.5rem;font-weight:600">{{ $stats['missing'] ?? 0 }}</div><div style="font-size:.72rem;color:var(--gray-400)">{{ $stats['submittable_missing'] ?? 0 }} submittable</div></x-filament::section>
+            <x-filament::section><div style="font-size:.72rem;text-transform:uppercase;color:var(--gray-500)">Linked here</div><div style="font-size:1.5rem;font-weight:600">{{ $stats['linked'] ?? 0 }}</div><div style="font-size:.72rem;color:var(--gray-400)">{{ $stats['linked_elsewhere'] ?? 0 }} link to another page</div></x-filament::section>
             @if (($stats['needs_review'] ?? 0) > 0)
                 <x-filament::section><div style="font-size:.72rem;text-transform:uppercase;color:var(--gray-500)">Needs review</div><div style="font-size:1.5rem;font-weight:600;color:#b45309">{{ $stats['needs_review'] }}</div><div style="font-size:.72rem;color:var(--gray-400)">found, not confirmed as this location's</div></x-filament::section>
             @endif
@@ -47,7 +48,7 @@
                 <table style="width:100%;border-collapse:collapse;font-size:.85rem">
                     <thead>
                         <tr style="text-align:left;color:var(--gray-500);font-size:.72rem;text-transform:uppercase">
-                            <th style="padding:.5rem"></th><th>Directory</th><th>Tier</th><th>Status</th><th>NAP match</th><th>Last checked</th><th></th>
+                            <th style="padding:.5rem"></th><th>Directory</th><th>Tier</th><th>Status</th><th>NAP match</th><th>Link</th><th>Last checked</th><th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -71,11 +72,25 @@
                                 <td style="color:var(--gray-500)">{{ ucfirst($row->tierLabel) }}{{ $row->isLocal ? ' · Local' : '' }}</td>
                                 <td><x-filament::badge :color="$row->chip['color']">{{ $row->chip['label'] }}</x-filament::badge></td>
                                 <td style="color:{{ $row->chip['key'] === 'mismatch' ? '#b45309' : 'var(--gray-500)' }}">{{ $row->napMatchSummary }}</td>
+                                <td style="font-size:.78rem">
+                                    @if ($row->link)
+                                        @php($lc = match ($row->link['state']) { 'this' => '#16a34a', 'sibling', 'home', 'other' => '#b45309', default => '#b91c1c' })
+                                        <div style="color:{{ $lc }}">{{ $row->link['label'] }}</div>
+                                        <div style="font-size:.7rem;color:var(--gray-400)"><a href="{{ $row->link['listing_url'] }}" target="_blank" rel="noopener" style="text-decoration:underline">{{ \Illuminate\Support\Str::limit($row->link['listing_url'], 48) }}</a>{{ $row->link['dofollow'] ? '' : ' · nofollow' }}{{ $row->link['rank'] !== null ? ' · DR '.$row->link['rank'] : '' }}</div>
+                                    @else
+                                        <span style="color:var(--gray-400)">No link in the index</span>
+                                    @endif
+                                </td>
                                 <td style="color:var(--gray-400);font-size:.75rem">{{ $row->lastCheckedAt?->diffForHumans() ?? '—' }}</td>
-                                <td style="text-align:right"><x-filament::button size="xs" color="gray" wire:click="openRow('{{ $row->directoryId }}')">Details</x-filament::button></td>
+                                <td style="text-align:right;white-space:nowrap">
+                                    @if ($row->createUrl)
+                                        <a href="{{ $row->createUrl }}" target="_blank" rel="noopener" style="font-size:.75rem;color:#2563eb;text-decoration:underline;margin-right:.5rem">{{ $row->createLabel }} ↗</a>
+                                    @endif
+                                    <x-filament::button size="xs" color="gray" wire:click="openRow('{{ $row->directoryId }}')">Details</x-filament::button>
+                                </td>
                             </tr>
                         @empty
-                            <tr><td colspan="7" style="padding:1rem;color:var(--gray-500)">No directories match this filter.</td></tr>
+                            <tr><td colspan="8" style="padding:1rem;color:var(--gray-500)">No directories match this filter.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -90,6 +105,35 @@
                     <div style="display:flex;justify-content:space-between;align-items:flex-start">
                         <h2 style="font-size:1.1rem;font-weight:600">Listing detail</h2>
                         <button wire:click="closeRow" style="border:0;background:none;font-size:1.4rem;cursor:pointer;color:var(--gray-500)">&times;</button>
+                    </div>
+
+                    @php($kit = $detail['kit'] ?? null)
+                    <div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
+                            <h3 style="font-size:.8rem;text-transform:uppercase;color:var(--gray-500)">Listing kit</h3>
+                            <x-filament::button size="xs" :color="$kit ? 'gray' : 'primary'" wire:click="draftKit({{ $kit ? 'true' : 'false' }})">{{ $kit ? 'Redraft' : 'Draft listing kit' }}</x-filament::button>
+                        </div>
+                        @if ($kit)
+                            @php($k = $kit->payload)
+                            @if (! $kit->model_ok)
+                                <p style="font-size:.75rem;color:#b45309;margin-bottom:.4rem">Plain fallback copy — the model did not answer. Redraft to try again.</p>
+                            @endif
+                            <div style="display:flex;flex-direction:column;gap:.5rem;font-size:.8rem">
+                                <label style="display:block"><span style="color:var(--gray-500)">Business name</span><input readonly value="{{ $k['nap']['business_name'] ?? '' }}" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff"></label>
+                                <label style="display:block"><span style="color:var(--gray-500)">Address · phone</span><input readonly value="{{ trim(($k['nap']['address'] ?? '').', '.($k['nap']['city'] ?? '').', '.($k['nap']['state'] ?? '').' '.($k['nap']['postal'] ?? '')) }} · {{ $k['nap']['phone'] ?? '' }}" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff"></label>
+                                <label style="display:block"><span style="color:var(--gray-500)">Website (link to this page)</span><input readonly value="{{ $k['link_url'] ?? '' }}" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff"></label>
+                                <label style="display:block"><span style="color:var(--gray-500)">Categories</span><input readonly value="{{ implode(' · ', $k['categories'] ?? []) }}" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff"></label>
+                                <label style="display:block"><span style="color:var(--gray-500)">Short description</span><textarea readonly rows="2" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff">{{ $k['short_description'] ?? '' }}</textarea></label>
+                                <label style="display:block"><span style="color:var(--gray-500)">Long description</span><textarea readonly rows="5" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff">{{ $k['long_description'] ?? '' }}</textarea></label>
+                                <label style="display:block"><span style="color:var(--gray-500)">Note for the form</span><textarea readonly rows="3" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff">{{ $k['pitch_body'] ?? '' }}</textarea></label>
+                                @if (! empty($k['target']['submission_url']))
+                                    <a href="{{ $k['target']['submission_url'] }}" target="_blank" rel="noopener" style="font-size:.78rem;color:#2563eb;text-decoration:underline">Open {{ $detail['directory']?->name }} to create the listing ↗</a>
+                                @endif
+                            </div>
+                            <p style="font-size:.7rem;color:var(--gray-400);margin-top:.4rem">Drafted {{ $kit->drafted_at->diffForHumans() }}. Click a field to select it.</p>
+                        @else
+                            <p style="font-size:.8rem;color:var(--gray-400)">Name, address, phone, the page to link, and descriptions in your voice — ready to paste into the directory form.</p>
+                        @endif
                     </div>
 
                     @if ($detail['status'])

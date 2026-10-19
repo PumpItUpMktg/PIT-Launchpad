@@ -190,6 +190,176 @@ class DataForSeoClient
         ]));
     }
 
+    // --- Backlinks API: a target's totals, and its links one per referring domain ---
+
+    /**
+     * @return array{backlinks: int, referring_domains: int, broken_backlinks: int, rank: int|null}
+     */
+    public function backlinksSummary(string $target): array
+    {
+        return self::parseBacklinkSummary($this->requestLiveTask('/v3/backlinks/summary/live', [
+            'target' => $target,
+            'include_subdomains' => true,
+            'exclude_internal_backlinks' => true,
+            'rank_scale' => 'one_hundred',
+        ]));
+    }
+
+    /**
+     * Live links to `$target`. `one_per_domain` returns each referring domain's strongest link, strongest
+     * domains first; pass the previous page's `search_after_token` as `$after` to continue (all other
+     * parameters must stay identical, which they do).
+     *
+     * @return array{items: list<array{domain_from: string, url_from: string, url_to: string, domain_from_rank: int|null, page_from_rank: int|null, spam_score: int|null, dofollow: bool, is_broken: bool, anchor: string|null, first_seen: string|null, last_seen: string|null}>, total_count: int, search_after_token: string|null}
+     */
+    public function backlinksLive(string $target, string $mode = 'one_per_domain', int $limit = 1000, ?string $after = null): array
+    {
+        $task = [
+            'target' => $target,
+            'mode' => $mode,
+            'limit' => max(1, min(1000, $limit)),
+            'order_by' => ['domain_from_rank,desc'],
+            'backlinks_status_type' => 'live',
+            'include_subdomains' => true,
+            'exclude_internal_backlinks' => true,
+            'rank_scale' => 'one_hundred',
+        ];
+        if ($after !== null && $after !== '') {
+            $task['search_after_token'] = $after;
+        }
+
+        return self::parseBacklinks($this->requestLiveTask('/v3/backlinks/backlinks/live', $task));
+    }
+
+    /**
+     * @param  array<int, mixed>  $result
+     * @return array{backlinks: int, referring_domains: int, broken_backlinks: int, rank: int|null}
+     */
+    public static function parseBacklinkSummary(array $result): array
+    {
+        $row = is_array($result[0] ?? null) ? $result[0] : [];
+
+        return [
+            'backlinks' => (int) ($row['backlinks'] ?? 0),
+            'referring_domains' => (int) ($row['referring_domains'] ?? 0),
+            'broken_backlinks' => (int) ($row['broken_backlinks'] ?? 0),
+            'rank' => isset($row['rank']) && is_numeric($row['rank']) ? (int) $row['rank'] : null,
+        ];
+    }
+
+    /**
+     * @param  array<int, mixed>  $result
+     * @return array{items: list<array{domain_from: string, url_from: string, url_to: string, domain_from_rank: int|null, page_from_rank: int|null, spam_score: int|null, dofollow: bool, is_broken: bool, anchor: string|null, first_seen: string|null, last_seen: string|null}>, total_count: int, search_after_token: string|null}
+     */
+    public static function parseBacklinks(array $result): array
+    {
+        $page = is_array($result[0] ?? null) ? $result[0] : [];
+        $int = static fn (mixed $v): ?int => is_numeric($v) ? (int) $v : null;
+        $date = static fn (mixed $v): ?string => is_string($v) && $v !== '' ? substr($v, 0, 10) : null;
+        $items = [];
+        foreach (is_array($page['items'] ?? null) ? $page['items'] : [] as $item) {
+            if (! is_array($item) || ! is_string($item['domain_from'] ?? null) || $item['domain_from'] === '') {
+                continue;
+            }
+            $items[] = [
+                'domain_from' => strtolower((string) preg_replace('/^www\./i', '', $item['domain_from'])),
+                'url_from' => (string) ($item['url_from'] ?? ''),
+                'url_to' => (string) ($item['url_to'] ?? ''),
+                'domain_from_rank' => $int($item['domain_from_rank'] ?? null),
+                'page_from_rank' => $int($item['page_from_rank'] ?? null),
+                'spam_score' => $int($item['backlink_spam_score'] ?? null),
+                'dofollow' => (bool) ($item['dofollow'] ?? true),
+                'is_broken' => (bool) ($item['is_broken'] ?? false),
+                'anchor' => isset($item['anchor']) && is_string($item['anchor']) && $item['anchor'] !== '' ? $item['anchor'] : null,
+                'first_seen' => $date($item['first_seen'] ?? null),
+                'last_seen' => $date($item['last_seen'] ?? null),
+            ];
+        }
+        $token = $page['search_after_token'] ?? null;
+
+        return [
+            'items' => $items,
+            'total_count' => (int) ($page['total_count'] ?? count($items)),
+            'search_after_token' => is_string($token) && $token !== '' ? $token : null,
+        ];
+    }
+
+    /**
+     * Referring domains that link to at least one of `$targets` and to none of `$exclude`
+     * (`backlinks/domain_intersection/live`, partial mode). Targets are keyed "1".."20" on the wire; the
+     * result names each domain's linked targets by the strings passed in.
+     *
+     * @param  list<string>  $targets
+     * @param  list<string>  $exclude
+     * @return list<array{domain: string, rank: int|null, spam_score: int|null, linked_targets: list<string>, first_seen: string|null}>
+     */
+    public function backlinksDomainIntersection(array $targets, array $exclude, int $limit = 300): array
+    {
+        $targets = array_slice(array_values(array_unique(array_filter($targets))), 0, 20);
+        if ($targets === []) {
+            return [];
+        }
+        $keyed = [];
+        foreach ($targets as $i => $t) {
+            $keyed[$i + 1] = $t; // 1-based int keys encode as the {"1": …} object the API wants
+        }
+        $task = [
+            'targets' => $keyed,
+            'intersection_mode' => 'partial',
+            'backlinks_status_type' => 'live',
+            'include_subdomains' => true,
+            'exclude_internal_backlinks' => true,
+            'rank_scale' => 'one_hundred',
+            'limit' => max(1, min(1000, $limit)),
+            'order_by' => ['1.rank,desc'],
+        ];
+        $exclude = array_slice(array_values(array_unique(array_filter($exclude))), 0, 10);
+        if ($exclude !== []) {
+            $task['exclude_targets'] = $exclude;
+        }
+
+        return self::parseDomainIntersection($this->requestLiveTask('/v3/backlinks/domain_intersection/live', $task), $keyed);
+    }
+
+    /**
+     * @param  array<int, mixed>  $result
+     * @param  array<int, string>  $keyed  the wire keys (1-based) → target strings
+     * @return list<array{domain: string, rank: int|null, spam_score: int|null, linked_targets: list<string>, first_seen: string|null}>
+     */
+    public static function parseDomainIntersection(array $result, array $keyed): array
+    {
+        $page = is_array($result[0] ?? null) ? $result[0] : [];
+        $out = [];
+        foreach (is_array($page['items'] ?? null) ? $page['items'] : [] as $item) {
+            $per = is_array($item['domain_intersection'] ?? null) ? $item['domain_intersection'] : [];
+            $domain = null;
+            $rank = null;
+            $spam = null;
+            $first = null;
+            $linked = [];
+            foreach ($per as $key => $entry) {
+                if (! is_array($entry)) {
+                    continue;
+                }
+                $linked[] = $keyed[(int) $key] ?? (string) $key;
+                $domain ??= isset($entry['target']) && is_string($entry['target']) ? strtolower((string) preg_replace('/^www\\./i', '', $entry['target'])) : null;
+                $rank = max($rank ?? 0, is_numeric($entry['rank'] ?? null) ? (int) $entry['rank'] : 0);
+                $spam = max($spam ?? 0, is_numeric($entry['backlinks_spam_score'] ?? null) ? (int) $entry['backlinks_spam_score'] : 0);
+                $seen = isset($entry['first_seen']) && is_string($entry['first_seen']) ? substr($entry['first_seen'], 0, 10) : null;
+                $first = $seen !== null && ($first === null || $seen < $first) ? $seen : $first;
+            }
+            if ($domain === null && isset($item['domain']) && is_string($item['domain'])) {
+                $domain = strtolower((string) preg_replace('/^www\\./i', '', $item['domain']));
+            }
+            if ($domain === null || $domain === '' || $linked === []) {
+                continue;
+            }
+            $out[] = ['domain' => $domain, 'rank' => $rank, 'spam_score' => $spam, 'linked_targets' => array_values(array_unique($linked)), 'first_seen' => $first];
+        }
+
+        return $out;
+    }
+
     // --- Standard-mode task lifecycle (generic over an endpoint family) ---
 
     /**

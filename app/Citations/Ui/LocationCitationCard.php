@@ -33,6 +33,8 @@ final readonly class LocationCitationCard
         public ?Carbon $lastScannedAt,
         public ?string $lastError = null,
         public int $unchecked = 0,     // directories the last scan could not check (DataForSEO hiccup)
+        public int $linked = 0,        // directories whose link in the backlink index lands on this office's page
+        public int $linkedElsewhere = 0, // directories that link to the site, but to the home page / another office / another page
     ) {}
 
     public function scanFailed(): bool
