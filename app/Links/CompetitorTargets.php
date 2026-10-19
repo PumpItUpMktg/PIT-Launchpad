@@ -5,6 +5,8 @@ namespace App\Links;
 use App\Backlinks\BacklinkSyncer;
 use App\Enums\CompetitorClass;
 use App\KeywordGenerator\Beatability\CompetitorClassifier;
+use App\Models\GeoGridPoint;
+use App\Models\GeoGridScan;
 use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -49,11 +51,73 @@ final class CompetitorTargets
     ) {}
 
     /**
-     * @return list<array{domain: string, appearances: int}> strongest first
+     * Map-pack competitors first (local businesses by definition, from the geo grid), then the organic
+     * town-rank competitors that pass the footprint and country rules, up to `$max`.
+     *
+     * @return list<array{domain: string, appearances: int, source: string}> strongest first
      */
     public function for(Site $site, int $max = 10): array
     {
-        $host = BacklinkSyncer::target((string) $site->domain_url);
+        $self = CompetitorClassifier::registrable(BacklinkSyncer::target((string) $site->domain_url));
+        $mapPack = $this->mapPack($site, $self);
+        $taken = array_column($mapPack, 'domain');
+        $organic = array_values(array_filter($this->organic($site, $self), fn (array $t): bool => ! in_array($t['domain'], $taken, true)));
+
+        return array_slice(array_merge($mapPack, $organic), 0, max(1, $max));
+    }
+
+    /**
+     * The businesses in the local pack across the latest complete grid scan of every (office × keyword):
+     * registrable domain, counted once per grid cell, strongest first. Older scans have no domain on their
+     * competitor rows (it is kept from the scanner change on), so they simply contribute nothing.
+     *
+     * @return list<array{domain: string, appearances: int, source: string}>
+     */
+    private function mapPack(Site $site, string $self): array
+    {
+        $latest = GeoGridScan::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)
+            ->where('status', 'complete')->whereNotNull('scanned_at')
+            ->orderByDesc('scanned_at')->get(['id', 'location_id', 'keyword_id'])
+            ->unique(fn (GeoGridScan $s): string => $s->location_id.'|'.$s->keyword_id)->pluck('id')->all();
+        if ($latest === []) {
+            return [];
+        }
+        $counts = [];
+        foreach (GeoGridPoint::withoutGlobalScope(SiteScope::class)->whereIn('scan_id', $latest)->get(['competitors']) as $point) {
+            $seen = [];
+            foreach (is_array($point->competitors) ? $point->competitors : [] as $c) {
+                $raw = $c['domain'] ?? null;
+                if (! is_string($raw) || $raw === '') {
+                    continue;
+                }
+                $domain = CompetitorClassifier::registrable((string) preg_replace('/^www\./i', '', $raw));
+                // A chain's map-pack listing (Roto-Rooter, Mr. Rooter) is local in the pack and national in its
+                // links — the classifier's lists still apply.
+                if ($domain === '' || $domain === $self || isset($seen[$domain]) || self::isPlatform($domain) || ! self::inCountry($domain)
+                    || $this->classifier->classify($domain) !== CompetitorClass::LocalCompetitor) {
+                    continue;
+                }
+                $seen[$domain] = true;
+                $counts[$domain] = ($counts[$domain] ?? 0) + 1;
+            }
+        }
+
+        $out = [];
+        foreach ($counts as $domain => $n) {
+            $out[] = ['domain' => (string) $domain, 'appearances' => $n, 'source' => 'map_pack'];
+        }
+        usort($out, fn (array $a, array $b): int => [$b['appearances'], $a['domain']] <=> [$a['appearances'], $b['domain']]);
+
+        return $out;
+    }
+
+    /**
+     * The organic competitors above us in the town results (see the class note), strongest first.
+     *
+     * @return list<array{domain: string, appearances: int, source: string}>
+     */
+    private function organic(Site $site, string $self): array
+    {
         $keywords = $this->priorities->for($site);
         if ($keywords === []) {
             $ids = TownRankScan::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->distinct()->pluck('keyword_id');
@@ -77,10 +141,11 @@ final class CompetitorTargets
                 $scanSize[$scanId] = $scanPoints->count();
                 foreach ($scanPoints as $point) {
                     $ours = $point->rank;
+                    $seen = []; // one count per town, however many of a domain's URLs sit in its top five
                     foreach (is_array($point->top_results) ? $point->top_results : [] as $item) {
                         // One competitor per business: the registrable domain (m.yelp.com and yelp.com are one).
                         $domain = CompetitorClassifier::registrable((string) preg_replace('/^www\./i', '', $item['domain']));
-                        if ($domain === '' || $domain === CompetitorClassifier::registrable($host) || ! self::inCountry($domain)) {
+                        if ($domain === '' || $domain === $self || isset($seen[$domain]) || ! self::inCountry($domain)) {
                             continue;
                         }
                         if ($ours !== null && $item['position'] > $ours) {
@@ -89,6 +154,7 @@ final class CompetitorTargets
                         if (self::isPlatform($domain) || $this->classifier->classify($domain) !== CompetitorClass::LocalCompetitor) {
                             continue;
                         }
+                        $seen[$domain] = true;
                         $counts[$domain] = ($counts[$domain] ?? 0) + 1;
                         $perScan[$scanId][$domain] = ($perScan[$scanId][$domain] ?? 0) + 1;
                     }
@@ -117,11 +183,11 @@ final class CompetitorTargets
 
                 continue;
             }
-            $out[] = ['domain' => (string) $domain, 'appearances' => $n];
+            $out[] = ['domain' => (string) $domain, 'appearances' => $n, 'source' => 'organic'];
         }
         usort($out, fn (array $a, array $b): int => [$b['appearances'], $a['domain']] <=> [$a['appearances'], $b['domain']]);
 
-        return array_slice($out, 0, max(1, $max));
+        return $out;
     }
 
     /**

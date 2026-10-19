@@ -30,7 +30,7 @@ final class LinkProspector
     ) {}
 
     /**
-     * @return array{targets: list<array{domain: string, appearances: int}>, returned: int, kept: int, new: int, refreshed: int, pruned: int, dropped_spam: int, dropped_rank: int, excluded_competitors: list<array{domain: string, appearances: int, share: float}>}
+     * @return array{targets: list<array{domain: string, appearances: int, source: string}>, returned: int, kept: int, new: int, refreshed: int, pruned: int, dropped_spam: int, dropped_rank: int, excluded_competitors: list<array{domain: string, appearances: int, share: float}>}
      */
     public function run(Site $site): array
     {

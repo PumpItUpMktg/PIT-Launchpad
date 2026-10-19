@@ -42,7 +42,9 @@ class FindLinkProspectsCommand extends Command
         }
         // Said BEFORE the index call, so a failed call still shows what was asked.
         $this->line("<info>{$site->brand_name}</info> — competitors asked about: ".implode(', ', array_map(
-            fn (array $t): string => "{$t['domain']} (above us in {$t['appearances']} results)", $targets)));
+            fn (array $t): string => $t['source'] === 'map_pack'
+                ? "{$t['domain']} (map pack, {$t['appearances']} grid cells)"
+                : "{$t['domain']} (organic, above us in {$t['appearances']} town results)", $targets)));
         if ($targetsFor->dropped !== []) {
             $this->line('  • excluded as territory-wide (not a local company): '.implode(', ', array_map(
                 fn (array $d): string => sprintf('%s (above us in %d%% of one scan\'s towns)', $d['domain'], (int) round($d['share'] * 100)), $targetsFor->dropped)));

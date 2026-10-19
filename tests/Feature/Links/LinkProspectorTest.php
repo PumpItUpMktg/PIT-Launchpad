@@ -122,7 +122,7 @@ it('the command reports the competitors asked about and what the list gained', f
     app()->instance(BacklinkProvider::class, intersectProvider([new IntersectRow('bucks-chamber.org', 41, 0, ['rivalplumbing.com'], null)], $asked));
 
     $this->artisan('launchpad:find-link-prospects', ['--site' => $site->id])
-        ->expectsOutputToContain('dryguys.com (above us in 1 results), rivalplumbing.com (above us in 1 results)')
+        ->expectsOutputToContain('dryguys.com (organic, above us in 1 town results), rivalplumbing.com (organic, above us in 1 town results)')
         ->expectsOutputToContain('the index returned 1 linking domains; 1 kept (0 dropped as spam, 0 below the authority floor) — 1 new prospect(s), 0 refreshed, 0 untouched prospect(s) from an earlier run dropped.')
         ->assertSuccessful();
 });
@@ -148,7 +148,7 @@ it('the command names the competitors before the index call, so a refused inters
     });
 
     $this->artisan('launchpad:find-link-prospects', ['--site' => $site->id])
-        ->expectsOutputToContain('competitors asked about: dryguys.com (above us in 1 results), rivalplumbing.com (above us in 1 results)')
+        ->expectsOutputToContain('competitors asked about: dryguys.com (organic, above us in 1 town results), rivalplumbing.com (organic, above us in 1 town results)')
         ->expectsOutputToContain('The backlink index refused the intersect: DataForSEO HTTP 500: Internal Error')
         ->assertFailed();
 
