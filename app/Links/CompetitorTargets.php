@@ -21,6 +21,17 @@ use App\TownPages\PriorityKeywords;
  */
 final class CompetitorTargets
 {
+    /**
+     * Hosts that outrank a local business in a town result without being a competitor — a Facebook page,
+     * a Google Business site, a site builder's shared host. An intersect over one of these asks the index
+     * for every domain that links to Facebook; the classifier does not know them, so they are named here.
+     */
+    private const PLATFORMS = [
+        'facebook', 'google', 'business', 'instagram', 'youtube', 'linkedin', 'x', 'twitter', 'tiktok',
+        'pinterest', 'wikipedia', 'wixsite', 'godaddysites', 'squarespace', 'weebly', 'wordpress', 'blogspot',
+        'bing', 'apple', 'yahoo', 'craigslist', 'indeed', 'glassdoor', 'reddit', 'quora',
+    ];
+
     public function __construct(
         private readonly PriorityKeywords $priorities,
         private readonly CompetitorClassifier $classifier,
@@ -58,7 +69,7 @@ final class CompetitorTargets
                         if ($ours !== null && $item['position'] > $ours) {
                             continue; // only who is above us
                         }
-                        if ($this->classifier->classify($domain) !== CompetitorClass::LocalCompetitor) {
+                        if (self::isPlatform($domain) || $this->classifier->classify($domain) !== CompetitorClass::LocalCompetitor) {
                             continue;
                         }
                         $counts[$domain] = ($counts[$domain] ?? 0) + 1;
@@ -74,5 +85,13 @@ final class CompetitorTargets
         usort($out, fn (array $a, array $b): int => [$b['appearances'], $a['domain']] <=> [$a['appearances'], $b['domain']]);
 
         return array_slice($out, 0, max(1, $max));
+    }
+
+    public static function isPlatform(string $domain): bool
+    {
+        $parts = explode('.', $domain);
+        $stem = count($parts) >= 2 ? $parts[count($parts) - 2] : $parts[0];
+
+        return in_array($stem, self::PLATFORMS, true);
     }
 }

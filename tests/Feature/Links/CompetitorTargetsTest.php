@@ -44,3 +44,11 @@ it('falls back to every scanned keyword when none is a priority, and caps the li
 
     expect(array_column(app(CompetitorTargets::class)->for($site, 2), 'domain'))->toBe(['a.com', 'b.com']);
 });
+
+it('never treats a platform host as a competitor — a Facebook page or a Google Business site above us is not a target', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sumppumpgurus.com']);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump repair', 'town_priority_rank' => 1]);
+    ctScan($site, $kw, 'town_query', Carbon::parse('2026-10-01'), [[null, [[1, 'www.facebook.com'], [2, 'rival-pumps.business.site'], [3, 'localrival.com'], [4, 'smith-plumbing.wixsite.com']]]]);
+
+    expect(array_column(app(CompetitorTargets::class)->for($site, 10), 'domain'))->toBe(['localrival.com']);
+});

@@ -311,7 +311,6 @@ class DataForSeoClient
             'exclude_internal_backlinks' => true,
             'rank_scale' => 'one_hundred',
             'limit' => max(1, min(1000, $limit)),
-            'order_by' => ['1.rank,desc'],
         ];
         $exclude = array_slice(array_values(array_unique(array_filter($exclude))), 0, 10);
         if ($exclude !== []) {
@@ -723,8 +722,15 @@ class DataForSeoClient
     private function handle(Response $response): array
     {
         if (! $response->successful()) {
+            // The vendor's own words when the body carries them — a 500 on a malformed intersect says
+            // what it objected to; without this the operator sees only the number.
+            $body = $response->json();
+            $detail = is_array($body) && is_string($body['status_message'] ?? null)
+                ? $body['status_message']
+                : trim(mb_substr(strip_tags((string) $response->body()), 0, 200));
+
             throw new DataForSeoException(
-                'DataForSEO HTTP '.$response->status(),
+                'DataForSEO HTTP '.$response->status().($detail !== '' ? ': '.$detail : ''),
                 $response->status(),
                 fatal: in_array($response->status(), [401, 402, 403], true),
             );

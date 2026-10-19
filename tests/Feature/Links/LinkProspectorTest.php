@@ -6,6 +6,7 @@ use App\Integrations\Backlinks\BacklinkPage;
 use App\Integrations\Backlinks\BacklinkProvider;
 use App\Integrations\Backlinks\BacklinkSummary;
 use App\Integrations\Backlinks\IntersectRow;
+use App\Integrations\DataForSeo\DataForSeoException;
 use App\KeywordGenerator\Beatability\CompetitorClassifier;
 use App\Links\CompetitorTargets;
 use App\Links\LinkProspector;
@@ -123,4 +124,32 @@ it('the command reports the competitors asked about and what the list gained', f
         ->expectsOutputToContain('dryguys.com (above us in 1 results), rivalplumbing.com (above us in 1 results)')
         ->expectsOutputToContain('the index returned 1 linking domains; 1 kept after the spam / authority floor — 1 new prospect(s), 0 refreshed.')
         ->assertSuccessful();
+});
+
+it('the command names the competitors before the index call, so a refused intersect still shows what was asked', function () {
+    $site = prospectSite();
+    app()->instance(BacklinkProvider::class, new class implements BacklinkProvider
+    {
+        public function summary(string $target): BacklinkSummary
+        {
+            return new BacklinkSummary(0, 0, 0, null);
+        }
+
+        public function referringDomains(string $target, int $limit = 1000, ?string $after = null): BacklinkPage
+        {
+            return new BacklinkPage([], 0, null);
+        }
+
+        public function domainIntersection(array $targets, array $exclude, int $limit = 300): array
+        {
+            throw new DataForSeoException('DataForSEO HTTP 500: Internal Error', 500);
+        }
+    });
+
+    $this->artisan('launchpad:find-link-prospects', ['--site' => $site->id])
+        ->expectsOutputToContain('competitors asked about: dryguys.com (above us in 1 results), rivalplumbing.com (above us in 1 results)')
+        ->expectsOutputToContain('The backlink index refused the intersect: DataForSEO HTTP 500: Internal Error')
+        ->assertFailed();
+
+    expect(LinkProspect::withoutGlobalScope(SiteScope::class)->count())->toBe(0);
 });
