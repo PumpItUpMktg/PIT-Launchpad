@@ -62,8 +62,9 @@ final class CompetitorTargets
                 foreach ($points as $point) {
                     $ours = $point->rank;
                     foreach (is_array($point->top_results) ? $point->top_results : [] as $item) {
-                        $domain = strtolower((string) preg_replace('/^www\./i', '', $item['domain']));
-                        if ($domain === '' || $domain === $host) {
+                        // One competitor per business: the registrable domain (m.yelp.com and yelp.com are one).
+                        $domain = CompetitorClassifier::registrable((string) preg_replace('/^www\./i', '', $item['domain']));
+                        if ($domain === '' || $domain === CompetitorClassifier::registrable($host) || ! self::inCountry($domain)) {
                             continue;
                         }
                         if ($ours !== null && $item['position'] > $ours) {
@@ -85,6 +86,21 @@ final class CompetitorTargets
         usort($out, fn (array $a, array $b): int => [$b['appearances'], $a['domain']] <=> [$a['appearances'], $b['domain']]);
 
         return array_slice($out, 0, max(1, $max));
+    }
+
+    /**
+     * A country-code domain outside the tenant's country is not a local competitor — harrisplumbing.ca does
+     * not serve New Jersey, however often it ranks for the phrase. Generic TLDs always pass.
+     */
+    public static function inCountry(string $domain): bool
+    {
+        $tld = (string) substr(strrchr($domain, '.') ?: '', 1);
+        if (strlen($tld) !== 2) {
+            return true;
+        }
+        $allowed = config('launchpad.links.country_tlds', ['us']);
+
+        return in_array($tld, is_array($allowed) ? $allowed : ['us'], true);
     }
 
     public static function isPlatform(string $domain): bool

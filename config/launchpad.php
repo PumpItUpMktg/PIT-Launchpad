@@ -1083,6 +1083,8 @@ return [
         'intersect_limit' => (int) env('LAUNCHPAD_LINKS_INTERSECT_LIMIT', 300),
         'min_rank' => (int) env('LAUNCHPAD_LINKS_MIN_RANK', 10),
         'spam_cap' => (int) env('LAUNCHPAD_LINKS_SPAM_CAP', 30),
+        // Country-code TLDs that still count as local competitors (a .ca site does not serve New Jersey).
+        'country_tlds' => array_values(array_filter(array_map('trim', explode(',', (string) env('LAUNCHPAD_LINKS_COUNTRY_TLDS', 'us'))))),
     ],
 
     'citations' => [
