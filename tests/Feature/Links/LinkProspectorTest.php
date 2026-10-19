@@ -13,6 +13,7 @@ use App\Links\LinkProspector;
 use App\Models\Directory;
 use App\Models\Keyword;
 use App\Models\LinkProspect;
+use App\Models\LinkProspectRun;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\TownRankPoint;
@@ -167,4 +168,40 @@ it('drops the untouched prospects an earlier run produced when the latest run no
 
     expect($r['pruned'])->toBe(1)
         ->and(LinkProspect::withoutGlobalScope(SiteScope::class)->pluck('domain')->sort()->values()->all())->toBe(['bucks-chamber.org', 'worked.example']);
+});
+
+it('keeps a run record — what was asked, what came back, what was kept — and a failed call is recorded with its reason', function () {
+    $site = prospectSite();
+    $asked = [];
+    $mk = fn (BacklinkProvider $p): LinkProspector => new LinkProspector($p, app(CompetitorTargets::class), app(CompetitorClassifier::class));
+    $mk(intersectProvider([new IntersectRow('bucks-chamber.org', 41, 0, ['rivalplumbing.com'], null), new IntersectRow('spamdir.example', 60, 45, ['dryguys.com'], null)], $asked))->run($site);
+
+    $run = LinkProspectRun::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->first();
+    expect($run->status)->toBe('complete')
+        ->and(array_column($run->targets, 'domain'))->toBe(['dryguys.com', 'rivalplumbing.com'])
+        ->and($run->targets[0]['source'])->toBe('organic')
+        ->and($run->returned)->toBe(2)->and($run->kept)->toBe(1)->and($run->dropped_spam)->toBe(1)->and($run->new)->toBe(1);
+
+    $failing = new class implements BacklinkProvider
+    {
+        public function summary(string $target): BacklinkSummary
+        {
+            return new BacklinkSummary(0, 0, 0, null);
+        }
+
+        public function referringDomains(string $target, int $limit = 1000, ?string $after = null): BacklinkPage
+        {
+            return new BacklinkPage([], 0, null);
+        }
+
+        public function domainIntersection(array $targets, array $exclude, int $limit = 300): array
+        {
+            throw new DataForSeoException('DataForSEO HTTP 500: Internal Error', 500);
+        }
+    };
+    expect(fn () => $mk($failing)->run($site))->toThrow(DataForSeoException::class);
+
+    $failed = LinkProspectRun::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->orderByDesc('ran_at')->first();
+    expect($failed->status)->toBe('failed')->and($failed->error)->toBe('DataForSEO HTTP 500: Internal Error')
+        ->and(array_column($failed->targets, 'domain'))->toBe(['dryguys.com', 'rivalplumbing.com']);
 });

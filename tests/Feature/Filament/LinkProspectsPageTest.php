@@ -8,6 +8,7 @@ use App\Filament\Pages\LinkProspectsPage;
 use App\Jobs\FindLinkProspects;
 use App\Links\OutreachKitDrafter;
 use App\Models\LinkProspect;
+use App\Models\LinkProspectRun;
 use App\Models\Location;
 use App\Models\OutreachKit;
 use App\Models\Scopes\SiteScope;
@@ -70,4 +71,22 @@ it('opens a prospect\'s pitch panel and drafts the kit for the chosen office', f
         ->assertSee('Body here');
 
     expect(OutreachKit::withoutGlobalScope(SiteScope::class)->where('target_domain', 'hudson-chamber.org')->value('location_id'))->toBe((string) $office->id);
+});
+
+it('shows the last run: who was asked about, who was excluded, what was kept', function () {
+    LinkProspectRun::withoutGlobalScope(SiteScope::class)->create([
+        'site_id' => $this->site->id, 'status' => 'complete',
+        'targets' => [['domain' => 'oriolebw.com', 'appearances' => 12, 'source' => 'map_pack'], ['domain' => 'patriotpumpservice.com', 'appearances' => 240, 'source' => 'organic']],
+        'excluded' => [['domain' => 'barbaraemergencyrestorationpompanobeachfl.com', 'appearances' => 1307, 'share' => 0.91]],
+        'returned' => 818, 'kept' => 4, 'new' => 0, 'refreshed' => 4, 'pruned' => 1, 'dropped_spam' => 803, 'dropped_rank' => 11, 'ran_at' => now(),
+    ]);
+
+    Livewire::test(LinkProspectsPage::class)
+        ->assertOk()
+        ->assertSee('oriolebw.com')
+        ->assertSee('map pack, 12 cells')
+        ->assertSee('above you in 240 town results')
+        ->assertSee('barbaraemergencyrestorationpompanobeachfl.com')
+        ->assertSee('91% of one scan')
+        ->assertSee('803 dropped as spam');
 });

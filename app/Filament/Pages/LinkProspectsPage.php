@@ -6,6 +6,7 @@ use App\Enums\LinkProspectStatus;
 use App\Jobs\FindLinkProspects;
 use App\Links\OutreachKitDrafter;
 use App\Models\LinkProspect;
+use App\Models\LinkProspectRun;
 use App\Models\Location;
 use App\Models\OutreachKit;
 use App\Models\Scopes\SiteScope;
@@ -26,6 +27,7 @@ use Livewire\Attributes\Url;
  *
  * @property-read list<LinkProspect> $prospects
  * @property-read list<array{id: string, name: string}> $offices
+ * @property-read LinkProspectRun|null $lastRun
  * @property-read array{prospect: LinkProspect, kit: ?OutreachKit}|null $activeKit
  * @property-read array{count: int, last_found_at: Carbon|null, by_status: array<string, int>} $summary
  */
@@ -98,6 +100,13 @@ class LinkProspectsPage extends Page
             'last_found_at' => $all->max('found_at'),
             'by_status' => $all->countBy(fn (LinkProspect $p): string => $p->status->value)->all(),
         ];
+    }
+
+    /** The latest intersect for the working tenant: who was asked about, who was excluded, what was kept. */
+    public function getLastRunProperty(): ?LinkProspectRun
+    {
+        return $this->siteId === null ? null
+            : LinkProspectRun::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->orderByDesc('ran_at')->first();
     }
 
     /** Queue one competitor intersect for the working tenant. */
