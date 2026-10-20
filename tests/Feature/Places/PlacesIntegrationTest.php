@@ -94,3 +94,21 @@ it('the mock provider returns a fully populated place', function () {
 it('binds the real Google client by default', function () {
     expect(app(PlacesProvider::class))->toBeInstanceOf(GooglePlacesClient::class);
 });
+
+it('reads a listing\'s public profile: rating, ratings, types, photo count, status, position', function () {
+    Http::fake([
+        '*/details/json*' => Http::response(['result' => [
+            'place_id' => 'PID1', 'name' => 'Apex Plumbing', 'rating' => 4.8, 'user_ratings_total' => 212,
+            'types' => ['plumber', 'point_of_interest', 'establishment'], 'photos' => [['photo_reference' => 'a'], ['photo_reference' => 'b']],
+            'business_status' => 'OPERATIONAL', 'geometry' => ['location' => ['lat' => 30.267153, 'lng' => -97.7430608]],
+            'url' => 'https://maps.google.com/?cid=123', 'website' => 'https://apex.example',
+        ]]),
+    ]);
+
+    $p = placesClient()->profile('PID1');
+
+    expect($p->rating)->toBe(4.8)->and($p->ratingsTotal)->toBe(212)->and($p->primaryType())->toBe('plumber')
+        ->and($p->photoCount)->toBe(2)->and($p->businessStatus)->toBe('OPERATIONAL')->and($p->lat)->toBe(30.267153)
+        ->and($p->website)->toBe('https://apex.example');
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'fields=place_id%2Cname%2Crating%2Cuser_ratings_total%2Ctypes%2Cphotos%2Cbusiness_status'));
+});

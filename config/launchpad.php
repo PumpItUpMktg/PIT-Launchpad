@@ -1091,6 +1091,17 @@ return [
         'country_tlds' => array_values(array_filter(array_map('trim', explode(',', (string) env('LAUNCHPAD_LINKS_COUNTRY_TLDS', 'us'))))),
     ],
 
+    // Office roadmap (§ Roadmap). `competitors_per_office` = how many map-pack competitors per office get a
+    // Google Business Profile row (one Places call each). A town is "out of reach" for the pack when at
+    // least `reach_min_closer` of the office's pack winners are closer to it than the office AND the
+    // office is more than `reach_ratio` × the nearest winner's distance away, beyond `reach_floor_miles`.
+    'roadmap' => [
+        'competitors_per_office' => (int) env('LAUNCHPAD_ROADMAP_COMPETITORS_PER_OFFICE', 10),
+        'reach_ratio' => (float) env('LAUNCHPAD_ROADMAP_REACH_RATIO', 1.5),
+        'reach_floor_miles' => (float) env('LAUNCHPAD_ROADMAP_REACH_FLOOR_MILES', 10),
+        'reach_min_closer' => (int) env('LAUNCHPAD_ROADMAP_REACH_MIN_CLOSER', 2),
+    ],
+
     'citations' => [
         'stalled_scan_threshold' => (int) env('LAUNCHPAD_CITATIONS_STALLED_THRESHOLD', 3),
         // A paid directory is "worth paying" only when its cost per SEO-value point is at or below this

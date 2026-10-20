@@ -176,6 +176,10 @@ Schedule::command('launchpad:refresh-places --all')->weeklyOn(4, '02:00')->witho
 // all read `site_backlinks`. One summary call + one call per 1,000 referring domains per site.
 Schedule::command('launchpad:sync-backlinks --all')->monthlyOn(2, '05:00')->withoutOverlapping()->onOneServer();
 
+// GBP profiles — monthly refresh of each office's own Google Business Profile and its top map-pack
+// competitors' (§ Roadmap), after the grid scans of the month. One Places call per place.
+Schedule::command('launchpad:refresh-gbp-profiles --all')->monthlyOn(3, '05:30')->withoutOverlapping()->onOneServer();
+
 // Citation scan — monthly directory-listing sweep for every NAP-profiled location. Queues one scan per
 // location; the run records what changed (new/fixed/regressed/lost), verifies in-flight submissions, and
 // refreshes the Local Presence Score. withoutOverlapping so a slow month can't stack.

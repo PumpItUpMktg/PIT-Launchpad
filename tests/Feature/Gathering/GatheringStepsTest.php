@@ -22,6 +22,7 @@ use App\Gathering\ServiceEnricher;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Places\PlaceCandidate;
 use App\Integrations\Places\PlaceDetails;
+use App\Integrations\Places\PlaceProfile;
 use App\Integrations\Places\PlacesProvider;
 use App\Integrations\Places\PlacesStatus;
 use App\Jobs\EnrichThinServices;
@@ -51,6 +52,11 @@ function fakePlaces(): void
 {
     app()->instance(PlacesProvider::class, new class implements PlacesProvider
     {
+        public function profile(string $placeId): ?PlaceProfile
+        {
+            return null;
+        }
+
         public function search(string $query): array
         {
             foreach (['Trooper', 'Montclair'] as $known) {
