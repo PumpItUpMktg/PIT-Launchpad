@@ -21,6 +21,9 @@ class CompetitorClassifier
         'rotorooter', 'mrrooter', 'rooterman', 'benjaminfranklinplumbing',
         'arsrescuerooter', 'americanresidential', 'mrhandyman', 'servicemaster', 'neighborly',
         'servpro', 'basementsystems', 'jackery', 'zoomdrain',
+        // Retail and supply chains that sit in the map pack because they sell pumps — a store, not a competitor.
+        'tractorsupply', 'acehardware', 'ferguson', 'menards', 'harborfreight', 'grainger', 'supplyhouse',
+        'truevalue', 'costco', 'bjs', 'samsclub', 'northerntool', 'ruralking', 'fleetfarm',
     ];
 
     private const EDITORIAL = [
