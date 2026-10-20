@@ -8,6 +8,7 @@ use App\Integrations\Census\GeocodeResult;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Places\PlaceCandidate;
 use App\Integrations\Places\PlaceDetails;
+use App\Integrations\Places\PlaceProfile;
 use App\Integrations\Places\PlacesProvider;
 use App\Integrations\Places\PlacesStatus;
 use App\Jobs\PublishJob;
@@ -159,6 +160,11 @@ it('will not add a job without a client name and address', function () {
 it('offers address autocomplete suggestions from the Places provider', function () {
     app()->instance(PlacesProvider::class, new class implements PlacesProvider
     {
+        public function profile(string $placeId): ?PlaceProfile
+        {
+            return null;
+        }
+
         public function search(string $query): array
         {
             return [

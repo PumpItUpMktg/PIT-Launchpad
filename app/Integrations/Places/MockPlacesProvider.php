@@ -55,6 +55,20 @@ final class MockPlacesProvider implements PlacesProvider
         );
     }
 
+    /** A canned profile for the mock place; any other id answers null, like the real API for an unknown id. */
+    public function profile(string $placeId): ?PlaceProfile
+    {
+        if ($placeId !== self::PLACE_ID) {
+            return null;
+        }
+
+        return new PlaceProfile(
+            placeId: self::PLACE_ID, name: 'Apex Plumbing — Austin', rating: 4.8, ratingsTotal: 212,
+            types: ['plumber', 'point_of_interest', 'establishment'], photoCount: 10, businessStatus: 'OPERATIONAL',
+            lat: 30.2671530, lng: -97.7430608, website: 'https://apexplumbing.example', gbpUrl: 'https://maps.google.com/?cid=12345678901234567890',
+        );
+    }
+
     public function smokeTest(): PlacesStatus
     {
         return PlacesStatus::ok();

@@ -16,6 +16,9 @@ final class GooglePlacesClient implements PlacesProvider
 
     private const DETAIL_FIELDS = 'place_id,name,formatted_address,address_components,international_phone_number,opening_hours,geometry,url,website';
 
+    /** The profile fields the pack ranks on. `photos` is a list of photo references; its length is the count. */
+    private const PROFILE_FIELDS = 'place_id,name,rating,user_ratings_total,types,photos,business_status,geometry,url,website';
+
     public function __construct(
         private readonly Http $http,
         private readonly string $apiKey,
@@ -72,6 +75,34 @@ final class GooglePlacesClient implements PlacesProvider
             lng: isset($location['lng']) ? (float) $location['lng'] : null,
             gbpUrl: isset($r['url']) ? (string) $r['url'] : null,
             website: isset($r['website']) ? (string) $r['website'] : null,
+        );
+    }
+
+    public function profile(string $placeId): ?PlaceProfile
+    {
+        if ($placeId === '') {
+            return null;
+        }
+
+        $response = $this->get('/details/json', ['place_id' => $placeId, 'fields' => self::PROFILE_FIELDS]);
+        $r = is_array($response['result'] ?? null) ? $response['result'] : null;
+        if ($r === null) {
+            return null;
+        }
+        $location = $r['geometry']['location'] ?? [];
+
+        return new PlaceProfile(
+            placeId: (string) ($r['place_id'] ?? $placeId),
+            name: (string) ($r['name'] ?? ''),
+            rating: isset($r['rating']) && is_numeric($r['rating']) ? (float) $r['rating'] : null,
+            ratingsTotal: isset($r['user_ratings_total']) && is_numeric($r['user_ratings_total']) ? (int) $r['user_ratings_total'] : null,
+            types: array_values(array_filter(array_map(fn ($t): string => is_string($t) ? $t : '', is_array($r['types'] ?? null) ? $r['types'] : []))),
+            photoCount: is_array($r['photos'] ?? null) ? count($r['photos']) : null,
+            businessStatus: isset($r['business_status']) ? (string) $r['business_status'] : null,
+            lat: isset($location['lat']) ? (float) $location['lat'] : null,
+            lng: isset($location['lng']) ? (float) $location['lng'] : null,
+            website: isset($r['website']) ? (string) $r['website'] : null,
+            gbpUrl: isset($r['url']) ? (string) $r['url'] : null,
         );
     }
 

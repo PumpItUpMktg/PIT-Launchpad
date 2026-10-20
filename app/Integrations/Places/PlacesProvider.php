@@ -19,6 +19,9 @@ interface PlacesProvider
     /** Full details for a place, or null when it can't be resolved. */
     public function details(string $placeId): ?PlaceDetails;
 
+    /** The listing's public profile — rating, ratings, types, photos, status, position — or null. */
+    public function profile(string $placeId): ?PlaceProfile;
+
     /** Confirm the Places API is enabled/reachable (clear reason when not). */
     public function smokeTest(): PlacesStatus;
 }
