@@ -139,3 +139,18 @@ it('counts a domain once per town however many of its URLs sit in the top five, 
 
     expect(app(CompetitorTargets::class)->for($site, 10))->toBe([['domain' => 'oriolebw.com', 'appearances' => 1, 'source' => 'organic']]);
 });
+
+it('a retail chain in the map pack is a store, not a competitor — Tractor Supply, Ace and Ferguson are dropped', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sumppumpgurus.com']);
+    $office = Location::factory()->create(['site_id' => $site->id]);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump', 'town_priority_rank' => 1]);
+    $scan = GeoGridScan::create(['site_id' => $site->id, 'location_id' => $office->id, 'keyword_id' => $kw->id, 'provider' => 'dataforseo', 'grid_size' => 1, 'spacing_miles' => 1, 'center_lat' => 40.7, 'center_lng' => -74.0, 'zoom' => 13, 'depth_cap' => 20, 'status' => 'complete', 'scanned_at' => '2026-10-20']);
+    GeoGridPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'row' => 0, 'col' => 0, 'lat' => 40.7, 'lng' => -74.0, 'rank' => 4, 'competitors' => [
+        ['name' => 'Tractor Supply', 'place_id' => 'p1', 'rank' => 1, 'domain' => 'www.tractorsupply.com'],
+        ['name' => 'Ace Hardware', 'place_id' => 'p2', 'rank' => 2, 'domain' => 'acehardware.com'],
+        ['name' => 'Ferguson', 'place_id' => 'p3', 'rank' => 3, 'domain' => 'ferguson.com'],
+        ['name' => 'D&L Pump and Well', 'place_id' => 'p4', 'rank' => 4, 'domain' => 'dlpumpandwell.com'],
+    ]]);
+
+    expect(array_column(app(CompetitorTargets::class)->for($site, 10), 'domain'))->toBe(['dlpumpandwell.com']);
+});
