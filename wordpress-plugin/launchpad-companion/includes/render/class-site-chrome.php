@@ -13,6 +13,7 @@
 namespace Launchpad\Companion\Render;
 
 use Launchpad\Companion\Content\SiteProfileStore;
+use Launchpad\Companion\Meta;
 
 if (! defined('ABSPATH')) {
     exit;
@@ -220,7 +221,11 @@ final class SiteChrome
         if (! empty($p['hours'])) {
             $out .= '<p class="lp-fmeta">' . esc_html((string) $p['hours']) . '</p>';
         }
-        if (! empty($p['address'])) {
+        $hq = $this->headquartersLine($p);
+        if ($hq !== '') {
+            // An out-of-state location page: the headquarters line, never the corporate street address.
+            $out .= '<p class="lp-fmeta lp-fhq">' . $hq . '</p>';
+        } elseif (! empty($p['address'])) {
             $out .= '<p class="lp-fmeta">' . esc_html((string) $p['address']) . '</p>';
         }
         $out .= '</div>';
@@ -323,6 +328,41 @@ final class SiteChrome
     /**
      * @param  list<array{label: string, url: string}>|mixed  $links
      */
+    /**
+     * The headquarters line for the footer of a location page whose state is not the corporate one
+     * (profile `hq.state`): "{Brand} corporate headquarters. For billing and mailing inquiries, please
+     * visit our <a>Contact & Billing page</a>." — so an out-of-state office page carries no competing
+     * home-state street address while anyone mailing a check is routed to the page that lists it.
+     * '' (⇒ the normal address line) on every other page, when the page has no state, when the
+     * profile has no corporate state, or when the states match.
+     *
+     * @param array<string,mixed> $p
+     */
+    private function headquartersLine(array $p): string
+    {
+        $hq = is_array($p['hq'] ?? null) ? $p['hq'] : [];
+        $corporate = strtoupper(trim((string) ($hq['state'] ?? '')));
+        if ($corporate === '') {
+            return '';
+        }
+        $post_id = (int) get_queried_object_id();
+        $state = $post_id > 0 ? strtoupper(trim((string) get_post_meta($post_id, Meta::STATE, true))) : '';
+        if ($state === '' || $state === $corporate) {
+            return '';
+        }
+        $text = trim((string) ($hq['text'] ?? ''));
+        if ($text === '') {
+            $text = $this->brandName($p) . ' corporate headquarters. For billing and mailing inquiries, please visit our';
+        }
+        $label = trim((string) ($hq['link_label'] ?? '')) ?: 'Contact & Billing page';
+        $url = trim((string) ($hq['url'] ?? ''));
+        $link = $url !== ''
+            ? '<a href="' . esc_url($url) . '">' . esc_html($label) . '</a>'
+            : esc_html($label);
+
+        return esc_html($text) . ' ' . $link . '.';
+    }
+
     private function footerColumn(string $title, mixed $links): string
     {
         if (! is_array($links) || $links === []) {

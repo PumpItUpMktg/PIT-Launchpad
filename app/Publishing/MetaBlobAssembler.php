@@ -28,6 +28,7 @@ use App\PageBuilder\Schema\KitSchema;
 use App\PageBuilder\Validation\PublishEligibility;
 use App\Publishing\Blocks\BlockContentAssembler;
 use App\Publishing\Blocks\BlogFeeds;
+use App\Publishing\Blocks\LocationSubject;
 use App\Publishing\Blocks\NapPin;
 use App\Publishing\Blocks\ServiceAreaMap;
 use App\Publishing\Breadcrumbs\SiloIndexResolver;
@@ -78,7 +79,19 @@ class MetaBlobAssembler
         private readonly LocationTitle $locationTitle,
         private readonly BlogFeeds $feeds,
         private readonly PrioritySections $prioritySections,
+        private readonly LocationSubject $locationSubject,
     ) {}
+
+    /** The two-letter state a location page belongs to, or null for any other page / an unresolvable one. */
+    private function pageState(Content $content): ?string
+    {
+        if ($content->kind !== ContentKind::Page || $content->page_type !== PageType::Location) {
+            return null;
+        }
+        $state = strtoupper(trim((string) $this->locationSubject->resolve($content)['state']));
+
+        return $state !== '' ? $state : null;
+    }
 
     /**
      * "Related articles" HTML for a post — its silo siblings ({@see BlogFeeds::related}), or '' when it has
@@ -283,6 +296,11 @@ class MetaBlobAssembler
             // Home still resolves 'home' (the plugin's static-front-page check); service/location/hub
             // have no standard_type and send their page_type unchanged.
             'page_type' => $content->standard_type->value ?? $content->page_type?->value,
+            // A location page's US state (the office's for a hub, the town's for a town page) — the plugin's
+            // footer swaps the corporate street address for the headquarters line on a page whose state is
+            // not the corporate one (an out-of-state office page must not carry the HQ city's geo signal).
+            // Null for every other page kind.
+            'state' => $this->pageState($content),
             'kit' => $this->kitName($content),
             'kit_version' => (string) ($content->wireframe_kit_version ?? ''),
             // Fall back to the routed silo when a post never had its silo_id promoted — the plugin

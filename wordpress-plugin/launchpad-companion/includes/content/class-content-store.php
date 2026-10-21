@@ -364,6 +364,7 @@ final class ContentStore
         update_post_meta($post_id, Meta::IMAGES, $images);
         update_post_meta($post_id, Meta::KIND, $kind);
         update_post_meta($post_id, Meta::PAGE_TYPE, (string) ($payload['page_type'] ?? ''));
+        update_post_meta($post_id, Meta::STATE, strtoupper(trim((string) ($payload['state'] ?? ''))));
         update_post_meta($post_id, Meta::KIT, (string) ($payload['kit'] ?? ''));
         update_post_meta($post_id, Meta::KIT_VERSION, (string) ($payload['kit_version'] ?? ''));
         update_post_meta($post_id, Meta::SILO_ID, (string) ($payload['silo_id'] ?? ''));

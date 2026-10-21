@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.51
+Stable tag: 0.9.52
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,14 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.52 =
+* Conditional footer address: on a location page whose state (`_lp_state`, pushed with the
+  content blob) is not the corporate state (site profile `hq.state`), the footer shows the
+  headquarters line — "{Brand} corporate headquarters. For billing and mailing inquiries, please
+  visit our Contact & Billing page." (linked) — instead of the corporate street address, so an
+  out-of-state office page carries no competing home-state geo signal. Every other page keeps
+  the address line exactly as before.
 
 = 0.9.51 =
 * POST /post/retire: trash an unmanaged (legacy) post by its path — the remove step of the legacy-twin

@@ -4,6 +4,7 @@
  */
 
 use Launchpad\Companion\Content\SiteProfileStore;
+use Launchpad\Companion\Meta;
 use Launchpad\Companion\Render\SiteChrome;
 
 class Test_Site_Chrome extends WP_UnitTestCase
@@ -276,5 +277,45 @@ class Test_Site_Chrome extends WP_UnitTestCase
         // The second group folds into a trailing "More" dropdown carrying its hub link.
         $this->assertStringContainsString('>More<', $header);
         $this->assertStringContainsString('href="https://x/g2"', $header);
+    }
+
+    public function test_footer_swaps_the_street_address_for_the_hq_line_on_an_out_of_state_location_page(): void
+    {
+        ( new SiteProfileStore() )->save([
+            'brand_name' => 'Sump Pump Gurus',
+            'address' => '1 Corporate Way, Clifton, NJ 07011',
+            'hq' => ['state' => 'NJ', 'text' => 'Sump Pump Gurus corporate headquarters. For billing and mailing inquiries, please visit our', 'link_label' => 'Contact & Billing page', 'url' => 'https://sumppumpgurus.com/contact/'],
+        ]);
+        $pa = self::factory()->post->create(['post_type' => 'page', 'post_title' => 'Trooper, PA']);
+        update_post_meta($pa, Meta::STATE, 'PA');
+        $nj = self::factory()->post->create(['post_type' => 'page', 'post_title' => 'Montclair, NJ']);
+        update_post_meta($nj, Meta::STATE, 'NJ');
+        $home = self::factory()->post->create(['post_type' => 'page', 'post_title' => 'Home']);
+
+        $this->go_to(get_permalink($pa));
+        $footer = (new SiteChrome())->footer();
+        $this->assertStringContainsString('lp-fhq', $footer);
+        $this->assertStringContainsString('Sump Pump Gurus corporate headquarters. For billing and mailing inquiries, please visit our <a href="https://sumppumpgurus.com/contact/">Contact &amp; Billing page</a>.', $footer);
+        $this->assertStringNotContainsString('Clifton', $footer);
+
+        // Same-state page and a page with no state keep the address exactly as before.
+        foreach ([$nj, $home] as $id) {
+            $this->go_to(get_permalink($id));
+            $footer = (new SiteChrome())->footer();
+            $this->assertStringContainsString('1 Corporate Way, Clifton, NJ 07011', $footer);
+            $this->assertStringNotContainsString('lp-fhq', $footer);
+        }
+    }
+
+    public function test_footer_never_swaps_when_the_profile_carries_no_corporate_state(): void
+    {
+        ( new SiteProfileStore() )->save(['brand_name' => 'Sewer Gurus', 'address' => '10 Main St, Newark, NJ', 'hq' => ['state' => '', 'url' => '']]);
+        $pa = self::factory()->post->create(['post_type' => 'page']);
+        update_post_meta($pa, Meta::STATE, 'PA');
+
+        $this->go_to(get_permalink($pa));
+        $footer = (new SiteChrome())->footer();
+        $this->assertStringContainsString('10 Main St, Newark, NJ', $footer);
+        $this->assertStringNotContainsString('lp-fhq', $footer);
     }
 }

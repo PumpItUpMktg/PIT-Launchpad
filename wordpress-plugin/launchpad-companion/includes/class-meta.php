@@ -44,6 +44,10 @@ final class Meta
      * re-push re-uploads nothing. */
     public const JOB_MEDIA = '_pig_job_media';
     public const PAGE_TYPE = '_lp_page_type';
+
+    /** A location page's two-letter US state ('' otherwise) — the footer compares it with the
+     * profile's corporate state to swap the street address for the headquarters line. */
+    public const STATE = '_lp_state';
     public const KIT = '_lp_kit';
     public const KIT_VERSION = '_lp_kit_version';
     public const SILO_ID = '_lp_silo_id';
