@@ -40,6 +40,10 @@ class RefreshGbpProfilesCommand extends Command
             $r = $profiler->refresh($site);
             $this->line(sprintf('<info>%s</info> — %d office(s), %d map-pack competitor(s): %d profile(s) refreshed, %d Places could not resolve.',
                 $site->brand_name, $r['offices'], $r['competitors'], $r['profiled'], $r['unresolved']));
+            foreach ($r['unresolved_places'] as $u) {
+                $this->line(sprintf('  · could not resolve: %s (%s%s) — place %s', $u['name'], $u['role'],
+                    $u['role'] === 'competitor' ? ', beside '.$u['beside'] : '', $u['place_id']));
+            }
         }
 
         return self::SUCCESS;

@@ -29,29 +29,39 @@ final class CompetitorProfiler
     ) {}
 
     /**
-     * @return array{offices: int, competitors: int, profiled: int, unresolved: int}
+     * `unresolved_places` names every place Places returned nothing for — its name as the grid (or the office
+     * record) knew it, whether it is one of our offices or a map-pack competitor, and the office it was
+     * seen beside — so a closed, merged, or re-keyed listing can be found rather than counted.
+     *
+     * @return array{offices: int, competitors: int, profiled: int, unresolved: int, unresolved_places: list<array{place_id: string, name: string, role: string, beside: string}>}
      */
     public function refresh(Site $site): array
     {
         $perOffice = max(1, (int) config('launchpad.roadmap.competitors_per_office', 10));
         $offices = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->gbpBacked()->whereNotNull('place_id')->get();
 
-        $wanted = []; // place_id => ['name' => …, 'domain' => …, 'location_id' => …]
+        $wanted = []; // place_id => ['name' => …, 'domain' => …, 'location_id' => …, 'beside' => office name]
         foreach ($offices as $office) {
-            $wanted[(string) $office->place_id] = ['name' => (string) $office->name, 'domain' => null, 'location_id' => (string) $office->id];
+            $wanted[(string) $office->place_id] = ['name' => (string) $office->name, 'domain' => null, 'location_id' => (string) $office->id, 'beside' => (string) $office->name];
         }
         foreach ($offices as $office) {
             foreach (array_slice(self::packCompetitors($site, $office), 0, $perOffice, true) as $placeId => $c) {
-                $wanted[$placeId] ??= ['name' => $c['name'], 'domain' => $c['domain'], 'location_id' => null];
+                $wanted[$placeId] ??= ['name' => $c['name'], 'domain' => $c['domain'], 'location_id' => null, 'beside' => (string) $office->name];
             }
         }
 
-        $profiled = $unresolved = 0;
+        $profiled = 0;
+        $unresolved = [];
         $now = now();
         foreach ($wanted as $placeId => $meta) {
             $profile = $this->places->profile($placeId);
             if ($profile === null) {
-                $unresolved++;
+                $unresolved[] = [
+                    'place_id' => (string) $placeId,
+                    'name' => $meta['name'],
+                    'role' => $meta['location_id'] === null ? 'competitor' : 'office',
+                    'beside' => $meta['beside'],
+                ];
 
                 continue;
             }
@@ -81,7 +91,13 @@ final class CompetitorProfiler
             $profiled++;
         }
 
-        return ['offices' => $offices->count(), 'competitors' => count($wanted) - $offices->count(), 'profiled' => $profiled, 'unresolved' => $unresolved];
+        return [
+            'offices' => $offices->count(),
+            'competitors' => count($wanted) - $offices->count(),
+            'profiled' => $profiled,
+            'unresolved' => count($unresolved),
+            'unresolved_places' => $unresolved,
+        ];
     }
 
     /**
