@@ -1693,23 +1693,30 @@ it('renders the lead form at the #contact CTA on the home page when configured',
     expect(array_values(array_diff(array_unique($hrefs[1]), array_unique($ids[1]))))->toBe([]);
 });
 
-it('Contact: lists the corporate mailing & billing address when it is not the address shown (multi-office HQ)', function () {
+it('Contact: shows the CORPORATE address whenever one is captured (every tenant), else the storefront\'s', function () {
     $site = Site::factory()->create([
         'phone' => '(973) 555-0100',
-        'corporate_street' => '1 Corporate Way', 'corporate_city' => 'Clifton', 'corporate_state' => 'NJ', 'corporate_postal_code' => '07011',
+        'corporate_street' => '377 Valley Road', 'corporate_city' => 'Clifton', 'corporate_state' => 'NJ', 'corporate_postal_code' => '07013',
     ]);
-    Location::factory()->create(['site_id' => $site->id, 'is_storefront' => true, 'address' => '99 Depot Rd, Trooper, PA 19403']);
+    Location::factory()->create(['site_id' => $site->id, 'is_storefront' => true, 'address' => '99 Depot Rd, Montclair, NJ 07042']);
     $page = blockContactPage($site);
 
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
-    expect($markup)->toContain('99 Depot Rd, Trooper, PA 19403')
-        ->toContain('Mailing &amp; billing address')
-        ->toContain('1 Corporate Way, Clifton, NJ 07011');
+    expect($markup)->toContain('377 Valley Road, Clifton, NJ 07013')
+        ->not->toContain('99 Depot Rd, Montclair, NJ 07042')
+        ->not->toContain('Mailing &amp; billing address');
 
-    // A single-office tenant whose storefront IS the corporate address gets one row, not a duplicate.
-    $one = Site::factory()->create(['phone' => '(973) 555-0100', 'corporate_street' => '99 Depot Rd', 'corporate_city' => 'Trooper', 'corporate_state' => 'PA', 'corporate_postal_code' => '19403']);
+    // No corporate address captured ⇒ the earliest storefront's own address, as before.
+    $one = Site::factory()->create(['phone' => '(973) 555-0100']);
     Location::factory()->create(['site_id' => $one->id, 'is_storefront' => true, 'address' => '99 Depot Rd, Trooper, PA 19403']);
     $page = blockContactPage($one);
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
-    expect($markup)->toContain('99 Depot Rd, Trooper, PA 19403')->not->toContain('Mailing &amp; billing address');
+    expect($markup)->toContain('99 Depot Rd, Trooper, PA 19403');
+
+    // No corporate address and a mobile-only base ⇒ no address row at all (never invite walk-ins to a garage).
+    $mobile = Site::factory()->create(['phone' => '(973) 555-0100']);
+    Location::factory()->create(['site_id' => $mobile->id, 'is_storefront' => false, 'address' => '1 Garage Ln, Nutley, NJ 07110']);
+    $page = blockContactPage($mobile);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($markup)->not->toContain('1 Garage Ln, Nutley, NJ 07110');
 });
