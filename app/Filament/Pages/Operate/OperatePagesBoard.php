@@ -23,6 +23,7 @@ use App\Models\Location;
 use App\Models\Market;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Operate\OfficeBuildStrip;
 use App\Operate\PagesBoard;
 use App\Operate\QueueHealth;
 use App\Operator\ActiveTenant;
@@ -217,6 +218,24 @@ abstract class OperatePagesBoard extends OperatePage
         return $this->family() === 'locations'
             ? app(PagesBoard::class)->locations($site, $this->activeLocationTab($site))
             : app(PagesBoard::class)->{$this->family()}($site);
+    }
+
+    /**
+     * The numbers on the active office's title bar (locations family only): the build, what Google did
+     * with it, what it earned. See {@see OfficeBuildStrip}.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getOfficeStripProperty(): ?array
+    {
+        $site = $this->getSite();
+        if ($site === null || $this->family() !== 'locations') {
+            return null;
+        }
+        $id = $this->activeLocationTab($site);
+        $office = $id === null ? null : Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->find($id);
+
+        return $office === null ? null : app(OfficeBuildStrip::class)->for($office);
     }
 
     /**

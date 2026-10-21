@@ -175,6 +175,11 @@
             .pb-gbp-line { display:inline-flex; align-items:center; gap:6px; }
             .pb-gbp-line .k { color:#94a3b8; }
             .pb-gbp-line a { color:#2563eb; text-decoration:none; }
+            .pb-gbp-stats { display:flex; gap:6px 18px; flex-wrap:wrap; margin-top:9px; padding-top:8px; border-top:1px solid rgba(37,99,235,.15); font-size:12px; color:#475569; }
+            .pb-stat { display:inline-flex; align-items:baseline; gap:4px; color:#475569; text-decoration:none; }
+            .pb-stat b { font-weight:700; color:#1e293b; font-size:13px; }
+            .pb-stat i { font-style:normal; color:#94a3b8; }
+            a.pb-stat:hover b { color:#2563eb; }
             .pb-gbp-line a:hover { text-decoration:underline; }
             .pb-gbp-missing { color:#b45309; font-style:italic; }
         </style>
@@ -273,6 +278,25 @@
                         <span class="pb-gbp-line"><a href="{{ $loc['gbp_url'] }}" target="_blank" rel="noopener">View GBP ↗</a></span>
                     @endif
                 </div>
+                @php $strip = $this->officeStrip; @endphp
+                @if ($strip !== null)
+                    <div class="pb-gbp-stats">
+                        <span class="pb-stat" title="Towns this office serves, and how many are selected to get a page"><b>{{ number_format($strip['towns']) }}</b> towns <i>· {{ number_format($strip['selected']) }} selected</i></span>
+                        <span class="pb-stat" title="Pages built for this office (its own page + its town pages), queued to publish, and published"><b>{{ number_format($strip['published']) }}</b> published <i>· {{ number_format($strip['built']) }} built{{ $strip['queued'] > 0 ? ', '.number_format($strip['queued']).' queued' : '' }}</i></span>
+                        <a class="pb-stat" href="{{ \App\Filament\Pages\IndexingBoard::getUrl() }}" title="Of the published pages: indexed by Google, still waiting, crawled and declined{{ $strip['inspected_at'] ? ' · last checked '.$strip['inspected_at']->diffForHumans() : '' }}"><b>{{ number_format($strip['indexed']) }}</b> indexed <i>· {{ number_format($strip['waiting']) }} waiting{{ $strip['declined'] > 0 ? ', '.number_format($strip['declined']).' declined' : '' }}</i></a>
+                        <span class="pb-stat" title="Search Console impressions and clicks on this office's pages, last {{ $strip['window_days'] }} days"><b>{{ number_format($strip['impressions']) }}</b> impressions <i>· {{ number_format($strip['clicks']) }} clicks · {{ $strip['window_days'] }}d</i></span>
+                        @if ($strip['scanned'] !== null && $strip['scanned'] > 0)
+                            <a class="pb-stat" href="{{ \App\Filament\Pages\TownRankPage::getUrl() }}" title="Town results for “{{ $strip['keyword'] }}”: top 3 and page 1, of the towns scanned"><b>{{ number_format($strip['top3']) }}</b> top 3 <i>· {{ number_format($strip['page1']) }} on page 1 of {{ number_format($strip['scanned']) }}</i></a>
+                        @endif
+                        @if ($strip['in_pack_pct'] !== null)
+                            <span class="pb-stat" title="Share of grid cells where this office is in the map pack (top 3), latest grid scans"><b>{{ $strip['in_pack_pct'] }}%</b> in the pack</span>
+                        @endif
+                        <span class="pb-stat" title="Town pages carrying their priority-keyword sections"><b>{{ number_format($strip['sections_live']) }}</b> sections live</span>
+                        @if ($strip['rating'] !== null)
+                            <span class="pb-stat" title="The listing's Google rating and number of ratings, from the last profile refresh"><b>{{ number_format($strip['rating'], 1) }}★</b> <i>({{ number_format((int) $strip['ratings_total']) }})</i></span>
+                        @endif
+                    </div>
+                @endif
             </div>
         @endif
 
