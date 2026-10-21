@@ -981,3 +981,15 @@ it('a location with no Google profile yet shows no rating line and no Google sec
 
     expect($markup)->not->toContain('lp-google-rating')->not->toContain('What customers say on Google')->not->toContain('Google review');
 });
+
+it('the blob carries a location page\'s STATE — the office\'s for a hub, the town\'s for a town page — so the footer can go conditional', function () {
+    $site = locRelaySite();
+    $parent = locRelayLocation($site);   // Trooper, PA
+    SiloBlueprint::create(['site_id' => $site->id, 'trade' => 'basement waterproofing']);
+    $hub = locRelayPage($site, $parent);
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Phillipsburg', 'state' => 'nj', 'geo_id' => '3404158200', 'population' => 14000, 'lat' => 40.69, 'lng' => -75.19, 'source_location_ids' => [$parent->id]]);
+    $town = locRelayPage($site, $parent, ['location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => '3404158200', 'title' => 'Phillipsburg, NJ', 'slug' => 'trooper-pa/phillipsburg-nj']);
+
+    expect(app(MetaBlobAssembler::class)->assemble($hub->fresh(), collect())['state'])->toBe('PA')
+        ->and(app(MetaBlobAssembler::class)->assemble($town->fresh(), collect())['state'])->toBe('NJ');
+});

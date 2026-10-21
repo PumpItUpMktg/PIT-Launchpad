@@ -80,6 +80,10 @@ final class SiteProfileStore
             'legal_links' => self::links($p['legal_links'] ?? []),
             'nav_menu' => self::navMenu($p['nav_menu'] ?? []),
             'alert' => self::alert($p['alert'] ?? []),
+            // Headquarters line for out-of-state location pages — {state, text, link_label, url}. On the
+            // whitelist deliberately (the header_tone regression again): dropped here, the footer would
+            // never swap and the corporate street would stay on every PA page.
+            'hq' => self::hq($p['hq'] ?? []),
             // Air-quality card config. On the whitelist deliberately — an un-whitelisted key is dropped
             // silently here, and the card would simply never render (the header_tone regression again).
             'air' => self::air($p['air'] ?? []),
@@ -114,6 +118,23 @@ final class SiteProfileStore
      * @param  mixed  $raw
      * @return array{enabled: bool, lat: float, lng: float, noun: string, cta_label: string, cta_url: string}
      */
+    /**
+     * @param  mixed  $raw
+     * @return array{state: string, text: string, link_label: string, url: string}
+     */
+    private static function hq(mixed $raw): array
+    {
+        $raw = is_array($raw) ? $raw : [];
+        $state = strtoupper(sanitize_text_field((string) ($raw['state'] ?? '')));
+
+        return [
+            'state' => preg_match('/^[A-Z]{2}$/', $state) === 1 ? $state : '',
+            'text' => sanitize_text_field((string) ($raw['text'] ?? '')),
+            'link_label' => sanitize_text_field((string) ($raw['link_label'] ?? '')),
+            'url' => isset($raw['url']) ? (string) esc_url_raw((string) $raw['url']) : '',
+        ];
+    }
+
     private static function alert(mixed $raw): array
     {
         $raw = is_array($raw) ? $raw : [];

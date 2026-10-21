@@ -190,6 +190,7 @@ final class BlockContentAssembler
             ctx: $ctx,
             email: is_string($location?->email) && trim($location->email) !== '' ? trim($location->email) : null,
             address: $storefront && is_string($location->address) && trim($location->address) !== '' ? trim($location->address) : null,
+            mailingAddress: $this->site($content)?->corporateAddressLine(),
             hours: $hours,
             serviceAreaBrief: $this->slotString($slots, 'service_area_brief'),
             audience: $this->audience($content),

@@ -88,6 +88,11 @@ final class SiteProfileAssembler
             'phone_tel' => $this->tel($phone),
             'emergency' => (bool) $site->offers_emergency,
             'address' => $address,
+            // The headquarters line the footer shows IN PLACE of the street address on a location page whose
+            // state is not the corporate one: keeps the corporate mailing setup, isolates its geo signal to
+            // the home state. `state` empty ⇒ the plugin never swaps. The link is the Contact page when it
+            // exists (same never-advertise-a-missing-page rule), where the mailing address is listed.
+            'hq' => $this->headquarters($site, $home, $address),
             'hours' => $this->hours($location, (bool) $site->offers_emergency),
             'legal' => '',
             'services' => $services,
@@ -118,6 +123,23 @@ final class SiteProfileAssembler
             // Local air-quality card config — the theme's "Local conditions" part renders nothing unless
             // this is on. Opt-in per tenant, same as the weather bar beside it.
             'air' => $this->airCard($site, $location),
+        ];
+    }
+
+    /**
+     * @return array{state: string, text: string, link_label: string, url: string}
+     */
+    private function headquarters(Site $site, string $home, string $address): array
+    {
+        $state = strtoupper(trim((string) $site->corporate_state));
+        $contact = $this->pagesBySlug($site, $home, ['contact', 'contact-us']);
+
+        return [
+            // Only a real corporate STREET address is worth hiding; a bare city/state line is not.
+            'state' => trim((string) $site->corporate_street) !== '' && $address !== '' ? $state : '',
+            'text' => trim((string) $site->brand_name).' corporate headquarters. For billing and mailing inquiries, please visit our',
+            'link_label' => 'Contact & Billing page',
+            'url' => trim((string) ($contact[0]['url'] ?? '')),
         ];
     }
 

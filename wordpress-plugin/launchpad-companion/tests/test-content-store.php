@@ -339,4 +339,15 @@ class Test_Content_Store extends WP_UnitTestCase
         $this->assertSame('water-heater-repair', $republish['slug'], 'The re-push must land on the SAME url, never -2/-3.');
         $this->assertNotSame('water-heater-repair', get_post_field('post_name', $squatter));
     }
+
+    public function test_a_location_page_stores_its_state_and_other_pages_store_none(): void
+    {
+        $store = new ContentStore();
+
+        $town = $store->upsert($this->payload(['content_id' => '01JCONTENTTOWN000000000000', 'page_type' => 'location', 'kit' => 'location-page', 'slug' => 'trooper-pa', 'state' => 'pa']));
+        $this->assertSame('PA', get_post_meta($town['wp_post_id'], Meta::STATE, true));
+
+        $service = $store->upsert($this->payload());
+        $this->assertSame('', get_post_meta($service['wp_post_id'], Meta::STATE, true));
+    }
 }

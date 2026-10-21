@@ -415,3 +415,28 @@ it('pushes the air-quality card config only for an opted-in tenant with coordina
     $noCoords = Site::factory()->create(['air_card' => true]);
     expect(app(SiteProfileAssembler::class)->assemble($noCoords->fresh())['air']['enabled'])->toBeFalse();
 });
+
+it('carries the headquarters block the footer swaps in on an out-of-state location page', function () {
+    $site = Site::factory()->create([
+        'brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://sumppumpgurus.com', 'phone' => '(973) 555-0100',
+        'corporate_street' => '1 Corporate Way', 'corporate_city' => 'Clifton', 'corporate_state' => 'nj', 'corporate_postal_code' => '07011',
+    ]);
+    Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Utility,
+        'status' => ContentStatus::Published, 'slug' => 'contact', 'title' => 'Contact',
+    ]);
+
+    $hq = app(SiteProfileAssembler::class)->assemble($site->fresh())['hq'];
+
+    expect($hq)->toBe([
+        'state' => 'NJ',
+        'text' => 'Sump Pump Gurus corporate headquarters. For billing and mailing inquiries, please visit our',
+        'link_label' => 'Contact & Billing page',
+        'url' => 'https://sumppumpgurus.com/contact/',
+    ]);
+
+    // No corporate STREET captured ⇒ no state ⇒ the plugin never swaps (and no Contact page ⇒ no link).
+    $bare = Site::factory()->create(['brand_name' => 'Sewer Gurus', 'domain_url' => 'https://sewergurus.com', 'corporate_state' => 'NJ']);
+    $hq = app(SiteProfileAssembler::class)->assemble($bare->fresh())['hq'];
+    expect($hq['state'])->toBe('')->and($hq['url'])->toBe('');
+});

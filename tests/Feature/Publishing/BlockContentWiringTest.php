@@ -1692,3 +1692,24 @@ it('renders the lead form at the #contact CTA on the home page when configured',
     preg_match_all('/\bid="([\w-]+)"/', $markup, $ids);
     expect(array_values(array_diff(array_unique($hrefs[1]), array_unique($ids[1]))))->toBe([]);
 });
+
+it('Contact: lists the corporate mailing & billing address when it is not the address shown (multi-office HQ)', function () {
+    $site = Site::factory()->create([
+        'phone' => '(973) 555-0100',
+        'corporate_street' => '1 Corporate Way', 'corporate_city' => 'Clifton', 'corporate_state' => 'NJ', 'corporate_postal_code' => '07011',
+    ]);
+    Location::factory()->create(['site_id' => $site->id, 'is_storefront' => true, 'address' => '99 Depot Rd, Trooper, PA 19403']);
+    $page = blockContactPage($site);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($markup)->toContain('99 Depot Rd, Trooper, PA 19403')
+        ->toContain('Mailing &amp; billing address')
+        ->toContain('1 Corporate Way, Clifton, NJ 07011');
+
+    // A single-office tenant whose storefront IS the corporate address gets one row, not a duplicate.
+    $one = Site::factory()->create(['phone' => '(973) 555-0100', 'corporate_street' => '99 Depot Rd', 'corporate_city' => 'Trooper', 'corporate_state' => 'PA', 'corporate_postal_code' => '19403']);
+    Location::factory()->create(['site_id' => $one->id, 'is_storefront' => true, 'address' => '99 Depot Rd, Trooper, PA 19403']);
+    $page = blockContactPage($one);
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+    expect($markup)->toContain('99 Depot Rd, Trooper, PA 19403')->not->toContain('Mailing &amp; billing address');
+});
