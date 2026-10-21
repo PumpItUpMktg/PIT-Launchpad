@@ -3,15 +3,23 @@
 namespace App\Roadmap;
 
 use App\Backlinks\BacklinkSyncer;
+use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
+use App\Enums\PageType;
 use App\Integrations\Backlinks\BacklinkProvider;
+use App\Integrations\Places\PlaceReview;
 use App\Integrations\Places\PlacesProvider;
+use App\Jobs\PublishContent;
 use App\KeywordGenerator\Beatability\CompetitorClassifier;
+use App\Models\Content;
 use App\Models\GbpProfile;
+use App\Models\GbpReview;
 use App\Models\GeoGridPoint;
 use App\Models\GeoGridScan;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use Illuminate\Support\Carbon;
 use Throwable;
 
 /**
@@ -33,7 +41,10 @@ final class CompetitorProfiler
      * record) knew it, whether it is one of our offices or a map-pack competitor, and the office it was
      * seen beside — so a closed, merged, or re-keyed listing can be found rather than counted.
      *
-     * @return array{offices: int, competitors: int, profiled: int, unresolved: int, unresolved_places: list<array{place_id: string, name: string, role: string, beside: string}>}
+     * `reviews` counts the Google reviews stored for the offices (their own listings only — a competitor's
+     * reviews are never kept), replaced whole per office so a review Google no longer returns drops.
+     *
+     * @return array{offices: int, competitors: int, profiled: int, unresolved: int, reviews: int, unresolved_places: list<array{place_id: string, name: string, role: string, beside: string}>}
      */
     public function refresh(Site $site): array
     {
@@ -50,7 +61,7 @@ final class CompetitorProfiler
             }
         }
 
-        $profiled = 0;
+        $profiled = $reviews = 0;
         $unresolved = [];
         $now = now();
         foreach ($wanted as $placeId => $meta) {
@@ -89,6 +100,9 @@ final class CompetitorProfiler
                 ],
             );
             $profiled++;
+            if ($meta['location_id'] !== null) {
+                $reviews += $this->storeReviews($site, $meta['location_id'], (string) $placeId, $profile->reviews, $now);
+            }
         }
 
         return [
@@ -96,8 +110,52 @@ final class CompetitorProfiler
             'competitors' => count($wanted) - $offices->count(),
             'profiled' => $profiled,
             'unresolved' => count($unresolved),
+            'reviews' => $reviews,
             'unresolved_places' => $unresolved,
         ];
+    }
+
+    /**
+     * Queue a re-push of every live location page (office hubs and their town pages) so the header rating
+     * and the Google reviews section carry what this refresh found. Returns how many were queued.
+     */
+    public function repushLocationPages(Site $site): int
+    {
+        $ids = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)
+            ->where('kind', ContentKind::Page->value)->where('page_type', PageType::Location->value)
+            ->where('status', ContentStatus::Published->value)
+            ->pluck('id')->all();
+        foreach ($ids as $id) {
+            PublishContent::dispatch((string) $id);
+        }
+
+        return count($ids);
+    }
+
+    /**
+     * Replace an office's stored Google reviews with what Places returned this time.
+     *
+     * @param  list<PlaceReview>  $reviews
+     */
+    private function storeReviews(Site $site, string $locationId, string $placeId, array $reviews, Carbon $now): int
+    {
+        GbpReview::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('location_id', $locationId)->delete();
+        foreach ($reviews as $rv) {
+            GbpReview::withoutGlobalScope(SiteScope::class)->create([
+                'site_id' => $site->id,
+                'location_id' => $locationId,
+                'place_id' => $placeId,
+                'author_name' => $rv->authorName !== '' ? $rv->authorName : 'A Google user',
+                'author_url' => $rv->authorUrl,
+                'rating' => $rv->rating,
+                'text' => $rv->text,
+                'relative_time' => $rv->relativeTime,
+                'reviewed_at' => $rv->time === null ? null : Carbon::createFromTimestamp($rv->time),
+                'refreshed_at' => $now,
+            ]);
+        }
+
+        return count($reviews);
     }
 
     /**

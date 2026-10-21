@@ -26,6 +26,7 @@ final class BlockSections
      * the left, the AI hero image on the right. Buttons and the trust row are emergency-gated.
      *
      * @param  list<array{value: string, label: string}>  $trust
+     * @param  array{rating: float, count: int, url: string}|null  $googleRating  the listing's Google rating line (location pages), linked to the listing
      */
     public function hero(
         string $eyebrow,
@@ -38,11 +39,13 @@ final class BlockSections
         array $trust,
         PageContext $ctx,
         array $imageAttrs = [],
+        ?array $googleRating = null,
     ): string {
         $left = [
             $this->b->paragraph($eyebrow, ['textColor' => 'base', 'fontSize' => 'small', 'className' => 'lp-eyebrow']),
             $this->b->heading(1, $headline, ['textColor' => 'base']),
             $this->b->paragraph($subhead, ['textColor' => 'base']),
+            $this->googleRatingLine($googleRating),
             $this->heroButtons($assessmentText, $assessmentUrl, $ctx),
             $this->trustRow($trust),
         ];
@@ -968,12 +971,34 @@ final class BlockSections
     }
 
     /**
-     * Testimonials: a three-up of client quotes. Data-gated — renders only when real, substantiated
-     * reviews exist; never fabricates a quote or a star rating.
+     * The Google rating line under a location hero's subhead: the stars, the rating, the count, linked to
+     * the listing. Visible text only — NO rating structured data (the permanent §8 schema policy). Omitted
+     * when the listing has no profile yet; never a placeholder.
+     *
+     * @param  array{rating: float, count: int, url: string}|null  $r
+     */
+    private function googleRatingLine(?array $r): string
+    {
+        if ($r === null || $r['rating'] <= 0 || trim($r['url']) === '') {
+            return '';
+        }
+        $stars = str_repeat('★', max(1, min(5, (int) round($r['rating']))));
+        $html = '<a class="lp-google-rating-link" href="'.$this->text($r['url']).'" target="_blank" rel="noopener">'
+            .'<span class="lp-stars">'.$stars.'</span> <strong>'.number_format($r['rating'], 1).'</strong>'
+            .' · '.number_format(max(0, $r['count'])).' Google review'.($r['count'] === 1 ? '' : 's').' ↗</a>';
+
+        return $this->b->paragraph($html, ['textColor' => 'base', 'className' => 'lp-google-rating']);
+    }
+
+    /**
+     * Testimonials: client quotes, three to a row. Data-gated — renders only when real, substantiated
+     * reviews exist; never fabricates a quote or a star rating. `$footnote` is sanitized inline HTML under
+     * the grid (the Google attribution + "read all" link on the Google section); `$variant` appends a
+     * className so the theme can style one section apart from another.
      *
      * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $quotes
      */
-    public function testimonials(string $eyebrow, string $heading, array $quotes, bool $preview = false): string
+    public function testimonials(string $eyebrow, string $heading, array $quotes, bool $preview = false, string $footnote = '', string $variant = ''): string
     {
         $quotes = array_values(array_filter($quotes, fn (array $q): bool => trim($q['quote']) !== ''));
         $placeholder = false;
@@ -1014,9 +1039,17 @@ final class BlockSections
         if ($placeholder) {
             $children[] = $this->placeholderNote('activates when you add reviews');
         }
-        $children[] = $this->b->columns($cols, ['className' => 'lp-testimonials-grid']);
+        // Three to a row: a fourth and fifth quote (Google returns five) start a second row rather than
+        // squeezing five columns into one.
+        foreach (array_chunk($cols, 3) as $row) {
+            $children[] = $this->b->columns($row, ['className' => 'lp-testimonials-grid']);
+        }
+        if (trim($footnote) !== '') {
+            $children[] = $this->b->paragraph($this->richText($footnote), ['textColor' => 'muted', 'fontSize' => 'small', 'className' => 'lp-testimonials-note']);
+        }
+        $class = $this->sectionClass('lp-testimonials', $placeholder).($variant !== '' ? ' '.$variant : '');
 
-        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $this->sectionClass('lp-testimonials', $placeholder)]);
+        return $this->b->group($children, ['align' => 'full', 'backgroundColor' => 'surface', 'className' => $class]);
     }
 
     /**

@@ -9,7 +9,10 @@ namespace App\Integrations\Places;
  */
 final class PlaceProfile
 {
-    /** @param  list<string>  $types */
+    /**
+     * @param  list<string>  $types
+     * @param  list<PlaceReview>  $reviews  Google's five most relevant reviews, when the listing has any
+     */
     public function __construct(
         public readonly string $placeId,
         public readonly string $name,
@@ -22,6 +25,7 @@ final class PlaceProfile
         public readonly ?float $lng,
         public readonly ?string $website,
         public readonly ?string $gbpUrl,
+        public readonly array $reviews = [],
     ) {}
 
     /** The primary Google type — the first non-generic one. */

@@ -15,7 +15,8 @@ class RefreshGbpProfilesCommand extends Command
 {
     protected $signature = 'launchpad:refresh-gbp-profiles
         {--site= : Site id or brand name}
-        {--all : Every site with a GBP-backed office}';
+        {--all : Every site with a GBP-backed office}
+        {--no-push : Do not queue a re-push of the live location pages afterwards}';
 
     protected $description = 'Refresh the own and competitor Google Business Profiles the office roadmap compares.';
 
@@ -38,11 +39,15 @@ class RefreshGbpProfilesCommand extends Command
 
         foreach ($sites as $site) {
             $r = $profiler->refresh($site);
-            $this->line(sprintf('<info>%s</info> — %d office(s), %d map-pack competitor(s): %d profile(s) refreshed, %d Places could not resolve.',
-                $site->brand_name, $r['offices'], $r['competitors'], $r['profiled'], $r['unresolved']));
+            $this->line(sprintf('<info>%s</info> — %d office(s), %d map-pack competitor(s): %d profile(s) refreshed, %d Google review(s) stored, %d Places could not resolve.',
+                $site->brand_name, $r['offices'], $r['competitors'], $r['profiled'], $r['reviews'], $r['unresolved']));
             foreach ($r['unresolved_places'] as $u) {
                 $this->line(sprintf('  · could not resolve: %s (%s%s) — place %s', $u['name'], $u['role'],
                     $u['role'] === 'competitor' ? ', beside '.$u['beside'] : '', $u['place_id']));
+            }
+            if (! $this->option('no-push')) {
+                $queued = $profiler->repushLocationPages($site);
+                $this->line(sprintf('  Queued a re-push of %d live location page(s) so the header rating and Google reviews refresh.', $queued));
             }
         }
 
