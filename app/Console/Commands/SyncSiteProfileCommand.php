@@ -56,6 +56,10 @@ class SyncSiteProfileCommand extends Command
             count($profile['company']),
             $profile['phone'] !== '' ? ', phone set' : ', no phone',
         ));
+        $hq = is_array($profile['hq'] ?? null) ? $profile['hq'] : [];
+        $this->line(($hq['state'] ?? '') !== ''
+            ? sprintf('  Footer HQ line: swaps on location pages outside %s → %s', $hq['state'], ($hq['url'] ?? '') !== '' ? $hq['url'] : '(no Contact page link)')
+            : '  Footer HQ line: off — no corporate street address captured, the street address shows everywhere.');
 
         return self::SUCCESS;
     }

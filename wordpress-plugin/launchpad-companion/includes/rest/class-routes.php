@@ -151,9 +151,10 @@ final class Routes
         ]);
     }
 
-    public function status(): WP_REST_Response
+    public function status(WP_REST_Request $request): WP_REST_Response
     {
-        return new WP_REST_Response(Status::payload(), 200);
+        // ?path=/trooper-pa/ adds what the companion stored for that page (state, page type, pushed).
+        return new WP_REST_Response(Status::payload((string) $request->get_param('path')), 200);
     }
 
     public function auth_check(): WP_REST_Response

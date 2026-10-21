@@ -10,6 +10,9 @@
 
 namespace Launchpad\Companion\Rest;
 
+use Launchpad\Companion\Content\SiteProfileStore;
+use Launchpad\Companion\Meta;
+
 if (! defined('ABSPATH')) {
     exit;
 }
@@ -17,11 +20,16 @@ if (! defined('ABSPATH')) {
 final class Status
 {
     /**
+     * @param  string  $path  optional site-relative path (e.g. /trooper-pa/) — when given, the payload also
+     *                        reports what the companion stored for that page: the post id, page type, the
+     *                        state the footer swaps on, and whether a push has ever landed. Read-only.
      * @return array<string, mixed>
      */
-    public static function payload(): array
+    public static function payload(string $path = ''): array
     {
         $theme = wp_get_theme();
+        $profile = SiteProfileStore::get();
+        $hq = is_array($profile['hq'] ?? null) ? $profile['hq'] : [];
 
         return [
             'wp_version' => get_bloginfo('version'),
@@ -40,6 +48,38 @@ final class Status
             // "colors didn't change" diagnosis.
             'active_colors' => self::active_colors(),
             'companion_version' => defined('LPC_VERSION') ? LPC_VERSION : null,
+            // What the footer swaps on: the corporate state the stored profile carries ('' ⇒ never swaps)
+            // and the Contact link. Ground truth for a "footer still shows the street address" diagnosis.
+            'footer_hq' => [
+                'state' => (string) ($hq['state'] ?? ''),
+                'url' => (string) ($hq['url'] ?? ''),
+            ],
+            'page' => $path !== '' ? self::page($path) : null,
+        ];
+    }
+
+    /**
+     * The stored facts about one managed page, by its site-relative path.
+     *
+     * @return array<string, mixed>
+     */
+    private static function page(string $path): array
+    {
+        $path = '/' . trim($path, '/') . '/';
+        $post_id = (int) url_to_postid(home_url($path));
+        if ($post_id <= 0) {
+            return ['path' => $path, 'found' => false];
+        }
+
+        return [
+            'path' => $path,
+            'found' => true,
+            'post_id' => $post_id,
+            'post_status' => (string) get_post_status($post_id),
+            'content_id' => (string) get_post_meta($post_id, Meta::CONTENT_ID, true),
+            'page_type' => (string) get_post_meta($post_id, Meta::PAGE_TYPE, true),
+            'state' => (string) get_post_meta($post_id, Meta::STATE, true),
+            'pushed' => (string) get_post_meta($post_id, Meta::LAST_PUSH, true) !== '',
         ];
     }
 
