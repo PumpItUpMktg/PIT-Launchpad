@@ -14,6 +14,8 @@
 
 namespace Launchpad\Companion\Rest;
 
+use Launchpad\Companion\ServiceUser;
+
 if (! defined('ABSPATH')) {
     exit;
 }
@@ -42,6 +44,9 @@ final class AuthDiagnostics
                 : null,
             'is_ssl' => function_exists('is_ssl') ? is_ssl() : false,
             'plugin_version' => defined('LPC_VERSION') ? LPC_VERSION : null,
+            // Whether THIS request would pass the write gate, and which install-side filters touch
+            // capabilities / user resolution — so an open gate can be diagnosed with a read, never a write.
+            'gate' => ServiceUser::gate_report(),
         ];
     }
 

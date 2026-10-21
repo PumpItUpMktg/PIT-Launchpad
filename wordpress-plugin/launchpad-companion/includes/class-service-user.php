@@ -98,6 +98,63 @@ final class ServiceUser
      */
     public static function can_manage(): bool
     {
+        // A request WordPress resolved to no user can never manage content, whatever a capability filter
+        // on the install says. Defense in depth: a site where a cap filter (or a stale role cache) grants
+        // the capability to the anonymous user must still refuse every write.
+        if (! is_user_logged_in() || get_current_user_id() <= 0) {
+            return false;
+        }
+
         return current_user_can(self::CAP);
+    }
+
+    /**
+     * Why this request would (or would not) pass the gate — surfaced by the PUBLIC auth-check route so an
+     * open gate can be seen from outside without a write. Names of filter callbacks only; no secrets.
+     *
+     * @return array<string, mixed>
+     */
+    public static function gate_report(): array
+    {
+        $filters = [];
+        foreach (['user_has_cap', 'map_meta_cap', 'determine_current_user', 'rest_authentication_errors'] as $hook) {
+            $filters[$hook] = self::callback_names($hook);
+        }
+
+        return [
+            'current_user_id' => (int) get_current_user_id(),
+            'logged_in' => is_user_logged_in(),
+            // The raw capability check the gate wraps — true here for an anonymous request means something
+            // on the install grants the capability to everyone (and the gate above is what stops it).
+            'raw_cap_check' => current_user_can(self::CAP),
+            'can_manage' => self::can_manage(),
+            'cap_filters' => $filters,
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function callback_names(string $hook): array
+    {
+        global $wp_filter;
+        $names = [];
+        if (! isset($wp_filter[$hook]) || ! is_object($wp_filter[$hook])) {
+            return $names;
+        }
+        foreach ((array) $wp_filter[$hook]->callbacks as $priority => $callbacks) {
+            foreach ((array) $callbacks as $cb) {
+                $fn = $cb['function'] ?? null;
+                if (is_string($fn)) {
+                    $names[] = $fn . '@' . $priority;
+                } elseif (is_array($fn) && count($fn) === 2) {
+                    $names[] = (is_object($fn[0]) ? get_class($fn[0]) : (string) $fn[0]) . '::' . (string) $fn[1] . '@' . $priority;
+                } else {
+                    $names[] = 'closure@' . $priority;
+                }
+            }
+        }
+
+        return $names;
     }
 }
