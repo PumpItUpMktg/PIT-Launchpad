@@ -15,9 +15,13 @@ use App\Filament\Pages\Operate\OperateLocationPages;
 use App\Filament\Pages\Operate\OperateServicePages;
 use App\Jobs\GeneratePage;
 use App\Jobs\PublishContent;
+use App\Metrics\UrlNormalizer;
 use App\Models\AuditLog;
 use App\Models\Content;
+use App\Models\CoverageArea;
+use App\Models\GbpProfile;
 use App\Models\Location;
+use App\Models\PageIndexState;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Silo;
@@ -26,8 +30,11 @@ use App\Models\Site;
 use App\Models\Spoke;
 use App\Models\User;
 use App\Models\WireframeKit;
+use App\Operate\OfficeBuildStrip;
 use App\Operate\PagesBoard;
+use App\Support\PublicUrl;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
@@ -462,4 +469,72 @@ it('renders the tab the board actually built, even when the view is asked for an
 
     // An id that is not a tab at all falls back to the first tab rather than rendering nothing.
     $page->call('setLocTab', 'not-a-location')->assertOk()->assertSee('Verona');
+});
+
+it('shows the office build strip on the title bar: towns, published/built, indexed, impressions, sections, rating', function () {
+    $site = pbSite();
+    session(['guided_site_id' => $site->id]);
+    $loc = Location::factory()->create([
+        'site_id' => $site->id, 'name' => 'Sump Pump Gurus Montclair', 'served_towns' => [],
+        'place_id' => 'ChIJmontclair', 'home_county_geoid' => '34013',
+    ]);
+    // Three towns in the office's county, two selected for a page.
+    foreach ([['3401', 'Belleville', 36000, true], ['3402', 'Nutley', 30000, true], ['3403', 'Glen Ridge', 7500, false]] as [$geo, $name, $pop, $sel]) {
+        CoverageArea::create([
+            'site_id' => $site->id, 'geo_id' => $geo, 'name' => $name, 'type' => 'place', 'state' => 'NJ',
+            'lat' => 40.79, 'lng' => -74.15, 'source_location_ids' => [$loc->id], 'population' => $pop, 'page_selected' => $sel,
+        ]);
+    }
+    // Hub published + one town published + one town still approved (queued).
+    $hub = pbPage($site, PageType::Location, ContentStatus::Published, 'Montclair', ['location_id' => $loc->id]);
+    $town = pbPage($site, PageType::Location, ContentStatus::Published, 'Belleville', ['parent_location_id' => $loc->id]);
+    pbPage($site, PageType::Location, ContentStatus::Approved, 'Nutley', ['parent_location_id' => $loc->id]);
+    // The hub is indexed (PASS); the town was crawled and declined.
+    foreach ([[$hub, 'PASS', 'indexed'], [$town, 'NEUTRAL', 'crawled_not_indexed']] as [$c, $verdict, $cov]) {
+        $url = PublicUrl::forContent($site->domain_url, $c);
+        PageIndexState::create([
+            'site_id' => $site->id, 'content_id' => $c->id, 'origin' => 'content', 'url' => $url,
+            'url_normalized' => UrlNormalizer::url($url), 'coverage_state' => $cov,
+            'index_verdict' => $verdict, 'last_inspected_at' => now()->subDay(),
+        ]);
+    }
+    // 1,234 impressions and 56 clicks on the hub this window.
+    $path = UrlNormalizer::path(PublicUrl::forContent($site->domain_url, $hub) ?? '/montclair');
+    foreach (['impressions' => 1234, 'clicks' => 56] as $key => $value) {
+        DB::table('metric_snapshots')->insert([
+            'id' => (string) Str::ulid(), 'site_id' => $site->id, 'provider' => 'gsc', 'metric_key' => $key,
+            'dimension_type' => 'page', 'dimension_value' => $path, 'period_grain' => 'day', 'period_date' => now()->toDateString(),
+            'value_numeric' => $value, 'captured_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+    }
+    GbpProfile::create([
+        'site_id' => $site->id, 'location_id' => $loc->id, 'place_id' => 'ChIJmontclair', 'name' => 'Sump Pump Gurus Montclair',
+        'rating' => 4.8, 'ratings_total' => 132, 'refreshed_at' => now(),
+    ]);
+
+    $strip = app(OfficeBuildStrip::class)->for($loc->fresh());
+    expect($strip['towns'])->toBe(3)
+        ->and($strip['selected'])->toBe(2)
+        ->and($strip['built'])->toBe(3)
+        ->and($strip['queued'])->toBe(1)
+        ->and($strip['published'])->toBe(2)
+        ->and($strip['indexed'])->toBe(1)
+        ->and($strip['declined'])->toBe(1)
+        ->and($strip['waiting'])->toBe(0)
+        ->and($strip['impressions'])->toBe(1234)
+        ->and($strip['clicks'])->toBe(56)
+        ->and($strip['rating'])->toBe(4.8)
+        ->and($strip['ratings_total'])->toBe(132);
+
+    Livewire::test(OperateLocationPages::class)
+        ->assertOk()
+        ->assertSee('3</b> towns', false)
+        ->assertSee('2 selected')
+        ->assertSee('2</b> published', false)
+        ->assertSee('3 built, 1 queued')
+        ->assertSee('1</b> indexed', false)
+        ->assertSee('1 declined')
+        ->assertSee('1,234</b> impressions', false)
+        ->assertSee('56 clicks')
+        ->assertSee('4.8★');
 });
