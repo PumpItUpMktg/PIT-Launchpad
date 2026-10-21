@@ -112,3 +112,25 @@ it('reads a listing\'s public profile: rating, ratings, types, photo count, stat
         ->and($p->website)->toBe('https://apex.example');
     Http::assertSent(fn ($request) => str_contains($request->url(), 'fields=place_id%2Cname%2Crating%2Cuser_ratings_total%2Ctypes%2Cphotos%2Cbusiness_status'));
 });
+
+it('reads the listing\'s Google reviews with the profile — verbatim, rating-only entries dropped', function () {
+    Http::fake([
+        '*/details/json*' => Http::response(['result' => [
+            'place_id' => 'PID1', 'name' => 'Apex Plumbing', 'rating' => 4.8, 'user_ratings_total' => 212,
+            'reviews' => [
+                ['author_name' => 'Dana R.', 'author_url' => 'https://www.google.com/maps/contrib/1', 'rating' => 5, 'text' => 'Fixed our sump the same day.', 'relative_time_description' => 'a month ago', 'time' => 1760000000],
+                ['author_name' => 'Lee', 'rating' => 4, 'text' => '', 'relative_time_description' => '2 months ago', 'time' => 1750000000],
+                ['author_name' => 'Pat', 'rating' => 2, 'text' => 'Late, but the work held up.', 'relative_time_description' => 'a year ago', 'time' => 1720000000],
+            ],
+        ]]),
+    ]);
+
+    $p = placesClient()->profile('PID1');
+
+    expect($p->reviews)->toHaveCount(2)
+        ->and($p->reviews[0]->authorName)->toBe('Dana R.')->and($p->reviews[0]->rating)->toBe(5)
+        ->and($p->reviews[0]->text)->toBe('Fixed our sump the same day.')->and($p->reviews[0]->relativeTime)->toBe('a month ago')
+        ->and($p->reviews[0]->time)->toBe(1760000000)->and($p->reviews[0]->authorUrl)->toBe('https://www.google.com/maps/contrib/1')
+        ->and($p->reviews[1]->rating)->toBe(2);   // Google's pick ships as given — a low one included
+    Http::assertSent(fn ($request) => str_contains($request->url(), '%2Creviews'));
+});

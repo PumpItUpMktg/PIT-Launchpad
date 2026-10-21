@@ -16,6 +16,8 @@ use App\Local\Proof\LocalReviewProvider;
 use App\Models\Content;
 use App\Models\ContentTown;
 use App\Models\CoverageArea;
+use App\Models\GbpProfile;
+use App\Models\GbpReview;
 use App\Models\Location;
 use App\Models\PageConfig;
 use App\Models\Scopes\SiteScope;
@@ -908,4 +910,74 @@ it('renders Local conditions on the hub but not on the town pages beneath it', f
     expect($townMarkup)->toContain('Pequannock')
         ->and($townMarkup)->not->toContain('Local conditions')
         ->and($townMarkup)->not->toContain('Summer dew points here average 67°F.');
+});
+
+function locGoogleProfile(Site $site, Location $location, int $reviews = 5): void
+{
+    GbpProfile::create(['site_id' => $site->id, 'location_id' => $location->id, 'place_id' => (string) $location->place_id, 'name' => 'Sump Pump Gurus | Trooper', 'rating' => 4.8, 'ratings_total' => 132, 'refreshed_at' => now()]);
+    for ($i = 1; $i <= $reviews; $i++) {
+        GbpReview::create([
+            'site_id' => $site->id, 'location_id' => $location->id, 'place_id' => (string) $location->place_id,
+            'author_name' => "Reviewer {$i}", 'rating' => $i === 3 ? 4 : 5, 'text' => "Google review number {$i} about the Trooper crew.",
+            'relative_time' => "{$i} months ago", 'reviewed_at' => now()->subMonths($i), 'refreshed_at' => now(),
+        ]);
+    }
+}
+
+it('a HUB page carries the Google rating line in the hero and its five Google reviews ABOVE our captured reviews', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site, ['place_id' => 'PID_TROOPER', 'gbp_url' => 'https://maps.google.com/?cid=777']);
+    $page = locRelayPage($site, $location);
+    locGoogleProfile($site, $location);
+    app()->instance(LocalReviewProvider::class, new class implements LocalReviewProvider
+    {
+        public function for(Location $location): array
+        {
+            return [new LocalReview('Maria', 5, 'They dried out our stone basement for good.', 'Norristown')];
+        }
+    });
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    // Hero: stars, the rating, the count, linked to the listing — before the hero buttons.
+    expect($markup)->toContain('lp-google-rating')
+        ->toContain('href="https://maps.google.com/?cid=777"')
+        ->toContain('<strong>4.8</strong> · 132 Google reviews ↗')
+        ->and(strpos($markup, 'lp-google-rating'))->toBeLessThan(strpos($markup, 'Get a free assessment'));
+    // Google section: all five, verbatim, author + Google's relative time, the attribution + read-all link.
+    expect($markup)->toContain('What customers say on Google')
+        ->toContain('Google review number 5 about the Trooper crew.')
+        ->toContain('<strong>Reviewer 1</strong><br><span class="lp-who-role">1 months ago</span>')
+        ->toContain('Reviews from Google.')
+        ->toContain('Read all 132 reviews on Google')
+        ->toMatch('#<a href="https://maps\.google\.com/\?cid(=|&\#61;)777">Read all 132 reviews#')   // the sanitizer entity-encodes "="; browsers decode it
+        ->toContain('lp-testimonials--google');
+    // Order: Google section, then our captured reviews.
+    expect(strpos($markup, 'What customers say on Google'))->toBeLessThan(strpos($markup, 'What neighbors say'))
+        ->and($markup)->toContain('They dried out our stone basement for good.');
+    // Still no rating structured data anywhere on the page (permanent §8 policy).
+    expect($markup)->not->toContain('aggregateRating')->not->toContain('"@type":"Review"');
+});
+
+it('a TOWN page carries its parent office\'s Google rating line but NOT the Google reviews section', function () {
+    $site = locRelaySite();
+    $parent = locRelayLocation($site, ['place_id' => 'PID_TROOPER', 'gbp_url' => 'https://maps.google.com/?cid=777']);
+    $town = locRelayPage($site, $parent, ['location_id' => null, 'parent_location_id' => $parent->id, 'title' => 'Pequannock, NJ', 'slug' => 'pequannock-nj']);
+    locGoogleProfile($site, $parent);
+
+    $markup = app(BlockContentAssembler::class)->compose($town->fresh(), $town->slot_payload, []);
+
+    expect($markup)->toContain('<strong>4.8</strong> · 132 Google reviews ↗')
+        ->not->toContain('What customers say on Google')
+        ->not->toContain('Google review number 1');
+});
+
+it('a location with no Google profile yet shows no rating line and no Google section — never a placeholder', function () {
+    $site = locRelaySite();
+    $location = locRelayLocation($site);
+    $page = locRelayPage($site, $location);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->not->toContain('lp-google-rating')->not->toContain('What customers say on Google')->not->toContain('Google review');
 });

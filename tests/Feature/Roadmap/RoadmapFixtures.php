@@ -46,9 +46,9 @@ function scriptedPlaces(array $profiles): PlacesProvider
     };
 }
 
-function roadmapProfile(string $placeId, string $name, float $rating, int $ratings, string $type, int $photos, float $lat, float $lng, ?string $website = null): PlaceProfile
+function roadmapProfile(string $placeId, string $name, float $rating, int $ratings, string $type, int $photos, float $lat, float $lng, ?string $website = null, array $reviews = []): PlaceProfile
 {
-    return new PlaceProfile($placeId, $name, $rating, $ratings, [$type, 'point_of_interest', 'establishment'], $photos, 'OPERATIONAL', $lat, $lng, $website, null);
+    return new PlaceProfile($placeId, $name, $rating, $ratings, [$type, 'point_of_interest', 'establishment'], $photos, 'OPERATIONAL', $lat, $lng, $website, null, $reviews);
 }
 
 function summaryBacklinks(array $byDomain): BacklinkProvider

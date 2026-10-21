@@ -20,6 +20,8 @@ use App\Local\Proof\ServiceReviewProvider;
 use App\Models\Content;
 use App\Models\ConversionConfig;
 use App\Models\CoverageArea;
+use App\Models\GbpProfile;
+use App\Models\GbpReview;
 use App\Models\Location;
 use App\Models\PageConfig;
 use App\Models\ProofItem;
@@ -915,6 +917,8 @@ final class BlockContentAssembler
             prioritySections: $prioritySections,
             coverage: $coverage,
             reviews: $this->locationReviews($location),
+            googleRating: $this->googleRating($location),
+            googleReviews: $isTown ? [] : $this->googleReviews($location),
             jobs: $this->locationJobs($content, $location, $isTown),
             localPosts: $this->localPosts($content, $city),
             faqs: $this->faqItems($slots, $this->offersEmergency($content)),
@@ -1238,6 +1242,50 @@ final class BlockContentAssembler
         }
 
         return $out;
+    }
+
+    /**
+     * The office's Google rating for the hero line — from its own {@see GbpProfile} row (the monthly refresh),
+     * linked to the listing (the GBP URL on the office, else Google's reviews deep link for its place id). A
+     * town page carries its parent office's rating. No profile, or no rating yet ⇒ null and the line omits.
+     *
+     * @return array{rating: float, count: int, url: string}|null
+     */
+    private function googleRating(Location $location): ?array
+    {
+        $profile = GbpProfile::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $location->site_id)->where('location_id', $location->id)->first();
+        if ($profile === null || $profile->rating === null || (float) $profile->rating <= 0) {
+            return null;
+        }
+        $url = trim((string) $location->gbp_url);
+        if ($url === '' && trim((string) $location->place_id) !== '') {
+            $url = 'https://search.google.com/local/reviews?placeid='.rawurlencode((string) $location->place_id);
+        }
+        if ($url === '') {
+            return null;
+        }
+
+        return ['rating' => (float) $profile->rating, 'count' => (int) ($profile->ratings_total ?? 0), 'url' => $url];
+    }
+
+    /**
+     * The office's stored Google reviews (hub pages only) mapped to the testimonials shape: the author's name
+     * as Google gives it, Google's relative time as the byline, the text verbatim. Empty ⇒ the section omits.
+     *
+     * @return list<array{quote: string, author: string, role: string, stars: int}>
+     */
+    private function googleReviews(Location $location): array
+    {
+        return GbpReview::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $location->site_id)->where('location_id', $location->id)
+            ->orderByDesc('reviewed_at')->limit(5)->get()
+            ->map(fn (GbpReview $r): array => [
+                'quote' => $r->text,
+                'author' => $r->author_name,
+                'role' => trim((string) $r->relative_time) !== '' ? (string) $r->relative_time : 'on Google',
+                'stars' => max(0, min(5, $r->rating)),
+            ])->values()->all();
     }
 
     /**

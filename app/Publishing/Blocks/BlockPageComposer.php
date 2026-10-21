@@ -1062,6 +1062,8 @@ final class BlockPageComposer
         bool $areasMapAvailable = false,
         bool $preview = false,
         array $prioritySections = [],
+        ?array $googleRating = null,
+        array $googleReviews = [],
     ): string {
         $place = trim($city) !== '' ? (trim($state) !== '' ? trim($city).', '.trim($state) : trim($city)) : '';
 
@@ -1083,6 +1085,7 @@ final class BlockPageComposer
             assessmentUrl: '#contact',
             trust: $this->heroTrust($ctx, $trustStats),
             ctx: $ctx,
+            googleRating: $googleRating,
         );
 
         // The drafted local grounding paragraphs — market notes + grounded facts woven into honest prose.
@@ -1186,6 +1189,19 @@ final class BlockPageComposer
 
         // Reviews + jobs are STRICTLY provider-gated — preview: false is deliberate (no "Example"
         // placeholder in either context; nothing an operator does today can fill them).
+        // The office's own Google reviews (hub pages; the five Places reports, verbatim, under Google's
+        // attribution) sit ABOVE our captured reviews — one section each, same card layout.
+        $googleBlock = $this->sections->testimonials(
+            eyebrow: 'Google reviews',
+            heading: 'What customers say on Google',
+            quotes: $googleReviews,
+            preview: false,
+            footnote: $googleRating !== null
+                ? 'Reviews from Google. <a href="'.htmlspecialchars($googleRating['url'], ENT_QUOTES, 'UTF-8').'">Read all '.number_format($googleRating['count']).' reviews on Google ↗</a>'
+                : 'Reviews from Google.',
+            variant: 'lp-testimonials--google',
+        );
+
         $reviewsBlock = $this->sections->testimonials(
             eyebrow: 'What neighbors say',
             heading: $city !== '' ? 'Reviews from around '.$city : 'Reviews nearby',
@@ -1228,7 +1244,7 @@ final class BlockPageComposer
         // Rhythm: hero + closing CTA are the colored bands; the NAP leads the body (contact truths
         // first), the areas-served link grid follows the coverage prose (prose intro → the real
         // linked towns). Gated reviews/jobs dropping out never puts two colored bands adjacent.
-        return $this->join([$hero, $nap, $map, $introBlock, $conditions, $services, $keywordSections, $coverageBlock, $areas, $reviewsBlock, $jobsBlock, $localBlock, $faq, $cta]);
+        return $this->join([$hero, $nap, $map, $introBlock, $conditions, $services, $keywordSections, $coverageBlock, $areas, $googleBlock, $reviewsBlock, $jobsBlock, $localBlock, $faq, $cta]);
     }
 
     /** @param list<string> $blocks */

@@ -16,8 +16,11 @@ final class GooglePlacesClient implements PlacesProvider
 
     private const DETAIL_FIELDS = 'place_id,name,formatted_address,address_components,international_phone_number,opening_hours,geometry,url,website';
 
-    /** The profile fields the pack ranks on. `photos` is a list of photo references; its length is the count. */
-    private const PROFILE_FIELDS = 'place_id,name,rating,user_ratings_total,types,photos,business_status,geometry,url,website';
+    /**
+     * The profile fields the pack ranks on. `photos` is a list of photo references; its length is the count.
+     * `reviews` (Google's five most relevant) rides in the same Atmosphere tier `rating` already bills for.
+     */
+    private const PROFILE_FIELDS = 'place_id,name,rating,user_ratings_total,types,photos,business_status,geometry,url,website,reviews';
 
     public function __construct(
         private readonly Http $http,
@@ -103,7 +106,37 @@ final class GooglePlacesClient implements PlacesProvider
             lng: isset($location['lng']) ? (float) $location['lng'] : null,
             website: isset($r['website']) ? (string) $r['website'] : null,
             gbpUrl: isset($r['url']) ? (string) $r['url'] : null,
+            reviews: self::reviews(is_array($r['reviews'] ?? null) ? $r['reviews'] : []),
         );
+    }
+
+    /**
+     * @param  list<mixed>  $raw
+     * @return list<PlaceReview>
+     */
+    private static function reviews(array $raw): array
+    {
+        $out = [];
+        foreach ($raw as $rv) {
+            if (! is_array($rv)) {
+                continue;
+            }
+            $text = trim((string) ($rv['text'] ?? ''));
+            $rating = isset($rv['rating']) && is_numeric($rv['rating']) ? (int) $rv['rating'] : 0;
+            if ($text === '' || $rating < 1) {
+                continue; // a rating with no words is not a quote
+            }
+            $out[] = new PlaceReview(
+                authorName: trim((string) ($rv['author_name'] ?? '')),
+                authorUrl: isset($rv['author_url']) ? (string) $rv['author_url'] : null,
+                rating: min(5, $rating),
+                text: $text,
+                relativeTime: isset($rv['relative_time_description']) ? (string) $rv['relative_time_description'] : null,
+                time: isset($rv['time']) && is_numeric($rv['time']) ? (int) $rv['time'] : null,
+            );
+        }
+
+        return $out;
     }
 
     public function smokeTest(): PlacesStatus
