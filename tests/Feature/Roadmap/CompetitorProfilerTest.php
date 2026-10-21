@@ -1,5 +1,7 @@
 <?php
 
+use App\Integrations\Backlinks\BacklinkProvider;
+use App\Integrations\Places\PlacesProvider;
 use App\Models\GbpProfile;
 use App\Models\Scopes\SiteScope;
 use App\Roadmap\CompetitorProfiler;
@@ -18,7 +20,10 @@ it('profiles the office and its top map-pack competitors, with the backlink summ
 
     $r = (new CompetitorProfiler($places, $backlinks))->refresh($site);
 
-    expect($r)->toBe(['offices' => 1, 'competitors' => 3, 'profiled' => 3, 'unresolved' => 1])
+    expect($r)->toBe([
+        'offices' => 1, 'competitors' => 3, 'profiled' => 3, 'unresolved' => 1,
+        'unresolved_places' => [['place_id' => 'PID_TSC', 'name' => 'Tractor Supply', 'role' => 'competitor', 'beside' => 'Hackettstown']],
+    ])
         ->and($places->asked)->toBe(['PID_US', 'PID_ORIOLE', 'PID_DL', 'PID_TSC']); // the office first, then winners by cells
 
     $rows = GbpProfile::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()->keyBy('place_id');
@@ -42,6 +47,23 @@ it('caps the competitors per office and keeps a row Places can no longer resolve
 
     $r = (new CompetitorProfiler(scriptedPlaces(['PID_US' => roadmapProfile('PID_US', 'Us', 4.7, 50, 'plumber', 6, 40.85, -74.83)]), summaryBacklinks([])))->refresh($site);
     expect($r['unresolved'])->toBe(1)
+        ->and($r['unresolved_places'][0]['name'])->toBe('Oriole Basement Waterproofing')
         ->and(GbpProfile::withoutGlobalScope(SiteScope::class)->where('place_id', 'PID_ORIOLE')->exists())->toBeTrue()   // kept
         ->and(GbpProfile::withoutGlobalScope(SiteScope::class)->where('place_id', 'PID_US')->value('ratings_total'))->toBe(50); // refreshed
+});
+
+it('the refresh command names every place Places could not resolve, with its role and the office beside it', function () {
+    ['site' => $site, 'office' => $office] = roadmapWorld();
+    app()->instance(PlacesProvider::class, scriptedPlaces([
+        'PID_ORIOLE' => roadmapProfile('PID_ORIOLE', 'Oriole', 4.9, 180, 'plumber', 40, 40.86, -74.80),
+        // Neither our office (PID_US) nor Tractor Supply / D&L resolve.
+    ]));
+    app()->instance(BacklinkProvider::class, summaryBacklinks([]));
+
+    $this->artisan('launchpad:refresh-gbp-profiles', ['--site' => $site->id])
+        ->expectsOutputToContain('1 office(s), 3 map-pack competitor(s): 1 profile(s) refreshed, 3 Places could not resolve.')
+        ->expectsOutputToContain('could not resolve: Hackettstown (office) — place PID_US')
+        ->expectsOutputToContain('could not resolve: D&L Pump and Well (competitor, beside Hackettstown) — place PID_DL')
+        ->expectsOutputToContain('could not resolve: Tractor Supply (competitor, beside Hackettstown) — place PID_TSC')
+        ->assertSuccessful();
 });
