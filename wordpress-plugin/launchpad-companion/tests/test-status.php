@@ -45,4 +45,30 @@ class Test_Status extends WP_UnitTestCase
 
         $this->assertArrayHasKey('/launchpad/v1/status', $routes);
     }
+
+    public function test_payload_reports_the_footer_hq_state_and_a_page_s_stored_state(): void
+    {
+        ( new \Launchpad\Companion\Content\SiteProfileStore() )->save([
+            'brand_name' => 'Sump Pump Gurus',
+            'hq' => ['state' => 'NJ', 'url' => 'https://sumppumpgurus.com/contact/'],
+        ]);
+        $store = new \Launchpad\Companion\Content\ContentStore();
+        $r = $store->upsert([
+            'content_id' => '01JSTATUSPAGE000000000000', 'kind' => 'page', 'page_type' => 'location', 'kit' => 'location-page',
+            'kit_version' => '1', 'slug' => 'trooper-pa', 'status' => 'published', 'locked' => false, 'state' => 'PA',
+            'slot_payload' => ['hero_headline' => 'Trooper'], 'images' => [], 'seo' => ['title' => 'Trooper'],
+        ]);
+
+        $p = Status::payload('/trooper-pa/');
+
+        $this->assertSame(['state' => 'NJ', 'url' => 'https://sumppumpgurus.com/contact/'], $p['footer_hq']);
+        $this->assertTrue($p['page']['found']);
+        $this->assertSame($r['wp_post_id'], $p['page']['post_id']);
+        $this->assertSame('location', $p['page']['page_type']);
+        $this->assertSame('PA', $p['page']['state']);
+        $this->assertTrue($p['page']['pushed']);
+
+        $this->assertFalse(Status::payload('/no-such-page/')['page']['found']);
+        $this->assertNull(Status::payload()['page']);
+    }
 }

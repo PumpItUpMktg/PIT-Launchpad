@@ -57,4 +57,14 @@ class Test_Auth_Diagnostics extends WP_UnitTestCase
         $this->assertArrayHasKey('is_ssl', $p);
         $this->assertIsBool($p['is_ssl']);
     }
+
+    public function test_reports_the_gate_verdict_for_the_current_request(): void
+    {
+        wp_set_current_user(0);
+        $gate = AuthDiagnostics::payload()['gate'];
+
+        $this->assertFalse($gate['logged_in']);
+        $this->assertFalse($gate['can_manage']);
+        $this->assertArrayHasKey('user_has_cap', $gate['cap_filters']);
+    }
 }

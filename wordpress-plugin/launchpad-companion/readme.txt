@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.52
+Stable tag: 0.9.54
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,20 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.54 =
+* SECURITY — the REST write gate now refuses any request WordPress resolved to no user, whatever
+  an install-side capability filter says (observed live: every launchpad/v1 route accepting
+  unauthenticated requests on one site). GET /auth-check (public) reports `gate`: the current user
+  id, whether the raw capability check passes for THIS request, the gate verdict, and the names of
+  the callbacks hooked to user_has_cap / map_meta_cap / determine_current_user /
+  rest_authentication_errors — so an open gate is diagnosed with a read, never a write.
+
+= 0.9.53 =
+* GET /status reports `footer_hq` (the corporate state + Contact link the footer swaps on, from the
+  stored profile) and, with `?path=/trooper-pa/`, that page's stored post id / status / page type /
+  state / whether a push has landed — read-only, no secrets; the ground truth for a "footer did not
+  swap" diagnosis.
 
 = 0.9.52 =
 * Conditional footer address: on a location page whose state (`_lp_state`, pushed with the
