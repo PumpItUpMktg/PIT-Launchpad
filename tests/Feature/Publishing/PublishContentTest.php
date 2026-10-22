@@ -6,11 +6,14 @@ use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\ProofType;
 use App\Jobs\PublishContent;
+use App\Jobs\PublishRedirects;
 use App\Models\AuditLog;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Market;
 use App\Models\ProofItem;
+use App\Models\Redirect;
+use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Publishing\PublishContentService;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -298,4 +301,30 @@ it('drops a duplicate publish dispatch for the same page, but not for a differen
     // A DIFFERENT page still gets its own job.
     PublishContent::dispatch('01JQZY8Z0OTHERPAGEULID00000');
     Queue::assertPushed(PublishContent::class, 2);
+});
+
+test('publishing a town page nested under its hub writes its legacy redirects (bare + old top-level slug) and queues ONE redirect push', function () {
+    PublishHarness::fakeAdapters();
+    fakeContentEndpoint(wpPostId: 321);
+    Queue::fake();
+
+    $site = PublishHarness::site();
+    $market = Market::factory()->create(['site_id' => $site->id]);
+    ProofItem::factory()->create(['site_id' => $site->id, 'type' => ProofType::Testimonial, 'is_substantiated' => true])->markets()->attach($market->id);
+    $content = PublishHarness::approvedLocationPage($site, $market->id);
+    $content->forceFill(['slug' => 'austin-tx/round-rock-tx', 'title' => 'Round Rock, TX'])->save();
+
+    app(PublishContentService::class)->publish($content->fresh());
+
+    $rows = Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()->keyBy('from_url');
+    expect($rows)->toHaveCount(2)
+        ->and($rows['/round-rock']->to_url)->toBe('/austin-tx/round-rock-tx')
+        ->and($rows['/round-rock-tx']->to_url)->toBe('/austin-tx/round-rock-tx')
+        ->and($rows['/round-rock-tx']->code)->toBe(301);
+    Queue::assertPushed(PublishRedirects::class, 1);
+
+    // A re-push of the same live page creates nothing and queues no second redirect push.
+    app(PublishContentService::class)->publish($content->fresh());
+    expect(Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(2);
+    Queue::assertPushed(PublishRedirects::class, 1);
 });
