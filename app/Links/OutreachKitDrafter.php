@@ -4,6 +4,7 @@ namespace App\Links;
 
 use App\ContentEngine\Drafting\VoiceResolver;
 use App\Enums\ContentKind;
+use App\Enums\LinkProspectKind;
 use App\Enums\PageType;
 use App\Integrations\Claude\ClaudeClient;
 use App\Models\Content;
@@ -59,6 +60,16 @@ final class OutreachKitDrafter
         }
         $target = ['kind' => OutreachKit::PROSPECT, 'domain' => (string) $prospect->domain, 'name' => (string) $prospect->domain,
             'prospect_kind' => $prospect->kind->value, 'competitors' => $prospect->competitors];
+        if ($prospect->kind->isLane()) {
+            $target['page_url'] = $prospect->url;
+            $target['offices_nearby'] = $prospect->offices ?? [];
+            if ($prospect->kind === LinkProspectKind::Sponsorship && ($site->sponsorship_budget_min !== null || $site->sponsorship_budget_max !== null)) {
+                $target['sponsorship_budget_per_year'] = ['min' => $site->sponsorship_budget_min, 'max' => $site->sponsorship_budget_max];
+            }
+            if ($prospect->kind === LinkProspectKind::DealerLocator) {
+                $target['brands_carried'] = $site->brands ?? [];
+            }
+        }
 
         return $this->draft($site, $location, $target, $existing);
     }
@@ -197,6 +208,20 @@ final class OutreachKitDrafter
         ];
     }
 
+    /** What the pitch asks for, by the kind of page it is going to. A sponsorship is a purchase with a link attached; a link is never bought on its own. */
+    private static function laneBrief(?LinkProspectKind $kind): string
+    {
+        $common = ' Say who we are in one line and why it fits THEIR readers or members. No flattery, no SEO talk, never money for a link.';
+
+        return match ($kind) {
+            LinkProspectKind::Sponsorship => 'The pitch is a short email (under 170 words) to the organisation behind TARGET.page_url asking about their sponsorship packages: what levels they offer, what each includes, and whether sponsors are listed on their website with a link to LINK TO USE. If a budget range is given, say we are looking at that range; never name a figure otherwise. The offices listed as nearby are the ones the sponsorship is for.'.$common,
+            LinkProspectKind::Membership => 'The pitch is a short email (under 170 words) asking how to join the organisation behind TARGET.page_url as a member business, and whether the member directory lists a website link (LINK TO USE). Mention the nearby office(s) as the location that would hold the membership.'.$common,
+            LinkProspectKind::DealerLocator => 'The pitch is a short email (under 170 words) to the manufacturer or program behind TARGET.page_url asking to be listed in their dealer / installer locator for the brands we carry (TARGET.brands_carried), with LINK TO USE as our website. Ask what the listing requires (account number, proof of purchase volume, certification). The nearby offices are the service areas to list.'.$common,
+            LinkProspectKind::JobBoard => 'The pitch is a short email (under 170 words) asking to be added as an employer partner on the job or training board behind TARGET.page_url: we hire in the trades named in SERVICES, would post openings there, and would like our employer profile to link to LINK TO USE.'.$common,
+            default => 'The pitch is a short email (under 170 words) to the person who runs the target site asking for one specific thing: a link to LINK TO USE from a page where it fits (a members/partners/resources page, a vendor list, a sponsor page). Say who we are in one line, why the link fits THEIR readers, and what we can offer back if it suits (a reciprocal mention, a sponsorship, a guest piece) — never money for a link. No flattery, no SEO talk.',
+        };
+    }
+
     /**
      * @param  array<string, mixed>  $nap
      * @param  list<array{name: string, description: string}>  $services
@@ -220,7 +245,7 @@ final class OutreachKitDrafter
         $parts[] = 'TARGET: '.$json($target);
         $parts[] = "LINK TO USE: {$linkUrl}";
         $parts[] = $isProspect
-            ? 'The pitch is a short email (under 170 words) to the person who runs the target site asking for one specific thing: a link to LINK TO USE from a page where it fits (a members/partners/resources page, a vendor list, a sponsor page). Say who we are in one line, why the link fits THEIR readers, and what we can offer back if it suits (a reciprocal mention, a sponsorship, a guest piece) — never money for a link. No flattery, no SEO talk.'
+            ? self::laneBrief(LinkProspectKind::tryFrom((string) ($target['prospect_kind'] ?? '')))
             : 'The pitch is the short note a person pastes into the directory form\'s "about" or "message" field (under 80 words).';
         $parts[] = 'Rules: use only the facts given; no claims about awards, years in business, licenses or prices unless they appear above; plain words; no exclamation marks.';
         $parts[] = 'Return ONLY JSON: {"short_description":"<under 150 characters>","long_description":"<under 700 characters, 2-4 sentences>","categories":["<up to 5 directory categories>"],"pitch_subject":"<subject line>","pitch_body":"<the pitch>"}';

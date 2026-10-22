@@ -42,6 +42,25 @@
             </div>
             <div class="g-field"><label>Warranty program @isset($prov['warranty_program'])<span class="g-seed {{ $prov['warranty_program']->value }}">{{ $prov['warranty_program']->value === 'seeded' ? 'from interview' : 'confirmed' }}</span>@endisset</label><textarea class="g-textarea" rows="2" wire:model="warrantyProgram"></textarea></div>
             <div class="g-field"><label>Guarantees @isset($prov['guarantees'])<span class="g-seed {{ $prov['guarantees']->value }}">{{ $prov['guarantees']->value === 'seeded' ? 'from interview' : 'confirmed' }}</span>@endisset</label><textarea class="g-textarea" rows="2" wire:model="guarantees"></textarea></div>
+            <h3 style="margin-top:1.25rem">Link building</h3>
+            <p class="g-hint">What the local-opportunity search runs on, and the guardrails on outreach. Brands you install or carry become dealer-locator searches; the lanes are the kinds of local link the search looks for.</p>
+            <div class="g-grid">
+                <div class="g-field"><label>Brands you install or carry <span style="opacity:.6">(one per line)</span></label><textarea class="g-textarea" rows="3" wire:model="brands" placeholder="Zoeller&#10;Liberty Pumps"></textarea></div>
+                <div class="g-field"><label>Lanes to search</label>
+                    @foreach (\App\Enums\LinkProspectKind::lanes() as $lane)
+                        <label style="display:block;font-weight:400;margin:.15rem 0"><input type="checkbox" value="{{ $lane->value }}" wire:model="linkLanes"> {{ $lane->label() }}</label>
+                    @endforeach
+                </div>
+            </div>
+            <div class="g-grid">
+                <div class="g-field"><label>Sponsorship budget, $ per year <span style="opacity:.6">(from)</span></label><input class="g-input" type="number" min="0" wire:model="sponsorshipBudgetMin" placeholder="500"></div>
+                <div class="g-field"><label>&nbsp;<span style="opacity:.6">(to)</span></label><input class="g-input" type="number" min="0" wire:model="sponsorshipBudgetMax" placeholder="3000"></div>
+                <div class="g-field"><label>Outreach emails per month <span style="opacity:.6">(max 20)</span></label><input class="g-input" type="number" min="1" max="20" wire:model="outreachMonthlyCap"><div class="g-hint" style="margin-top:4px">A hard ceiling. Every email is reviewed and sent one at a time — never a blast.</div></div>
+            </div>
+            <div class="g-grid">
+                <div class="g-field"><label>Outreach sender email <span style="opacity:.6">(must be on {{ $this->domainUrl !== '' ? parse_url($this->domainUrl, PHP_URL_HOST) : 'the site domain' }})</span></label><input class="g-input" type="email" wire:model="outreachFromEmail" placeholder="outreach@yourdomain.com"><div class="g-hint" style="margin-top:4px">Mail goes out from the client's own domain only. An address on any other domain is not saved.</div></div>
+                <div class="g-field"><label>Sender name</label><input class="g-input" type="text" wire:model="outreachFromName" placeholder="{{ $this->brandName !== '' ? $this->brandName : 'Business name' }}"></div>
+            </div>
             <button class="g-btn primary" wire:click="save">Save business</button>
         </div>
 

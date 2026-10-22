@@ -2,8 +2,10 @@
 
 namespace App\Filament\Pages;
 
+use App\Enums\LinkProspectKind;
 use App\Enums\LinkProspectStatus;
 use App\Jobs\FindLinkProspects;
+use App\Jobs\FindLocalOpportunities;
 use App\Links\OutreachKitDrafter;
 use App\Models\LinkProspect;
 use App\Models\LinkProspectRun;
@@ -50,6 +52,10 @@ class LinkProspectsPage extends Page
     #[Url]
     public string $status = 'open';
 
+    /** 'all', 'competitors' (the backlink intersect), or one LinkProspectKind value. */
+    #[Url]
+    public string $kind = 'all';
+
     /** The prospect whose kit is open in the side panel. */
     public ?string $activeProspectId = null;
 
@@ -83,8 +89,14 @@ class LinkProspectsPage extends Page
             'all' => null,
             default => $q->where('status', $this->status),
         };
+        $lanes = array_map(fn (LinkProspectKind $k): string => $k->value, LinkProspectKind::lanes());
+        match ($this->kind) {
+            'all' => null,
+            'competitors' => $q->whereNotIn('kind', $lanes),
+            default => $q->where('kind', $this->kind),
+        };
 
-        return $q->orderByDesc('competitor_count')->orderByDesc('rank')->orderBy('domain')->get()->all();
+        return $q->orderByDesc('competitor_count')->orderByDesc('locality')->orderByDesc('rank')->orderBy('domain')->get()->all();
     }
 
     /** @return array{count: int, last_found_at: Carbon|null, by_status: array<string, int>} */
@@ -119,6 +131,19 @@ class LinkProspectsPage extends Page
         FindLinkProspects::dispatch((string) $site->id);
         Notification::make()->success()->title('Finding link prospects')
             ->body('One backlink-index call on the worker: the domains linking to the local competitors Town Rank finds above you, and not to you. Reload in a minute.')
+            ->send();
+    }
+
+    /** Queue one local-opportunity search (sponsorships, memberships, dealer locators, job boards) for the working tenant. */
+    public function findLocalOpportunities(): void
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return;
+        }
+        FindLocalOpportunities::dispatch((string) $site->id);
+        Notification::make()->success()->title('Finding local opportunities')
+            ->body('Searching each office\'s town and county for sponsorship, membership, dealer-locator and job-board pages on the worker. Reload in a few minutes.')
             ->send();
     }
 

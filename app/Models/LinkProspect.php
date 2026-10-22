@@ -14,6 +14,12 @@ use Illuminate\Support\Carbon;
  * intersect, worked by hand: `status` and `notes` are the operator's and survive every re-run; the index
  * fields are refreshed each time the intersect returns the domain.
  *
+ * @property string|null $url the page the opportunity lives on (opportunity prospects)
+ * @property string|null $query
+ * @property string|null $location_id
+ * @property list<string>|null $offices
+ * @property int $locality 0–3
+ * @property string|null $contact_email
  * @property string $id
  * @property string $site_id
  * @property string $domain
@@ -37,6 +43,8 @@ class LinkProspect extends Model
     protected function casts(): array
     {
         return [
+            'offices' => 'array',
+            'locality' => 'integer',
             'rank' => 'integer',
             'spam_score' => 'integer',
             'competitors' => 'array',

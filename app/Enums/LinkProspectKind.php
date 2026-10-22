@@ -12,6 +12,11 @@ enum LinkProspectKind: string
     case Local = 'local';
     case Editorial = 'editorial';
     case National = 'national';
+    // Local opportunity lanes (§ Links) — found by the discovery pass, not the competitor intersect.
+    case Sponsorship = 'sponsorship';
+    case Membership = 'membership';
+    case DealerLocator = 'dealer_locator';
+    case JobBoard = 'job_board';
 
     public function label(): string
     {
@@ -20,6 +25,21 @@ enum LinkProspectKind: string
             self::Local => 'Local site',
             self::Editorial => 'Editorial / gov',
             self::National => 'National',
+            self::Sponsorship => 'Sponsorship',
+            self::Membership => 'Membership',
+            self::DealerLocator => 'Dealer locator',
+            self::JobBoard => 'Job / training board',
         };
+    }
+
+    /** The lanes the local-opportunity discovery pass searches, in the order they are worth a tenant's time. */
+    public static function lanes(): array
+    {
+        return [self::DealerLocator, self::Sponsorship, self::Membership, self::JobBoard];
+    }
+
+    public function isLane(): bool
+    {
+        return in_array($this, self::lanes(), true);
     }
 }

@@ -28,6 +28,13 @@ use Illuminate\Support\Carbon;
  * @property int|null $silo_own_page_bar
  * @property array<string, int>|null $coverage_thresholds
  * @property array{indexed_pct?: float, stale_days?: int}|null $tier_gate
+ * @property list<string>|null $brands the brands the tenant installs / carries (one dealer-locator search each)
+ * @property list<string>|null $link_lanes the local-opportunity lanes to search (null = all)
+ * @property int|null $sponsorship_budget_min dollars per year
+ * @property int|null $sponsorship_budget_max
+ * @property int $outreach_monthly_cap outreach emails per calendar month — a hard ceiling, default 20
+ * @property string|null $outreach_from_email the sender, on the tenant's own domain — never anything else
+ * @property string|null $outreach_from_name
  * @property array{enabled?: bool, batch?: int, stale_days?: int}|null $publish_drip
  * @property string|null $domain_url
  * @property string|null $gsc_property Search Console property to query for this tenant (from the shared Google grant)
@@ -300,6 +307,9 @@ class Site extends Model
     protected function casts(): array
     {
         return [
+            'brands' => 'array',
+            'link_lanes' => 'array',
+            'outreach_monthly_cap' => 'integer',
             'slug_conventions' => 'array',
             'status' => SiteStatus::class,
             'product' => ProductPlan::class,
