@@ -45,7 +45,11 @@ class ImportForeignRedirectsCommand extends Command
 
         $this->line(sprintf('<info>%s</info> — %d foreign redirect rule(s) found on the live site', $site->brand_name, $plan['total']));
         foreach ($plan['tables'] as $t) {
-            $this->line(sprintf('  table %s — %d row(s)', $t['table'] ?? '?', (int) ($t['rows'] ?? 0)));
+            $cols = is_array($t['columns'] ?? null) ? implode(', ', array_map('strval', $t['columns'])) : '';
+            $this->line(sprintf('  table %s — %d row(s), %d parsed as rules%s', $t['table'] ?? '?', (int) ($t['rows'] ?? 0), (int) ($t['parsed'] ?? 0), $cols !== '' ? " · columns: {$cols}" : ''));
+        }
+        foreach ($plan['skipped_tables'] as $t) {
+            $this->line(sprintf('  table %s — not read (%s)', $t['table'] ?? '?', $t['why'] ?? ''));
         }
         foreach ($plan['options'] as $o) {
             $this->line(sprintf('  option %s — %s', $o['name'] ?? '?', $o['summary'] ?? ''));
@@ -59,8 +63,18 @@ class ImportForeignRedirectsCommand extends Command
         foreach ($plan['live'] as $r) {
             $this->line(sprintf('  • <fg=yellow>live</>     %s is a live page of ours — not redirected (plugin sent it to %s)', $r['from'], $r['to']));
         }
+        // A row with no destination is a 404-log entry, not a rule — count them, never list thousands.
+        $noDestination = 0;
         foreach ($plan['unparsed'] as $r) {
+            if ($r['why'] === 'no destination') {
+                $noDestination++;
+
+                continue;
+            }
             $this->line(sprintf('  • <fg=yellow>skipped</>  %s → %s — %s', $r['from'] !== '' ? $r['from'] : '(empty)', $r['to'] !== '' ? $r['to'] : '(empty)', $r['why']));
+        }
+        if ($noDestination > 0) {
+            $this->line(sprintf('  • <fg=yellow>skipped</>  %d row(s) with no destination (404-log entries, not rules)', $noDestination));
         }
         $this->line(sprintf('  %d covered by our store already, %d new, %d conflict(s), %d live, %d skipped.',
             count($plan['covered']), count($plan['new']), count($plan['conflict']), count($plan['live']), count($plan['unparsed'])));

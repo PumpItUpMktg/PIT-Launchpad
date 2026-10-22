@@ -46,9 +46,16 @@ final class ForeignRedirects
         // 1. Tables with "redirect" in the name (301 Redirects: {prefix}redirects · Redirection:
         //    {prefix}redirection_items · others).
         $names = (array) $wpdb->get_col($wpdb->prepare('SHOW TABLES LIKE %s', '%' . $wpdb->esc_like('redirect') . '%'));
+        $skipped = [];
         foreach ($names as $table) {
             $table = (string) $table;
             if (preg_match('/^[A-Za-z0-9_]+$/', $table) !== 1) {
+                continue;
+            }
+            // A hit / 404 log is not a rule set (301 Redirects Pro: {prefix}wf301_redirect_logs) — never read it.
+            if (preg_match('/log|hit|stat|404/i', $table) === 1) {
+                $skipped[] = ['table' => $table, 'why' => 'log table'];
+
                 continue;
             }
             $columns = array_map('strval', (array) $wpdb->get_col("SHOW COLUMNS FROM `{$table}`", 0));
@@ -119,7 +126,7 @@ final class ForeignRedirects
             ];
         }
 
-        return ['rules' => $rules, 'tables' => $tables, 'options' => $options];
+        return ['rules' => $rules, 'tables' => $tables, 'options' => $options, 'skipped_tables' => $skipped];
     }
 
     /**
@@ -158,7 +165,11 @@ final class ForeignRedirects
             $code = 301;
         }
         $hits = self::pick($lower, self::HITS_COLUMNS);
-        $regex = ! empty($lower['regex']) || (isset($lower['match_type']) && (string) $lower['match_type'] === 'regex');
+        // The regex flag is only trusted when it is a real truthy value — plugins store "0", "no", "off"
+        // or "" for a plain rule, and a loose empty() check read every one of those as "regex".
+        $regex = self::truthy($lower['regex'] ?? null)
+            || self::truthy($lower['is_regex'] ?? null)
+            || (isset($lower['match_type']) && strtolower((string) $lower['match_type']) === 'regex');
 
         return [
             'from' => trim((string) $from),
@@ -168,6 +179,18 @@ final class ForeignRedirects
             'source' => $source,
             'regex' => $regex,
         ];
+    }
+
+    private static function truthy(mixed $v): bool
+    {
+        if (is_bool($v)) {
+            return $v;
+        }
+        if (is_int($v) || is_float($v)) {
+            return $v > 0;
+        }
+
+        return in_array(strtolower(trim((string) $v)), ['1', 'true', 'yes', 'on', 'regex'], true);
     }
 
     /**

@@ -13,6 +13,8 @@ class Test_Foreign_Redirects extends WP_UnitTestCase
         global $wpdb;
         $wpdb->query("DROP TABLE IF EXISTS `{$wpdb->prefix}redirects`");
         $wpdb->query("DROP TABLE IF EXISTS `{$wpdb->prefix}redirection_items`");
+        $wpdb->query("DROP TABLE IF EXISTS `{$wpdb->prefix}wf301_redirect_rules`");
+        $wpdb->query("DROP TABLE IF EXISTS `{$wpdb->prefix}wf301_redirect_logs`");
         delete_option('301_redirects');
         parent::tear_down();
     }
@@ -65,5 +67,28 @@ class Test_Foreign_Redirects extends WP_UnitTestCase
         $this->assertSame('/b/', $fromOption[0]['to']);
         $this->assertSame([], array_filter($r['rules'], static fn (array $x): bool => $x['from'] === '/ours/'));
         $this->assertSame([], array_filter($r['options'], static fn (array $x): bool => $x['name'] === 'lp_redirects'));
+    }
+
+    public function test_skips_a_log_table_and_does_not_read_a_no_or_zero_regex_flag_as_regex(): void
+    {
+        global $wpdb;
+        $rules = $wpdb->prefix . 'wf301_redirect_rules';
+        $logs = $wpdb->prefix . 'wf301_redirect_logs';
+        $wpdb->query("CREATE TABLE `{$rules}` (id int auto_increment primary key, url_from varchar(255), url_to varchar(255), type varchar(8), status varchar(16), regex varchar(8), hits int)");
+        $wpdb->query("CREATE TABLE `{$logs}` (id int auto_increment primary key, url_from varchar(255), status varchar(16), hits int)");
+        $wpdb->insert($rules, ['url_from' => '/west-goshen-pa', 'url_to' => '/downingtown-pa/west-goshen-pa', 'type' => '301', 'status' => 'active', 'regex' => 'no', 'hits' => 5]);
+        $wpdb->insert($rules, ['url_from' => '/hoboken', 'url_to' => '/hoboken-nj', 'type' => '301', 'status' => 'active', 'regex' => '0', 'hits' => 5]);
+        $wpdb->insert($rules, ['url_from' => '^/blog/(.*)$', 'url_to' => '/news/$1', 'type' => '301', 'status' => 'active', 'regex' => 'yes', 'hits' => 0]);
+        $wpdb->insert($logs, ['url_from' => '/login', 'status' => '404', 'hits' => 900]);
+
+        $r = ForeignRedirects::collect();
+
+        $fromRules = array_values(array_filter($r['rules'], static fn (array $x): bool => $x['source'] === $rules));
+        $this->assertCount(3, $fromRules);
+        $this->assertFalse($fromRules[0]['regex']);
+        $this->assertFalse($fromRules[1]['regex']);
+        $this->assertTrue($fromRules[2]['regex']);
+        $this->assertSame([], array_filter($r['rules'], static fn (array $x): bool => $x['source'] === $logs));
+        $this->assertSame([['table' => $logs, 'why' => 'log table']], $r['skipped_tables']);
     }
 }
