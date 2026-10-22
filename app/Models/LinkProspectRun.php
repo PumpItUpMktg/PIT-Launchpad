@@ -23,6 +23,8 @@ use Illuminate\Support\Carbon;
  * @property int $pruned
  * @property int $dropped_spam
  * @property int $dropped_rank
+ * @property string $scope competitors (the backlink intersect) | opportunities (the local-opportunity search)
+ * @property int $queries searches run (opportunities scope)
  * @property string|null $error
  * @property Carbon $ran_at
  */
@@ -49,6 +51,7 @@ class LinkProspectRun extends Model
             'pruned' => 'integer',
             'dropped_spam' => 'integer',
             'dropped_rank' => 'integer',
+            'queries' => 'integer',
             'ran_at' => 'datetime',
         ];
     }

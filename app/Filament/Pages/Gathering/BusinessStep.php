@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Gathering;
 
+use App\Enums\LinkProspectKind;
 use App\Gathering\Provenance;
 use App\Integrations\Places\PlacesProvider;
 use App\Integrations\Wordpress\WordpressClientFactory;
@@ -68,6 +69,22 @@ class BusinessStep extends GatheringPage
 
     public string $guarantees = '';
 
+    // Local link opportunities (§ Links) — the inputs the discovery pass and the outreach guardrails read.
+    public string $brands = '';            // one per line or comma-separated
+
+    /** @var list<string> */
+    public array $linkLanes = [];
+
+    public string $sponsorshipBudgetMin = '';
+
+    public string $sponsorshipBudgetMax = '';
+
+    public string $outreachMonthlyCap = '20';
+
+    public string $outreachFromEmail = '';
+
+    public string $outreachFromName = '';
+
     // Bulk GBP import.
     public string $bulkInput = '';
 
@@ -96,6 +113,15 @@ class BusinessStep extends GatheringPage
         $this->yearsInBusiness = $site->years_in_business !== null ? (string) $site->years_in_business : '';
         $this->warrantyProgram = (string) ($site->warranty_program ?? '');
         $this->guarantees = (string) ($site->guarantees ?? '');
+        $this->brands = implode("\n", is_array($site->brands) ? $site->brands : []);
+        $this->linkLanes = $site->link_lanes !== null && $site->link_lanes !== []
+            ? $site->link_lanes
+            : array_map(fn (LinkProspectKind $k): string => $k->value, LinkProspectKind::lanes());
+        $this->sponsorshipBudgetMin = $site->sponsorship_budget_min !== null ? (string) $site->sponsorship_budget_min : '';
+        $this->sponsorshipBudgetMax = $site->sponsorship_budget_max !== null ? (string) $site->sponsorship_budget_max : '';
+        $this->outreachMonthlyCap = (string) ($site->outreach_monthly_cap ?? 20);
+        $this->outreachFromEmail = (string) ($site->outreach_from_email ?? '');
+        $this->outreachFromName = (string) ($site->outreach_from_name ?? '');
     }
 
     public function save(): void
@@ -123,6 +149,14 @@ class BusinessStep extends GatheringPage
             'years_in_business' => trim($this->yearsInBusiness) !== '' ? (int) $this->yearsInBusiness : null,
             'warranty_program' => trim($this->warrantyProgram) !== '' ? trim($this->warrantyProgram) : null,
             'guarantees' => trim($this->guarantees) !== '' ? trim($this->guarantees) : null,
+            'brands' => $this->brandList(),
+            'link_lanes' => $this->laneList(),
+            'sponsorship_budget_min' => trim($this->sponsorshipBudgetMin) !== '' ? max(0, (int) $this->sponsorshipBudgetMin) : null,
+            'sponsorship_budget_max' => trim($this->sponsorshipBudgetMax) !== '' ? max(0, (int) $this->sponsorshipBudgetMax) : null,
+            // The hard ceiling on outreach emails per month — never above 20, never below 1.
+            'outreach_monthly_cap' => max(1, min(20, (int) ($this->outreachMonthlyCap !== '' ? $this->outreachMonthlyCap : 20))),
+            'outreach_from_email' => $this->fromEmail($site),
+            'outreach_from_name' => trim($this->outreachFromName) !== '' ? trim($this->outreachFromName) : null,
         ])->save();
 
         // The trade seeds the structure engine (SiloBlueprint) — same write as the old guided
@@ -322,5 +356,44 @@ class BusinessStep extends GatheringPage
             'place_id' => $best->placeId,
             'message' => null,
         ];
+    }
+
+    /** @return list<string>|null */
+    private function brandList(): ?array
+    {
+        $out = [];
+        foreach (preg_split('/[\n,]+/', $this->brands) ?: [] as $b) {
+            $b = trim((string) $b);
+            if ($b !== '' && ! in_array($b, $out, true)) {
+                $out[] = $b;
+            }
+        }
+
+        return $out !== [] ? $out : null;
+    }
+
+    /** @return list<string>|null null = every lane */
+    private function laneList(): ?array
+    {
+        $known = array_map(fn (LinkProspectKind $k): string => $k->value, LinkProspectKind::lanes());
+        $chosen = array_values(array_intersect($known, array_map('strval', $this->linkLanes)));
+
+        return count($chosen) === count($known) || $chosen === [] ? null : $chosen;
+    }
+
+    /**
+     * The outreach sender: must be an address on the tenant's OWN domain — mail never goes out from anywhere
+     * else. Anything else is dropped (and the field shows empty on the next load, which is the signal).
+     */
+    private function fromEmail(Site $site): ?string
+    {
+        $email = strtolower(trim($this->outreachFromEmail));
+        if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            return null;
+        }
+        $domain = strtolower((string) preg_replace('/^www\./', '', (string) parse_url((string) $site->domain_url, PHP_URL_HOST)));
+        $at = (string) substr($email, (int) strrpos($email, '@') + 1);
+
+        return $domain !== '' && ($at === $domain || str_ends_with($at, '.'.$domain)) ? $email : null;
     }
 }

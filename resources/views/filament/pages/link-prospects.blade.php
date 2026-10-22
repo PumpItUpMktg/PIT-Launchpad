@@ -7,6 +7,10 @@
         \App\Enums\LinkProspectKind::Directory => 'info',
         \App\Enums\LinkProspectKind::Local => 'success',
         \App\Enums\LinkProspectKind::Editorial => 'warning',
+        \App\Enums\LinkProspectKind::Sponsorship => 'primary',
+        \App\Enums\LinkProspectKind::Membership => 'primary',
+        \App\Enums\LinkProspectKind::DealerLocator => 'primary',
+        \App\Enums\LinkProspectKind::JobBoard => 'primary',
         default => 'gray',
     };
 @endphp
@@ -18,7 +22,7 @@
             <x-filament::section>
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
                     <div style="font-size:.85rem;color:var(--gray-500)">
-                        Domains that link to the local competitors Town Rank finds above you, and not to you — ranked by how many competitors they link to.
+                        Two sources: domains that link to the local competitors Town Rank finds above you and not to you (the intersect), and local opportunity pages — sponsorships, memberships, dealer locators, job and training boards — found by searching each office's town and county.
                         @if ($summary['count'] > 0)
                             <strong>{{ $summary['count'] }}</strong> on the list · last found {{ $summary['last_found_at']?->diffForHumans() ?? '—' }}
                             @foreach ($summary['by_status'] as $st => $n) · {{ \App\Enums\LinkProspectStatus::from($st)->label() }} {{ $n }} @endforeach
@@ -26,7 +30,10 @@
                             No prospects yet — run the intersect once Town Rank has scanned.
                         @endif
                     </div>
-                    <x-filament::button size="sm" wire:click="findProspects" wire:confirm="Run the competitor intersect for this site? One backlink-index call.">Find prospects</x-filament::button>
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+                        <x-filament::button size="sm" color="gray" wire:click="findProspects" wire:confirm="Run the competitor intersect for this site? One backlink-index call.">Find prospects</x-filament::button>
+                        <x-filament::button size="sm" wire:click="findLocalOpportunities" wire:confirm="Search every office's town and county for sponsorship, membership, dealer-locator and job-board pages? A few dozen searches.">Find local opportunities</x-filament::button>
+                    </div>
                 </div>
                 @php($run = $this->lastRun)
                 @if ($run !== null)
@@ -34,11 +41,13 @@
                         <div><strong>Last run</strong> {{ $run->ran_at->diffForHumans() }}
                             @if ($run->status === \App\Models\LinkProspectRun::FAILED)
                                 · <span style="color:#b91c1c">failed: {{ $run->error }}</span>
+                            @elseif ($run->scope === 'opportunities')
+                                · local opportunities: <strong>{{ $run->queries }}</strong> searches returned <strong>{{ $run->returned }}</strong> results · <strong>{{ $run->kept }}</strong> opportunity domains kept ({{ $run->dropped_rank }} national / aggregator and {{ $run->dropped_spam }} platform dropped) · {{ $run->new }} new, {{ $run->refreshed }} refreshed
                             @else
                                 · the index returned <strong>{{ $run->returned }}</strong> linking domains · <strong>{{ $run->kept }}</strong> kept ({{ $run->dropped_spam }} dropped as spam, {{ $run->dropped_rank }} below the authority floor) · {{ $run->new }} new, {{ $run->refreshed }} refreshed, {{ $run->pruned }} untouched from an earlier run dropped
                             @endif
                         </div>
-                        <div style="color:var(--gray-500)">Competitors asked about:
+                        <div style="color:var(--gray-500)" @if ($run->scope === 'opportunities') hidden @endif>Competitors asked about:
                             @forelse ($run->targets as $t)
                                 <span style="white-space:nowrap">{{ $t['domain'] }} <em>({{ $t['source'] === 'map_pack' ? 'map pack, '.$t['appearances'].' cells' : 'organic, above you in '.$t['appearances'].' town results' }})</em></span>@if (! $loop->last), @endif
                             @empty
@@ -56,6 +65,10 @@
                     @foreach (['open' => 'Open', 'new' => 'New', 'contacted' => 'Contacted', 'acquired' => 'Acquired', 'dismissed' => 'Dismissed', 'all' => 'All'] as $key => $label)
                         <x-filament::button size="xs" wire:click="$set('status', '{{ $key }}')" :color="$this->status === $key ? 'primary' : 'gray'">{{ $label }}</x-filament::button>
                     @endforeach
+                    <span style="width:1px;background:var(--gray-200);margin:0 .25rem"></span>
+                    @foreach (['all' => 'Every kind', 'competitors' => 'Competitor links'] + collect(\App\Enums\LinkProspectKind::lanes())->mapWithKeys(fn ($k) => [$k->value => $k->label()])->all() as $key => $label)
+                        <x-filament::button size="xs" wire:click="$set('kind', '{{ $key }}')" :color="$this->kind === $key ? 'primary' : 'gray'">{{ $label }}</x-filament::button>
+                    @endforeach
                 </div>
             </x-filament::section>
 
@@ -63,15 +76,26 @@
                 <table style="width:100%;border-collapse:collapse;font-size:.85rem">
                     <thead>
                         <tr style="text-align:left;color:var(--gray-500);font-size:.72rem;text-transform:uppercase">
-                            <th style="padding:.5rem">Domain</th><th>DR</th><th>Links to</th><th>Kind</th><th>Status</th><th>Notes</th><th></th>
+                            <th style="padding:.5rem">Domain</th><th>DR</th><th>Links to / near</th><th>Kind</th><th>Status</th><th>Notes</th><th></th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($rows as $p)
                             <tr style="border-top:1px solid var(--gray-100)">
-                                <td style="padding:.5rem;font-weight:500">{{ $p->domain }}</td>
+                                <td style="padding:.5rem;font-weight:500">{{ $p->domain }}
+                                    @if ($p->url !== null)
+                                        <div style="font-size:.72rem;font-weight:400;color:var(--gray-500);max-width:28rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ $p->url }}">{{ preg_replace('#^https?://(www\.)?#', '', $p->url) }}</div>
+                                    @endif
+                                </td>
                                 <td style="color:var(--gray-500)">{{ $p->rank ?? '—' }}</td>
-                                <td style="font-size:.78rem"><strong>{{ $p->competitor_count }}</strong> <span style="color:var(--gray-500)">{{ implode(', ', $p->competitors) }}</span></td>
+                                <td style="font-size:.78rem">
+                                    @if ($p->kind->isLane())
+                                        <span style="color:var(--gray-500)">{{ $p->offices !== null && $p->offices !== [] ? implode(', ', $p->offices) : 'state-wide' }}</span>
+                                        @if ($p->locality > 0)<span title="how local the page reads: town +2, state +1" style="margin-left:.25rem;font-size:.68rem;color:#15803d">{{ str_repeat('●', $p->locality) }}</span>@endif
+                                    @else
+                                        <strong>{{ $p->competitor_count }}</strong> <span style="color:var(--gray-500)">{{ implode(', ', $p->competitors) }}</span>
+                                    @endif
+                                </td>
                                 <td><x-filament::badge :color="$kindColor($p->kind)">{{ $p->kind->label() }}</x-filament::badge></td>
                                 <td>
                                     <select wire:change="setStatus('{{ $p->id }}', $event.target.value)" style="font-size:.8rem;border:1px solid var(--gray-300);border-radius:.375rem;padding:.2rem .4rem">
@@ -82,7 +106,7 @@
                                 </td>
                                 <td><input type="text" value="{{ $p->notes }}" placeholder="who, when, what they said" wire:change="setNotes('{{ $p->id }}', $event.target.value)" style="width:100%;font-size:.8rem;border:1px solid var(--gray-300);border-radius:.375rem;padding:.2rem .4rem"></td>
                                 <td style="text-align:right;white-space:nowrap">
-                                    <a href="https://{{ $p->domain }}" target="_blank" rel="noopener" style="font-size:.75rem;color:#2563eb;text-decoration:underline;margin-right:.5rem">Open ↗</a>
+                                    <a href="{{ $p->url ?? 'https://'.$p->domain }}" target="_blank" rel="noopener" style="font-size:.75rem;color:#2563eb;text-decoration:underline;margin-right:.5rem">Open ↗</a>
                                     <x-filament::button size="xs" color="gray" wire:click="openKit('{{ $p->id }}')">Pitch</x-filament::button>
                                 </td>
                             </tr>
@@ -102,7 +126,7 @@
                     <div style="display:flex;justify-content:space-between;align-items:flex-start">
                         <div>
                             <h2 style="font-size:1.1rem;font-weight:600">{{ $ak['prospect']->domain }}</h2>
-                            <div style="font-size:.78rem;color:var(--gray-500)">{{ $ak['prospect']->kind->label() }} · links to {{ implode(', ', $ak['prospect']->competitors) }}</div>
+                            <div style="font-size:.78rem;color:var(--gray-500)">{{ $ak['prospect']->kind->label() }} · {{ $ak['prospect']->kind->isLane() ? ($ak['prospect']->offices !== null && $ak['prospect']->offices !== [] ? 'near '.implode(', ', $ak['prospect']->offices) : 'state-wide') : 'links to '.implode(', ', $ak['prospect']->competitors) }}</div>
                         </div>
                         <button wire:click="closeKit" style="border:0;background:none;font-size:1.4rem;cursor:pointer;color:var(--gray-500)">&times;</button>
                     </div>
