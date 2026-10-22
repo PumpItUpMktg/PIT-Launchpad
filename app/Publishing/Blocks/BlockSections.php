@@ -1014,17 +1014,30 @@ final class BlockSections
             $placeholder = true;
         }
 
-        $cols = array_map(function (array $q): string {
+        // The compact card (the Google strip): who + when on one header line behind an initial badge, the
+        // stars beneath, the quote clamped by the theme — so five long reviews sit on ONE row instead of
+        // three tall cards and an orphaned pair under them.
+        $compact = $variant === 'lp-testimonials--google';
+
+        $cols = array_map(function (array $q) use ($compact): string {
             $children = [];
             $stars = (int) ($q['stars'] ?? 0);
+            $author = trim((string) ($q['author'] ?? ''));
+            $role = trim((string) ($q['role'] ?? ''));
+
+            if ($compact && $author !== '') {
+                $initial = mb_strtoupper(mb_substr($author, 0, 1));
+                $head = '<span class="lp-avatar" aria-hidden="true">'.$this->text($initial).'</span>'
+                    .'<span class="lp-quote-byline"><strong>'.$this->text($author).'</strong>'
+                    .($role !== '' ? '<span class="lp-who-role">'.$this->text($role).'</span>' : '').'</span>';
+                $children[] = $this->b->paragraph($head, ['className' => 'lp-quote-head']);
+            }
             if ($stars > 0) {
                 $children[] = $this->b->paragraph(str_repeat('★', min($stars, 5)), ['textColor' => 'accent-ink', 'className' => 'lp-stars']);
             }
             $children[] = $this->b->paragraph('“'.$this->text($q['quote']).'”', ['className' => 'lp-quote-text']);
 
-            $author = trim((string) ($q['author'] ?? ''));
-            $role = trim((string) ($q['role'] ?? ''));
-            if ($author !== '' || $role !== '') {
+            if (! $compact && ($author !== '' || $role !== '')) {
                 $who = '<strong>'.$this->text($author !== '' ? $author : $role).'</strong>';
                 if ($author !== '' && $role !== '') {
                     $who .= '<br><span class="lp-who-role">'.$this->text($role).'</span>';
@@ -1032,17 +1045,23 @@ final class BlockSections
                 $children[] = $this->b->paragraph($who, ['className' => 'lp-who']);
             }
 
-            return $this->b->column([$this->b->group($children, ['backgroundColor' => 'base', 'className' => 'lp-quote'])]);
+            return $this->b->column([$this->b->group($children, ['backgroundColor' => 'base', 'className' => 'lp-quote'.($compact ? ' lp-quote--compact' : '')])]);
         }, $quotes);
 
         $children = [$this->sectionHead($eyebrow, $heading, center: true)];
         if ($placeholder) {
             $children[] = $this->placeholderNote('activates when you add reviews');
         }
-        // Three to a row: a fourth and fifth quote (Google returns five) start a second row rather than
-        // squeezing five columns into one.
-        foreach (array_chunk($cols, 3) as $row) {
-            $children[] = $this->b->columns($row, ['className' => 'lp-testimonials-grid']);
+        if ($compact) {
+            // One strip: every card in a single columns block; the theme lays them out as one row (five
+            // equal columns on a wide screen, a side-scrolling strip below that).
+            $children[] = $this->b->columns($cols, ['className' => 'lp-testimonials-grid lp-testimonials-strip']);
+        } else {
+            // Three to a row: a fourth and fifth quote start a second row rather than squeezing five
+            // columns into one.
+            foreach (array_chunk($cols, 3) as $row) {
+                $children[] = $this->b->columns($row, ['className' => 'lp-testimonials-grid']);
+            }
         }
         if (trim($footnote) !== '') {
             $children[] = $this->b->paragraph($this->richText($footnote), ['textColor' => 'muted', 'fontSize' => 'small', 'className' => 'lp-testimonials-note']);

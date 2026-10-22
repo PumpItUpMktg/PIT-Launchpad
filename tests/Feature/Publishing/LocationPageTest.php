@@ -949,7 +949,9 @@ it('a HUB page carries the Google rating line in the hero and its Google reviews
     expect($markup)->toContain('What customers say on Google')
         ->toContain('Google review number 4 about the Trooper crew.')
         ->not->toContain('Google review number 5 about the Trooper crew.')
-        ->toContain('<strong>Reviewer 1</strong><br><span class="lp-who-role">1 months ago</span>')
+        ->toContain('<span class="lp-avatar" aria-hidden="true">R</span><span class="lp-quote-byline"><strong>Reviewer 1</strong><span class="lp-who-role">1 months ago</span></span>')
+        ->toContain('lp-testimonials-strip')     // one row, every card in a single columns block
+        ->toContain('lp-quote lp-quote--compact')
         ->toContain('Reviews from Google.')
         ->toContain('Read all 132 reviews on Google')
         ->toMatch('#<a href="https://maps\.google\.com/\?cid(=|&\#61;)777">Read all 132 reviews#')   // the sanitizer entity-encodes "="; browsers decode it
