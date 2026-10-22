@@ -44,6 +44,7 @@ class LegacyRedirectAuditor
      *   ok: list<array{from: string, to: string}>,
      *   ambiguous: list<array{from: string, candidates: list<string>, current: string|null}>,
      *   skipped_live: list<string>,
+     *   shadowing: list<array{from: string, to: string}>,
      * }
      */
     public function audit(Site $site, bool $apply): array
@@ -76,6 +77,17 @@ class LegacyRedirectAuditor
         $ambiguous = [];
         $skippedLive = [];
         $toApply = [];
+
+        // A stored rule whose SOURCE is a live page shadows that page: every visit redirects away from a
+        // URL that should serve. Typically a slug-change redirect left behind after a second town with
+        // the same name was later published at the old address. Deactivated on apply; the next push
+        // replaces the plugin's whole map, so the rule is gone from the live site too.
+        $shadowing = [];
+        foreach ($existing as $from => $row) {
+            if ((string) $row->status === 'active' && in_array($from, $liveSlugs, true)) {
+                $shadowing[] = ['from' => $from, 'to' => (string) $row->to_url];
+            }
+        }
 
         // Every live page that claims a bare-town slug, grouped — so a shared name is decided once, not
         // once per page with the last one winning.
@@ -130,18 +142,26 @@ class LegacyRedirectAuditor
             }
         }
 
-        if ($apply && $toApply !== []) {
-            DB::transaction(function () use ($site, $toApply): void {
+        if ($apply && ($toApply !== [] || $shadowing !== [])) {
+            DB::transaction(function () use ($site, $toApply, $shadowing): void {
                 foreach ($toApply as $row) {
                     Redirect::withoutGlobalScope(SiteScope::class)->updateOrCreate(
                         ['site_id' => $site->id, 'from_url' => $row['from']],
                         ['to_url' => $row['to'], 'code' => 301, 'status' => 'active', 'source' => RedirectSource::Migration->value],
                     );
                 }
+                foreach ($shadowing as $row) {
+                    Redirect::withoutGlobalScope(SiteScope::class)
+                        ->where('site_id', $site->id)->where('from_url', $row['from'])
+                        ->update(['status' => 'inactive']);
+                }
             });
         }
 
-        return ['create' => $create, 'fix' => $fix, 'ok' => $ok, 'ambiguous' => $ambiguous, 'skipped_live' => array_values(array_unique($skippedLive))];
+        return [
+            'create' => $create, 'fix' => $fix, 'ok' => $ok, 'ambiguous' => $ambiguous,
+            'skipped_live' => array_values(array_unique($skippedLive)), 'shadowing' => $shadowing,
+        ];
     }
 
     /**

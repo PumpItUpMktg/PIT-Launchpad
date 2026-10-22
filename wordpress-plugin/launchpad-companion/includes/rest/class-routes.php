@@ -262,7 +262,7 @@ final class Routes
 
         $count = ( new RedirectStore() )->upsert($redirects);
 
-        return new WP_REST_Response(['count' => $count], 200);
+        return new WP_REST_Response(['count' => $count, 'page_caches_purged' => RedirectStore::$last_purged], 200);
     }
 
     public function kit_template(WP_REST_Request $request): WP_REST_Response

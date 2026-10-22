@@ -7,6 +7,7 @@
 
 namespace Launchpad\Companion\Content;
 
+use Launchpad\Companion\CachePurge;
 use Launchpad\Companion\Meta;
 
 if (! defined('ABSPATH')) {
@@ -40,8 +41,15 @@ final class RedirectStore
 
         update_option(Meta::OPTION_REDIRECTS, $map, false);
 
+        // A full-page cache keeps serving the OLD 301 for a path after its rule changed (a redirect
+        // response is cached like any other) — purge, as the style push does, so the new rule serves.
+        self::$last_purged = CachePurge::page_caches();
+
         return count($map);
     }
+
+    /** @var list<string> the cache layers the last upsert asked to purge — surfaced in the route's response */
+    public static array $last_purged = [];
 
     public static function normalize(string $url): string
     {

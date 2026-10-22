@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.56
+Stable tag: 0.9.57
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,12 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.57 =
+* A redirect push purges the full-page caches (shared CachePurge with the style push, plus Nginx
+  Helper / FlyWP / a `launchpad_purge_page_cache` hook for host snippets): a cached 301 kept
+  serving the OLD rule for a path after it changed. The /redirects response reports
+  `page_caches_purged`.
 
 = 0.9.56 =
 * /redirects/foreign: a hit / 404 log table (301 Redirects Pro's wf301_redirect_logs) is never read as
