@@ -12,7 +12,11 @@ use Tests\Support\PublishHarness;
 
 function reviewEndpoint(): void
 {
-    Http::fake(['*/wp-json/launchpad/v1/content' => Http::response(['wp_post_id' => 88, 'status' => 'publish', 'skipped' => false], 200)]);
+    Http::fake([
+        '*/wp-json/launchpad/v1/content' => Http::response(['wp_post_id' => 88, 'status' => 'publish', 'skipped' => false], 200),
+        // A published location page writes its legacy redirects and pushes them (sync queue in tests).
+        '*/wp-json/launchpad/v1/redirects' => Http::response(['updated' => 1], 200),
+    ]);
 }
 
 function marketReview(string $siteId, ?string $marketId): ProofItem

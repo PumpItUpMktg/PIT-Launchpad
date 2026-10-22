@@ -105,3 +105,34 @@ it('settles a shared bare slug on the office landing, and surfaces it as ambiguo
         ->and(Redirect::withoutGlobalScope(SiteScope::class)->where('from_url', '/franklin')->value('to_url'))->toBe('/bedminster-nj/franklin-nj')
         ->and(Redirect::withoutGlobalScope(SiteScope::class)->where('from_url', '/middletown')->exists())->toBeFalse();
 });
+
+it('also proposes the old TOP-LEVEL slug of a town page nested under its hub — the URL Google indexed before nesting', function () {
+    $site = Site::factory()->create();
+    locationPage($site, 'Montclair, NJ', 'montclair-nj', ['location_id' => Location::factory()->create(['site_id' => $site->id])->id]);
+    locationPage($site, 'Newark, NJ', 'montclair-nj/newark-nj', ['parent_location_id' => null]);
+
+    $r = app(LegacyRedirectAuditor::class)->audit($site, apply: false);
+
+    expect($r['create'])->toContain(['from' => '/newark', 'to' => '/montclair-nj/newark-nj'])
+        ->toContain(['from' => '/newark-nj', 'to' => '/montclair-nj/newark-nj'])
+        ->toContain(['from' => '/montclair', 'to' => '/montclair-nj'])
+        ->and(collect($r['create'])->pluck('from')->all())->not->toContain('/montclair-nj'); // the hub's own slug is its live URL
+});
+
+it('forPage writes a just-published town page\'s legacy redirects create-only, never shadowing a live slug or overwriting an existing row', function () {
+    $site = Site::factory()->create();
+    locationPage($site, 'Hoboken, NJ', 'hoboken-nj');                                  // a live page owns /hoboken-nj
+    Redirect::factory()->create(['site_id' => $site->id, 'from_url' => '/belleville', 'to_url' => '/somewhere-else', 'code' => 301, 'status' => 'active']);
+    $town = locationPage($site, 'Belleville, NJ', 'montclair-nj/belleville-nj');
+
+    $created = app(LegacyRedirectAuditor::class)->forPage($town);
+
+    $rows = Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()->keyBy('from_url');
+    expect($created)->toBe(1)
+        ->and($rows['/belleville-nj']->to_url)->toBe('/montclair-nj/belleville-nj')   // the old top-level URL
+        ->and($rows['/belleville']->to_url)->toBe('/somewhere-else');                  // existing row untouched (the audit's repoint owns that)
+
+    // A second publish of the same page creates nothing more (idempotent), and a non-location page writes nothing.
+    expect(app(LegacyRedirectAuditor::class)->forPage($town))->toBe(0)
+        ->and(app(LegacyRedirectAuditor::class)->forPage(Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'status' => ContentStatus::Published, 'title' => 'Sump Pump Repair', 'slug' => 'sump-pump-repair'])))->toBe(0);
+});

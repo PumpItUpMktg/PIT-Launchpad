@@ -13,6 +13,7 @@ use Launchpad\Companion\Content\BrandKitStore;
 use Launchpad\Companion\Content\ContentDiagnostics;
 use Launchpad\Companion\Content\StyleStore;
 use Launchpad\Companion\Content\ContentStore;
+use Launchpad\Companion\Content\ForeignRedirects;
 use Launchpad\Companion\Content\JobStore;
 use Launchpad\Companion\Content\KitTemplateStore;
 use Launchpad\Companion\Content\PostRetirer;
@@ -97,6 +98,14 @@ final class Routes
             'permission_callback' => $auth,
         ]);
 
+        // The redirect rules OTHER plugins hold, read from their own tables — the migration path off a
+        // third-party redirect plugin whose UI may be broken. Read-only.
+        register_rest_route(self::NS, '/redirects/foreign', [
+            'methods' => 'GET',
+            'callback' => [$this, 'foreign_redirects'],
+            'permission_callback' => $auth,
+        ]);
+
         register_rest_route(self::NS, '/kit-template', [
             'methods' => 'POST',
             'callback' => [$this, 'kit_template'],
@@ -149,6 +158,11 @@ final class Routes
             'callback' => [$this, 'indexnow_key'],
             'permission_callback' => $auth,
         ]);
+    }
+
+    public function foreign_redirects(): WP_REST_Response
+    {
+        return new WP_REST_Response(ForeignRedirects::collect(), 200);
     }
 
     public function status(WP_REST_Request $request): WP_REST_Response

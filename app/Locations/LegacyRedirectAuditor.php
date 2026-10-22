@@ -83,18 +83,17 @@ class LegacyRedirectAuditor
         $claims = [];
         foreach ($pages as $page) {
             $canonical = $this->path((string) $page->slug);
-            $town = $this->townName((string) $page->title);
-            $legacy = $this->path(Str::slug($town));
+            foreach ($this->legacyForms($page) as $legacy) {
+                if ($legacy === '' || $canonical === '' || $legacy === $canonical) {
+                    continue; // no distinct legacy form
+                }
+                if (in_array($legacy, $liveSlugs, true)) {
+                    $skippedLive[] = $legacy; // a real page lives here — never redirect it
 
-            if ($legacy === '' || $canonical === '' || $legacy === $canonical) {
-                continue; // no distinct bare-town legacy form
+                    continue;
+                }
+                $claims[$legacy][] = ['to' => $canonical, 'landing' => $page->location_id !== null];
             }
-            if (in_array($legacy, $liveSlugs, true)) {
-                $skippedLive[] = $legacy; // a real page lives here — never redirect it
-
-                continue;
-            }
-            $claims[$legacy][] = ['to' => $canonical, 'landing' => $page->location_id !== null];
         }
 
         foreach ($claims as $legacy => $claimants) {
@@ -143,6 +142,68 @@ class LegacyRedirectAuditor
         }
 
         return ['create' => $create, 'fix' => $fix, 'ok' => $ok, 'ambiguous' => $ambiguous, 'skipped_live' => array_values(array_unique($skippedLive))];
+    }
+
+    /**
+     * Write the legacy redirects for ONE just-published location page — create-only (an existing row for
+     * the same legacy path, however it got there, is never overwritten here; the audit's repoint logic
+     * owns that), never shadowing a live page slug. Called at publish time so a town page nested under its
+     * hub carries its old top-level URL from the moment it goes live, without waiting for an audit run.
+     * Returns how many rows were created.
+     */
+    public function forPage(Content $page): int
+    {
+        if ($page->kind !== ContentKind::Page || $page->page_type !== PageType::Location || $page->status !== ContentStatus::Published) {
+            return 0;
+        }
+        $canonical = $this->path((string) $page->slug);
+        if ($canonical === '') {
+            return 0;
+        }
+        $liveSlugs = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $page->site_id)
+            ->whereNotNull('slug')
+            ->pluck('slug')
+            ->map(fn ($s): string => $this->path((string) $s))
+            ->filter()->unique()->all();
+
+        $created = 0;
+        foreach (array_unique($this->legacyForms($page)) as $legacy) {
+            if ($legacy === '' || $legacy === $canonical || in_array($legacy, $liveSlugs, true)) {
+                continue;
+            }
+            $exists = Redirect::withoutGlobalScope(SiteScope::class)
+                ->where('site_id', $page->site_id)->where('from_url', $legacy)->exists();
+            if ($exists) {
+                continue;
+            }
+            Redirect::withoutGlobalScope(SiteScope::class)->create([
+                'site_id' => $page->site_id, 'from_url' => $legacy, 'to_url' => $canonical,
+                'code' => 301, 'status' => 'active', 'source' => RedirectSource::Migration->value,
+            ]);
+            $created++;
+        }
+
+        return $created;
+    }
+
+    /**
+     * The legacy top-level URLs a location page may still be indexed at: the bare town slug ("/hoboken"
+     * for "Hoboken, NJ"), and — for a page nested under its hub — its own last slug segment at the top
+     * level ("/newark-nj" for "/montclair-nj/newark-nj"), which is the URL every town page LIVED at before
+     * nesting and the one Google indexed.
+     *
+     * @return list<string>
+     */
+    private function legacyForms(Content $page): array
+    {
+        $forms = [$this->path(Str::slug($this->townName((string) $page->title)))];
+        $slug = trim((string) $page->slug, '/');
+        if (str_contains($slug, '/')) {
+            $forms[] = $this->path((string) substr($slug, (int) strrpos($slug, '/') + 1));
+        }
+
+        return array_values(array_filter($forms, fn (string $f): bool => $f !== ''));
     }
 
     /** The town label without a trailing ", ST" state suffix ("Hoboken, NJ" → "Hoboken"). */

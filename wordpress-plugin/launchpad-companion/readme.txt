@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.54
+Stable tag: 0.9.55
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,13 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.55 =
+* GET /redirects/foreign (authed, read-only): the redirect rules OTHER plugins on the site hold, read
+  straight from their database storage — 301 Redirects / 301 Redirects Pro tables, Redirection items
+  (JSON destinations, regex flag), Safe Redirect Manager rules, and any `*redirect*` table or option
+  by shape — normalized to {from, to, code, hits, source, regex}. The migration path off a third-party
+  redirect plugin whose UI is broken; the companion's own map is excluded.
 
 = 0.9.54 =
 * SECURITY — the REST write gate now refuses any request WordPress resolved to no user, whatever

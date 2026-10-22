@@ -14,6 +14,8 @@ use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
 use App\Jobs\PingIndexNow;
 use App\Jobs\PublishContent;
+use App\Jobs\PublishRedirects;
+use App\Locations\LegacyRedirectAuditor;
 use App\Models\Content;
 use App\Models\Redirect;
 use App\Models\Scopes\SiteScope;
@@ -198,6 +200,11 @@ class PublishContentService
         // towns drip in. Re-publish the already-live parent hub so its town links stay complete.
         $this->republishParentHub($content);
 
+        // A location page's legacy URLs (the bare town slug, and its old top-level slug for a page nested
+        // under its hub) 301 to it from the moment it is live — create-only, pushed only when a row was
+        // actually created, so the 400-page re-push never storms the redirect endpoint.
+        $this->writeLocationLegacyRedirects($content);
+
         // A freshly-published POST auto-tags itself with the towns it names and repushes the live
         // location pages whose blog feed just changed — so the article lands on those pages without a
         // manual reconcile. No-op for a page, or a post that names no coverage town.
@@ -261,6 +268,16 @@ class PublishContentService
                 ['site_id' => $site->id, 'from_url' => $fromPath],
                 ['to_url' => $toPath, 'code' => 301, 'status' => 'active', 'source' => RedirectSource::Migration->value],
             );
+        }
+    }
+
+    private function writeLocationLegacyRedirects(Content $content): void
+    {
+        if ($content->page_type !== PageType::Location) {
+            return;
+        }
+        if (app(LegacyRedirectAuditor::class)->forPage($content->fresh() ?? $content) > 0) {
+            PublishRedirects::dispatch((string) $content->site_id);
         }
     }
 
