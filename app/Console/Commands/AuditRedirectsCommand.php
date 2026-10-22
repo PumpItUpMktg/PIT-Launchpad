@@ -59,8 +59,11 @@ class AuditRedirectsCommand extends Command
         if ($r['skipped_live'] !== []) {
             $this->line('  • skipped (a live page owns the slug): '.implode(', ', $r['skipped_live']));
         }
+        foreach ($r['shadowing'] as $row) {
+            $this->line("  • <fg=red>shadowing</>  {$row['from']} → {$row['to']} — the source is a LIVE page; the rule is deactivated so the page serves again");
+        }
 
-        $changes = count($r['create']) + count($r['fix']);
+        $changes = count($r['create']) + count($r['fix']) + count($r['shadowing']);
         if ($changes === 0) {
             $this->newLine();
             $this->info('No legacy location redirects to add or fix.');

@@ -11,6 +11,7 @@
 
 namespace Launchpad\Companion\Content;
 
+use Launchpad\Companion\CachePurge;
 use Launchpad\Companion\Meta;
 use Launchpad\Companion\Render\BrandPaint;
 
@@ -204,82 +205,14 @@ final class StyleStore
     }
 
     /**
-     * Purge the common full-page caches so a brand push actually re-renders on the front end. A block
-     * theme inlines its global-styles CSS per page, so a cached page keeps the old colors until its
-     * cache is cleared — and unlike a wp-admin save, our REST write doesn't run the editor's purge path.
-     * Every purger is fired defensively (a `do_action` with no listener is a harmless no-op; function
-     * calls are `function_exists`-guarded), so this is safe on a site with no cache plugin at all.
-     *
-     * Returns the names of the cache layers we asked to purge — surfaced in the readback so a lingering
-     * stale page can be pinned on a cache we DIDN'T cover (e.g. an external CDN) rather than the write.
+     * Purge the common full-page caches so a brand push actually re-renders on the front end — see
+     * {@see \Launchpad\Companion\CachePurge::page_caches()} (shared with the redirect push).
      *
      * @return list<string>
      */
     private static function purge_page_caches(): array
     {
-        $purged = [];
-
-        // LiteSpeed Cache.
-        if (has_action('litespeed_purge_all') || defined('LSCWP_V')) {
-            do_action('litespeed_purge_all');
-            $purged[] = 'litespeed';
-        }
-        // WP Rocket.
-        if (function_exists('rocket_clean_domain')) {
-            rocket_clean_domain();
-            $purged[] = 'wp-rocket';
-        }
-        // W3 Total Cache.
-        if (function_exists('w3tc_flush_all')) {
-            w3tc_flush_all();
-            $purged[] = 'w3-total-cache';
-        }
-        // WP Super Cache.
-        if (function_exists('wp_cache_clear_cache')) {
-            wp_cache_clear_cache();
-            $purged[] = 'wp-super-cache';
-        }
-        // WP Fastest Cache.
-        if (function_exists('wpfc_clear_all_cache')) {
-            wpfc_clear_all_cache(true);
-            $purged[] = 'wp-fastest-cache';
-        } elseif (has_action('wpfc_clear_all_cache')) {
-            do_action('wpfc_clear_all_cache', true);
-            $purged[] = 'wp-fastest-cache';
-        }
-        // Cache Enabler.
-        if (has_action('cache_enabler_clear_complete_cache')) {
-            do_action('cache_enabler_clear_complete_cache');
-            $purged[] = 'cache-enabler';
-        }
-        // SiteGround SG Optimizer.
-        if (function_exists('sg_cachepress_purge_cache')) {
-            sg_cachepress_purge_cache();
-            $purged[] = 'sg-optimizer';
-        } elseif (has_action('siteground_optimizer_flush_cache')) {
-            do_action('siteground_optimizer_flush_cache');
-            $purged[] = 'sg-optimizer';
-        }
-        // Breeze (Cloudways).
-        if (has_action('breeze_clear_all_cache')) {
-            do_action('breeze_clear_all_cache');
-            $purged[] = 'breeze';
-        }
-        // Autoptimize (CSS/page cache).
-        if (has_action('autoptimize_flush_pagecache')) {
-            do_action('autoptimize_flush_pagecache', '');
-            $purged[] = 'autoptimize';
-        } elseif (class_exists('autoptimizeCache') && method_exists('autoptimizeCache', 'clearall')) {
-            \autoptimizeCache::clearall();
-            $purged[] = 'autoptimize';
-        }
-        // Kinsta / other hosts commonly listen on this generic signal.
-        if (has_action('kinsta_cache_purge_all')) {
-            do_action('kinsta_cache_purge_all');
-            $purged[] = 'kinsta';
-        }
-
-        return $purged;
+        return CachePurge::page_caches();
     }
 
     /**

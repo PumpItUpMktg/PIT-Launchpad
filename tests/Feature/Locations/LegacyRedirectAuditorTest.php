@@ -136,3 +136,19 @@ it('forPage writes a just-published town page\'s legacy redirects create-only, n
     expect(app(LegacyRedirectAuditor::class)->forPage($town))->toBe(0)
         ->and(app(LegacyRedirectAuditor::class)->forPage(Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Service, 'status' => ContentStatus::Published, 'title' => 'Sump Pump Repair', 'slug' => 'sump-pump-repair'])))->toBe(0);
 });
+
+it('deactivates a stored rule whose SOURCE is a live page (it shadows the page) and reports it', function () {
+    $site = Site::factory()->create();
+    locationPage($site, 'Newtown, PA', 'doylestown-pa/newtown-pa');                 // live at the old address of a town that moved
+    locationPage($site, 'Newtown, PA', 'downingtown-pa/newtown-pa');
+    Redirect::factory()->create(['site_id' => $site->id, 'from_url' => '/doylestown-pa/newtown-pa', 'to_url' => '/downingtown-pa/newtown-pa', 'code' => 301, 'status' => 'active']);
+    Redirect::factory()->create(['site_id' => $site->id, 'from_url' => '/old-thing', 'to_url' => '/downingtown-pa/newtown-pa', 'code' => 301, 'status' => 'active']); // not a live page — untouched
+
+    $preview = app(LegacyRedirectAuditor::class)->audit($site, apply: false);
+    expect($preview['shadowing'])->toBe([['from' => '/doylestown-pa/newtown-pa', 'to' => '/downingtown-pa/newtown-pa']])
+        ->and(Redirect::withoutGlobalScope(SiteScope::class)->where('from_url', '/doylestown-pa/newtown-pa')->value('status'))->toBe('active'); // preview changes nothing
+
+    app(LegacyRedirectAuditor::class)->audit($site, apply: true);
+    expect(Redirect::withoutGlobalScope(SiteScope::class)->where('from_url', '/doylestown-pa/newtown-pa')->value('status'))->toBe('inactive')
+        ->and(Redirect::withoutGlobalScope(SiteScope::class)->where('from_url', '/old-thing')->value('status'))->toBe('active');
+});

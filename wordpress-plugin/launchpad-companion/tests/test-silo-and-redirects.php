@@ -85,4 +85,22 @@ class Test_Silo_And_Redirects extends WP_UnitTestCase
         $this->assertNotFalse(has_filter('do_redirect_guess_404_permalink', '__return_false'));
         $this->assertFalse(apply_filters('do_redirect_guess_404_permalink', true));
     }
+
+    public function test_a_redirect_push_purges_the_page_caches_and_reports_the_layers(): void
+    {
+        $fired = 0;
+        $listener = static function () use (&$fired): void { $fired++; };
+        add_action('litespeed_purge_all', $listener);      // stands in for whatever full-page cache the host runs
+        add_action('launchpad_purge_page_cache', $listener); // the host-snippet hook
+
+        $count = ( new RedirectStore() )->upsert([['from_url' => '/old/', 'to_url' => '/new/', 'code' => 301]]);
+
+        remove_action('litespeed_purge_all', $listener);
+        remove_action('launchpad_purge_page_cache', $listener);
+
+        $this->assertSame(1, $count);
+        $this->assertSame(2, $fired, 'Both purge signals must fire on a redirect push.');
+        $this->assertContains('litespeed', RedirectStore::$last_purged);
+        $this->assertContains('custom', RedirectStore::$last_purged);
+    }
 }

@@ -46,3 +46,17 @@ it('never pushes from a preview', function () {
 
     Queue::assertNotPushed(PublishRedirects::class);
 });
+
+it('reports a shadowing rule, counts it as a change, and pushes after deactivating it', function () {
+    Queue::fake();
+    $site = auditedSite();
+    Content::factory()->create(['site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::Published, 'wp_post_id' => 77, 'title' => 'Tinicum, PA', 'slug' => 'downingtown-pa/tinicum-pa']);
+    Redirect::factory()->create(['site_id' => $site->id, 'from_url' => '/downingtown-pa/tinicum-pa', 'to_url' => '/doylestown-pa/tinicum-pa', 'code' => 301, 'status' => 'active']);
+
+    $this->artisan('launchpad:audit-redirects', ['--site' => $site->id, '--apply' => true, '--push' => true])
+        ->expectsOutputToContain('shadowing  /downingtown-pa/tinicum-pa → /doylestown-pa/tinicum-pa — the source is a LIVE page; the rule is deactivated so the page serves again')
+        ->expectsOutputToContain('Queued the redirect push to WordPress')
+        ->assertSuccessful();
+    expect(Redirect::withoutGlobalScope(SiteScope::class)->where('from_url', '/downingtown-pa/tinicum-pa')->value('status'))->toBe('inactive');
+    Queue::assertPushed(PublishRedirects::class);
+});
