@@ -1377,17 +1377,10 @@ final class BlockSections
         array $hours,
         bool $preview = false,
         string $mapSlotKey = '',
-        ?string $mailingAddress = null,
     ): string {
         $phoneDisplay = trim((string) $phoneDisplay);
         $email = trim((string) $email);
         $address = trim((string) $address);
-        // The corporate mailing / billing address, when it is not the address shown above (a multi-office
-        // tenant whose checks go to headquarters) — the page the out-of-state footer line points at.
-        $mailingAddress = trim((string) $mailingAddress);
-        if ($mailingAddress === $address) {
-            $mailingAddress = '';
-        }
 
         $placeholder = false;
         if ($phoneDisplay === '' && $email === '' && $address === '' && $hours === []) {
@@ -1414,9 +1407,6 @@ final class BlockSections
         }
         if ($address !== '') {
             $rows[] = $this->detailRow('Address', $this->text($address));
-        }
-        if ($mailingAddress !== '') {
-            $rows[] = $this->detailRow('Mailing & billing address', $this->text($mailingAddress));
         }
 
         $cols = [];

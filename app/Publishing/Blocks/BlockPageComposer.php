@@ -920,7 +920,6 @@ final class BlockPageComposer
         bool $mapAvailable = false,
         bool $storefront = false,
         bool $preview = false,
-        ?string $mailingAddress = null,
     ): string {
         $ask = $audience === 'commercial' ? 'Request an assessment' : 'Request service';
 
@@ -949,7 +948,6 @@ final class BlockPageComposer
             address: $address,
             hours: $hours,
             preview: $preview,
-            mailingAddress: $mailingAddress,
         );
 
         // The MAP — a storefront centers on its pin ("Find us", the address beneath); a mobile-only

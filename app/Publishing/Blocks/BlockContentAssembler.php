@@ -162,9 +162,11 @@ final class BlockContentAssembler
      * The Contact page — hero + the real NAP (phone via the shared context, email/address/hours from the
      * primary §1 Location) + a request-service CTA. Every channel is honest and per-field data-gated.
      *
-     * The ADDRESS renders only for a real STOREFRONT (`Location.is_storefront`) — many home-services
-     * businesses are mobile-only with no location customers visit; showing their base address would
-     * invite walk-ins to a garage. Emergency tenants get an honest "Emergencies — 24/7" hours row.
+     * The ADDRESS is the corporate address whenever one is captured (the mailing / billing address, which
+     * the out-of-state footer line sends visitors here for); without one it renders only for a real
+     * STOREFRONT (`Location.is_storefront`) — many home-services businesses are mobile-only with no
+     * location customers visit; showing their base address would invite walk-ins to a garage. Emergency
+     * tenants get an honest "Emergencies — 24/7" hours row.
      * NAP consistency: the same primary-Location record feeds this page, the footer, and the schema.
      *
      * @param  array<string, mixed>  $slots
@@ -189,8 +191,9 @@ final class BlockContentAssembler
             slots: $slots,
             ctx: $ctx,
             email: is_string($location?->email) && trim($location->email) !== '' ? trim($location->email) : null,
-            address: $storefront && is_string($location->address) && trim($location->address) !== '' ? trim($location->address) : null,
-            mailingAddress: $this->site($content)?->corporateAddressLine(),
+            // The CORPORATE address whenever one is captured (every tenant: it is the mailing / billing
+            // address the out-of-state footer line points visitors at), else the earliest storefront's.
+            address: $this->contactAddress($content, $location, $storefront),
             hours: $hours,
             serviceAreaBrief: $this->slotString($slots, 'service_area_brief'),
             audience: $this->audience($content),
@@ -1243,6 +1246,17 @@ final class BlockContentAssembler
         }
 
         return $out;
+    }
+
+    /** The Contact page address: the corporate line when captured, else a real storefront's own address. */
+    private function contactAddress(Content $content, ?Location $location, bool $storefront): ?string
+    {
+        $corporate = trim((string) $this->site($content)?->corporateAddressLine());
+        if ($corporate !== '') {
+            return $corporate;
+        }
+
+        return $storefront && $location !== null && is_string($location->address) && trim($location->address) !== '' ? trim($location->address) : null;
     }
 
     /**
