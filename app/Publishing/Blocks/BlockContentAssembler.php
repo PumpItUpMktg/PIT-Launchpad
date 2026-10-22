@@ -1286,14 +1286,19 @@ final class BlockContentAssembler
 
     /**
      * The office's stored Google reviews (hub pages only) mapped to the testimonials shape: the author's name
-     * as Google gives it, Google's relative time as the byline, the text verbatim. Empty ⇒ the section omits.
+     * as Google gives it, Google's relative time as the byline, the text verbatim. Only those at or above the
+     * configured minimum rating are quoted (the section never claims to be every review and links to the
+     * full list on Google). Empty ⇒ the section omits.
      *
      * @return list<array{quote: string, author: string, role: string, stars: int}>
      */
     private function googleReviews(Location $location): array
     {
+        $minRating = max(1, min(5, (int) config('launchpad.google_reviews.min_rating', 4)));
+
         return GbpReview::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $location->site_id)->where('location_id', $location->id)
+            ->where('rating', '>=', $minRating)
             ->orderByDesc('reviewed_at')->limit(5)->get()
             ->map(fn (GbpReview $r): array => [
                 'quote' => $r->text,

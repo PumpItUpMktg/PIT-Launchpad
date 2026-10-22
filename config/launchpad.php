@@ -1095,6 +1095,13 @@ return [
     // Google Business Profile row (one Places call each). A town is "out of reach" for the pack when at
     // least `reach_min_closer` of the office's pack winners are closer to it than the office AND the
     // office is more than `reach_ratio` × the nearest winner's distance away, beyond `reach_floor_miles`.
+    // Google reviews on the office hub (§ Reviews): the five Places returns are stored whole; the page
+    // shows only those at or above this rating. The section stays honest — it never claims to be every
+    // review and links to the full list on Google — so a low one is simply not quoted on the page.
+    'google_reviews' => [
+        'min_rating' => (int) env('LAUNCHPAD_GOOGLE_REVIEWS_MIN_RATING', 4),
+    ],
+
     'roadmap' => [
         'competitors_per_office' => (int) env('LAUNCHPAD_ROADMAP_COMPETITORS_PER_OFFICE', 10),
         'reach_ratio' => (float) env('LAUNCHPAD_ROADMAP_REACH_RATIO', 1.5),

@@ -918,13 +918,13 @@ function locGoogleProfile(Site $site, Location $location, int $reviews = 5): voi
     for ($i = 1; $i <= $reviews; $i++) {
         GbpReview::create([
             'site_id' => $site->id, 'location_id' => $location->id, 'place_id' => (string) $location->place_id,
-            'author_name' => "Reviewer {$i}", 'rating' => $i === 3 ? 4 : 5, 'text' => "Google review number {$i} about the Trooper crew.",
+            'author_name' => "Reviewer {$i}", 'rating' => $i === 3 ? 4 : ($i === 5 ? 1 : 5), 'text' => "Google review number {$i} about the Trooper crew.",
             'relative_time' => "{$i} months ago", 'reviewed_at' => now()->subMonths($i), 'refreshed_at' => now(),
         ]);
     }
 }
 
-it('a HUB page carries the Google rating line in the hero and its five Google reviews ABOVE our captured reviews', function () {
+it('a HUB page carries the Google rating line in the hero and its Google reviews (4★ and up) ABOVE our captured reviews', function () {
     $site = locRelaySite();
     $location = locRelayLocation($site, ['place_id' => 'PID_TROOPER', 'gbp_url' => 'https://maps.google.com/?cid=777']);
     $page = locRelayPage($site, $location);
@@ -944,9 +944,11 @@ it('a HUB page carries the Google rating line in the hero and its five Google re
         ->toContain('href="https://maps.google.com/?cid=777"')
         ->toContain('<strong>4.8</strong> · 132 Google reviews ↗')
         ->and(strpos($markup, 'lp-google-rating'))->toBeLessThan(strpos($markup, 'Get a free assessment'));
-    // Google section: all five, verbatim, author + Google's relative time, the attribution + read-all link.
+    // Google section: the four at or above the minimum rating (the 1-star fifth is not quoted), verbatim,
+    // author + Google's relative time, the attribution + read-all link (the honest count stays 132).
     expect($markup)->toContain('What customers say on Google')
-        ->toContain('Google review number 5 about the Trooper crew.')
+        ->toContain('Google review number 4 about the Trooper crew.')
+        ->not->toContain('Google review number 5 about the Trooper crew.')
         ->toContain('<strong>Reviewer 1</strong><br><span class="lp-who-role">1 months ago</span>')
         ->toContain('Reviews from Google.')
         ->toContain('Read all 132 reviews on Google')
@@ -992,4 +994,16 @@ it('the blob carries a location page\'s STATE — the office\'s for a hub, the t
 
     expect(app(MetaBlobAssembler::class)->assemble($hub->fresh(), collect())['state'])->toBe('PA')
         ->and(app(MetaBlobAssembler::class)->assemble($town->fresh(), collect())['state'])->toBe('NJ');
+});
+
+it('the Google reviews minimum rating is configurable — at 1 every stored review is quoted', function () {
+    config(['launchpad.google_reviews.min_rating' => 1]);
+    $site = locRelaySite();
+    $location = locRelayLocation($site, ['place_id' => 'PID_TROOPER', 'gbp_url' => 'https://maps.google.com/?cid=777']);
+    $page = locRelayPage($site, $location);
+    locGoogleProfile($site, $location);
+
+    $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
+
+    expect($markup)->toContain('Google review number 5 about the Trooper crew.');
 });
