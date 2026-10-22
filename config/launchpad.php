@@ -1089,6 +1089,17 @@ return [
         'max_footprint' => (float) env('LAUNCHPAD_LINKS_MAX_FOOTPRINT', 0.5),
         // Country-code TLDs that still count as local competitors (a .ca site does not serve New Jersey).
         'country_tlds' => array_values(array_filter(array_map('trim', explode(',', (string) env('LAUNCHPAD_LINKS_COUNTRY_TLDS', 'us'))))),
+        // Email outreach to link prospects (§ Links). Every email is reviewed and sent one at a time by a
+        // click; nothing sends on a schedule. `hard_cap` is the platform ceiling on a tenant's monthly cap
+        // (the tenant may set lower, never higher); `enabled=false` refuses every send. A follow-up may go
+        // only once, and only `follow_up_after_days` after the pitch. Mail goes out from the tenant's own
+        // domain only — the sender address is checked against `Site.domain_url` at save AND at send.
+        'outreach' => [
+            'enabled' => (bool) env('LAUNCHPAD_OUTREACH_ENABLED', true),
+            'hard_cap' => (int) env('LAUNCHPAD_OUTREACH_HARD_CAP', 20),
+            'follow_up_after_days' => (int) env('LAUNCHPAD_OUTREACH_FOLLOW_UP_AFTER_DAYS', 5),
+            'contact_timeout' => (int) env('LAUNCHPAD_OUTREACH_CONTACT_TIMEOUT', 8),
+        ],
     ],
 
     // Office roadmap (§ Roadmap). `competitors_per_office` = how many map-pack competitors per office get a

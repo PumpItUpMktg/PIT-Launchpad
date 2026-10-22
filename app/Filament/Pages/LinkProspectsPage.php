@@ -2,14 +2,23 @@
 
 namespace App\Filament\Pages;
 
+use App\Enums\ClientDecision;
 use App\Enums\LinkProspectKind;
 use App\Enums\LinkProspectStatus;
 use App\Jobs\FindLinkProspects;
 use App\Jobs\FindLocalOpportunities;
+use App\Jobs\FindProspectContact;
+use App\Links\Outreach\FollowUpComposer;
+use App\Links\Outreach\GuardResult;
+use App\Links\Outreach\OutreachGuard;
+use App\Links\Outreach\OutreachRefused;
+use App\Links\Outreach\OutreachSender;
+use App\Links\Outreach\Sender;
 use App\Links\OutreachKitDrafter;
 use App\Models\LinkProspect;
 use App\Models\LinkProspectRun;
 use App\Models\Location;
+use App\Models\OutreachEmail;
 use App\Models\OutreachKit;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -62,6 +71,16 @@ class LinkProspectsPage extends Page
     /** The office the open kit speaks for ('' = the brand, linking to the home page). */
     public string $kitLocationId = '';
 
+    /** The email as it will go — pre-filled from the kit (or the follow-up composer), edited by the person, sent verbatim. */
+    public string $sendSubject = '';
+
+    public string $sendBody = '';
+
+    /** pitch | follow_up — which email the send box holds. */
+    public string $sendKind = OutreachEmail::PITCH;
+
+    public string $contactEmailInput = '';
+
     public static function menuTag(): string
     {
         return 'unaddressed';
@@ -85,7 +104,8 @@ class LinkProspectsPage extends Page
         }
         $q = LinkProspect::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId);
         match ($this->status) {
-            'open' => $q->whereIn('status', [LinkProspectStatus::New->value, LinkProspectStatus::Contacted->value]),
+            'open' => $q->whereIn('status', LinkProspectStatus::openValues()),
+            'interested' => $q->where('client_decision', ClientDecision::Interested->value)->whereIn('status', LinkProspectStatus::openValues()),
             'all' => null,
             default => $q->where('status', $this->status),
         };
@@ -171,11 +191,147 @@ class LinkProspectsPage extends Page
     public function openKit(string $prospectId): void
     {
         $this->activeProspectId = $prospectId;
+        $this->contactEmailInput = (string) $this->activeProspect()?->contact_email;
+        $this->prefillSend();
     }
 
     public function closeKit(): void
     {
         $this->activeProspectId = null;
+        $this->sendSubject = $this->sendBody = '';
+        $this->sendKind = OutreachEmail::PITCH;
+    }
+
+    public function updatedKitLocationId(): void
+    {
+        $this->prefillSend();
+    }
+
+    /** The operator records the client's call here (PR C lets the client do it in the portal). */
+    public function setDecision(string $prospectId, string $decision): void
+    {
+        $prospect = $this->siteId === null ? null
+            : LinkProspect::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->find($prospectId);
+        if ($prospect === null) {
+            return;
+        }
+        $value = ClientDecision::tryFrom($decision);
+        $prospect->forceFill(['client_decision' => $value, 'client_decided_at' => $value !== null ? now() : null, 'client_decided_by' => $value !== null ? Auth::id() : null])->save();
+    }
+
+    public function setContact(): void
+    {
+        $prospect = $this->activeProspect();
+        if ($prospect === null) {
+            return;
+        }
+        $email = strtolower(trim($this->contactEmailInput));
+        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            Notification::make()->danger()->title('That is not an email address')->send();
+
+            return;
+        }
+        $prospect->forceFill(['contact_email' => $email !== '' ? $email : null, 'contact_source' => $email !== '' ? 'manual' : null])->save();
+        Notification::make()->success()->title($email !== '' ? "Contact set: {$email}" : 'Contact cleared')->send();
+    }
+
+    public function pickContact(string $email): void
+    {
+        $this->contactEmailInput = $email;
+        $this->setContact();
+    }
+
+    /** Queue one read of the prospect's page for a contact address. */
+    public function findContact(): void
+    {
+        $prospect = $this->activeProspect();
+        if ($prospect === null) {
+            return;
+        }
+        FindProspectContact::dispatch((string) $prospect->id);
+        Notification::make()->success()->title('Looking for a contact')->body('Reading the page (and its contact page) on the worker. Reopen the panel in a minute.')->send();
+    }
+
+    /** The guard's checklist for the email in the send box — red until every line is green. */
+    public function getSendGuardProperty(): ?GuardResult
+    {
+        $prospect = $this->activeProspect();
+        $site = $this->site();
+
+        return $prospect === null || $site === null ? null : app(OutreachGuard::class)->check($site, $prospect, $this->sendKind);
+    }
+
+    /** @return array{email: string, name: string}|null */
+    public function getSenderProperty(): ?array
+    {
+        $site = $this->site();
+
+        return $site === null ? null : Sender::for($site);
+    }
+
+    /** @return array{used: int, cap: int} */
+    public function getMonthUsageProperty(): array
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return ['used' => 0, 'cap' => 0];
+        }
+
+        return ['used' => app(OutreachGuard::class)->usedThisMonth($site), 'cap' => OutreachGuard::capFor($site)];
+    }
+
+    /** @return list<OutreachEmail> */
+    public function getSentEmailsProperty(): array
+    {
+        $prospect = $this->activeProspect();
+
+        return $prospect === null ? []
+            : OutreachEmail::withoutGlobalScope(SiteScope::class)->where('link_prospect_id', $prospect->id)->orderBy('approved_at')->get()->all();
+    }
+
+    /** One click, one email: the guard runs again inside the sender's lock; refusals come back as the reasons. */
+    public function approveAndSend(): void
+    {
+        $prospect = $this->activeProspect();
+        $site = $this->site();
+        if ($prospect === null || $site === null) {
+            return;
+        }
+        $kit = $this->getActiveKitProperty()['kit'] ?? null;
+        try {
+            $email = app(OutreachSender::class)->approve($site, $prospect, $this->sendKind, $this->sendSubject, $this->sendBody, $kit, Auth::user());
+        } catch (OutreachRefused $e) {
+            Notification::make()->danger()->title('Not sent')->body(implode(' ', $e->reasons))->persistent()->send();
+
+            return;
+        }
+        Notification::make()->success()->title($this->sendKind === OutreachEmail::FOLLOW_UP ? "Follow-up approved for {$prospect->domain}" : "Pitch approved for {$prospect->domain}")
+            ->body("Sending to {$email->to_email} from {$email->from_email} on the worker.")->send();
+        $this->prefillSend();
+    }
+
+    /** Pre-fill the send box: the pitch from the kit while no pitch has gone; the follow-up once one has. */
+    private function prefillSend(): void
+    {
+        $prospect = $this->activeProspect();
+        $site = $this->site();
+        if ($prospect === null || $site === null) {
+            return;
+        }
+        $pitch = OutreachEmail::withoutGlobalScope(SiteScope::class)->where('link_prospect_id', $prospect->id)
+            ->where('kind', OutreachEmail::PITCH)->where('status', '!=', OutreachEmail::FAILED)->orderByDesc('approved_at')->first();
+        if ($pitch !== null) {
+            $this->sendKind = OutreachEmail::FOLLOW_UP;
+            $draft = app(FollowUpComposer::class)->compose($site, $pitch);
+            $this->sendSubject = $draft['subject'];
+            $this->sendBody = $draft['body'];
+
+            return;
+        }
+        $this->sendKind = OutreachEmail::PITCH;
+        $kit = $this->getActiveKitProperty()['kit'] ?? null;
+        $this->sendSubject = (string) ($kit->payload['pitch_subject'] ?? '');
+        $this->sendBody = (string) ($kit->payload['pitch_body'] ?? '');
     }
 
     /** @return list<array{id: string, name: string}> */
@@ -216,6 +372,7 @@ class LinkProspectsPage extends Page
         Notification::make()->{$kit->model_ok ? 'success' : 'warning'}()
             ->title($kit->model_ok ? "Pitch ready for {$prospect->domain}" : "Pitch for {$prospect->domain} uses the plain fallback copy")
             ->send();
+        $this->prefillSend();
     }
 
     private function activeProspect(): ?LinkProspect

@@ -23,6 +23,11 @@
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
                     <div style="font-size:.85rem;color:var(--gray-500)">
                         Two sources: domains that link to the local competitors Town Rank finds above you and not to you (the intersect), and local opportunity pages — sponsorships, memberships, dealer locators, job and training boards — found by searching each office's town and county.
+                        @php($usage = $this->monthUsage)
+                        @php($sender = $this->sender)
+                        <div style="margin-top:.35rem">Outreach this month: <strong>{{ $usage['used'] }} of {{ $usage['cap'] }}</strong> ·
+                            @if ($sender !== null) sends from <strong>{{ $sender['email'] }}</strong> @else <span style="color:#b91c1c">no sender on the client's own domain — set one on the Business step; nothing can send until then</span> @endif
+                            · only prospects the client marked <strong>Interested</strong> can be emailed, one at a time.</div>
                         @if ($summary['count'] > 0)
                             <strong>{{ $summary['count'] }}</strong> on the list · last found {{ $summary['last_found_at']?->diffForHumans() ?? '—' }}
                             @foreach ($summary['by_status'] as $st => $n) · {{ \App\Enums\LinkProspectStatus::from($st)->label() }} {{ $n }} @endforeach
@@ -62,7 +67,7 @@
                     </div>
                 @endif
                 <div style="display:flex;gap:.4rem;margin-top:.75rem;flex-wrap:wrap">
-                    @foreach (['open' => 'Open', 'new' => 'New', 'contacted' => 'Contacted', 'acquired' => 'Acquired', 'dismissed' => 'Dismissed', 'all' => 'All'] as $key => $label)
+                    @foreach (['open' => 'Open', 'interested' => 'Client interested', 'new' => 'New', 'contacted' => 'Contacted', 'replied' => 'Replied', 'acquired' => 'Won', 'declined' => 'Declined', 'dismissed' => 'Dismissed', 'all' => 'All'] as $key => $label)
                         <x-filament::button size="xs" wire:click="$set('status', '{{ $key }}')" :color="$this->status === $key ? 'primary' : 'gray'">{{ $label }}</x-filament::button>
                     @endforeach
                     <span style="width:1px;background:var(--gray-200);margin:0 .25rem"></span>
@@ -76,7 +81,7 @@
                 <table style="width:100%;border-collapse:collapse;font-size:.85rem">
                     <thead>
                         <tr style="text-align:left;color:var(--gray-500);font-size:.72rem;text-transform:uppercase">
-                            <th style="padding:.5rem">Domain</th><th>DR</th><th>Links to / near</th><th>Kind</th><th>Status</th><th>Notes</th><th></th>
+                            <th style="padding:.5rem">Domain</th><th>DR</th><th>Links to / near</th><th>Kind</th><th>Client</th><th>Status</th><th>Notes</th><th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -98,6 +103,15 @@
                                 </td>
                                 <td><x-filament::badge :color="$kindColor($p->kind)">{{ $p->kind->label() }}</x-filament::badge></td>
                                 <td>
+                                    <select wire:change="setDecision('{{ $p->id }}', $event.target.value)" style="font-size:.8rem;border:1px solid {{ $p->client_decision === \App\Enums\ClientDecision::Interested ? '#16a34a' : 'var(--gray-300)' }};border-radius:.375rem;padding:.2rem .4rem">
+                                        <option value="" @selected($p->client_decision === null)>Undecided</option>
+                                        @foreach (\App\Enums\ClientDecision::cases() as $d)
+                                            <option value="{{ $d->value }}" @selected($p->client_decision === $d)>{{ $d->label() }}</option>
+                                        @endforeach
+                                    </select>
+                                    @if ($p->emails_sent > 0)<div style="font-size:.68rem;color:var(--gray-500)">{{ $p->emails_sent }} sent · {{ $p->last_emailed_at?->diffForHumans() }}</div>@endif
+                                </td>
+                                <td>
                                     <select wire:change="setStatus('{{ $p->id }}', $event.target.value)" style="font-size:.8rem;border:1px solid var(--gray-300);border-radius:.375rem;padding:.2rem .4rem">
                                         @foreach ($statuses as $st)
                                             <option value="{{ $st->value }}" @selected($p->status === $st)>{{ $st->label() }}</option>
@@ -111,7 +125,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="7" style="padding:1rem;color:var(--gray-500)">Nothing in this view.</td></tr>
+                            <tr><td colspan="8" style="padding:1rem;color:var(--gray-500)">Nothing in this view.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -150,9 +164,62 @@
                             <label style="display:block"><span style="color:var(--gray-500)">Link to ask for</span><input readonly value="{{ $k['link_url'] ?? '' }}" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff"></label>
                             <label style="display:block"><span style="color:var(--gray-500)">One-line description (for a listing or a bio)</span><textarea readonly rows="2" onclick="this.select()" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff">{{ $k['short_description'] ?? '' }}</textarea></label>
                         </div>
-                        <p style="font-size:.7rem;color:var(--gray-400)">Drafted {{ $kit->drafted_at->diffForHumans() }}. Click a field to select it. Nothing is sent from here.</p>
+                        <p style="font-size:.7rem;color:var(--gray-400)">Drafted {{ $kit->drafted_at->diffForHumans() }}. Click a field to select it, or send it from the box below.</p>
                     @else
-                        <p style="font-size:.8rem;color:var(--gray-400)">A short email asking for one specific link, in your voice, with the page to link — ready to paste into your mail client.</p>
+                        <p style="font-size:.8rem;color:var(--gray-400)">A short email asking for one specific thing, in your voice, with the page to link — draft it, then review and send it below.</p>
+                    @endif
+
+                    @php($prospect = $ak['prospect'])
+                    <h3 style="font-size:.8rem;text-transform:uppercase;color:var(--gray-500);margin-top:.5rem">Contact</h3>
+                    <div style="display:flex;gap:.4rem;align-items:center">
+                        <input type="email" wire:model="contactEmailInput" placeholder="who to write to" style="flex:1;font-size:.8rem;border:1px solid var(--gray-300);border-radius:.375rem;padding:.3rem .5rem;background:#fff">
+                        <x-filament::button size="xs" color="gray" wire:click="setContact">Set</x-filament::button>
+                        <x-filament::button size="xs" color="gray" wire:click="findContact">Find contact</x-filament::button>
+                    </div>
+                    <div style="font-size:.72rem;color:var(--gray-500)">
+                        @if ($prospect->contact_email !== null)
+                            Writing to <strong>{{ $prospect->contact_email }}</strong> ({{ $prospect->contact_source === 'manual' ? 'entered by hand' : ($prospect->contact_source === 'mailto' ? 'mailto link on the page' : 'found on the page') }}).
+                        @elseif ($prospect->contact_checked_at !== null)
+                            Checked {{ $prospect->contact_checked_at->diffForHumans() }} — no address on the page or its contact page. Enter one by hand.
+                        @else
+                            No contact yet — Find contact reads the page and its contact page.
+                        @endif
+                        @if (is_array($prospect->contact_candidates) && count($prospect->contact_candidates) > 1)
+                            <div>Also seen:
+                                @foreach ($prospect->contact_candidates as $c)
+                                    @if ($c !== $prospect->contact_email)<button type="button" wire:click="pickContact('{{ $c }}')" style="border:0;background:none;color:#2563eb;text-decoration:underline;cursor:pointer;font-size:.72rem">{{ $c }}</button>@endif
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+
+                    @php($guard = $this->sendGuard)
+                    @php($sent = $this->sentEmails)
+                    <h3 style="font-size:.8rem;text-transform:uppercase;color:var(--gray-500);margin-top:.5rem">{{ $this->sendKind === \App\Models\OutreachEmail::FOLLOW_UP ? 'The one follow-up' : 'Send the pitch' }}</h3>
+                    @if ($sent !== [])
+                        <div style="font-size:.72rem;color:var(--gray-500);display:flex;flex-direction:column;gap:.15rem">
+                            @foreach ($sent as $e)
+                                <div>{{ $e->kind === \App\Models\OutreachEmail::FOLLOW_UP ? 'Follow-up' : 'Pitch' }} · {{ $e->approved_at->toFormattedDateString() }} · to {{ $e->to_email }} ·
+                                    @if ($e->status === \App\Models\OutreachEmail::SENT)<span style="color:#15803d">sent</span>
+                                    @elseif ($e->status === \App\Models\OutreachEmail::FAILED)<span style="color:#b91c1c">failed: {{ $e->error }}</span>
+                                    @else queued @endif
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                    @if ($guard !== null)
+                        <div style="display:flex;flex-direction:column;gap:.5rem;font-size:.8rem">
+                            <label style="display:block"><span style="color:var(--gray-500)">Subject</span><input wire:model="sendSubject" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff"></label>
+                            <label style="display:block"><span style="color:var(--gray-500)">Email (sent exactly as shown, then the signature with your address and a way out)</span><textarea wire:model="sendBody" rows="10" style="width:100%;border:1px solid var(--gray-200);border-radius:.375rem;padding:.3rem .5rem;background:#fff"></textarea></label>
+                        </div>
+                        <ul style="font-size:.72rem;list-style:none;padding:0;display:flex;flex-direction:column;gap:.15rem">
+                            @foreach ($guard->checks as $c)
+                                <li style="color:{{ $c['ok'] ? '#15803d' : '#b91c1c' }}">{{ $c['ok'] ? '✓' : '✗' }} {{ $c['ok'] ? match ($c['key']) { 'enabled' => 'Outreach is on', 'sender' => 'Sender on the client\'s own domain', 'decision' => 'Client marked Interested', 'contact' => 'Contact known', 'open' => 'Prospect is open', 'cap' => 'Cap has room ('.$guard->usedThisMonth.' of '.$guard->cap.' used)', 'pitched' => 'Pitch was sent', 'once' => 'Not sent before', 'waited' => 'Waited long enough', default => $c['key'] } : $c['text'] }}</li>
+                            @endforeach
+                        </ul>
+                        <div>
+                            <x-filament::button size="sm" :color="$guard->ok() ? 'primary' : 'gray'" :disabled="! $guard->ok()" wire:click="approveAndSend" wire:confirm="Send this email now, from {{ $this->sender['email'] ?? 'the client\'s address' }} to {{ $prospect->contact_email ?? '—' }}? It counts one against this month's cap.">Approve &amp; send</x-filament::button>
+                        </div>
                     @endif
                 </div>
             </aside>

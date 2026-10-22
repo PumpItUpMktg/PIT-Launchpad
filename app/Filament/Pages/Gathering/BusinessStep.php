@@ -7,6 +7,8 @@ use App\Gathering\Provenance;
 use App\Integrations\Places\PlacesProvider;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Interview\SiloSeed;
+use App\Links\Outreach\OutreachGuard;
+use App\Links\Outreach\Sender;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\SiloBlueprint;
@@ -119,7 +121,7 @@ class BusinessStep extends GatheringPage
             : array_map(fn (LinkProspectKind $k): string => $k->value, LinkProspectKind::lanes());
         $this->sponsorshipBudgetMin = $site->sponsorship_budget_min !== null ? (string) $site->sponsorship_budget_min : '';
         $this->sponsorshipBudgetMax = $site->sponsorship_budget_max !== null ? (string) $site->sponsorship_budget_max : '';
-        $this->outreachMonthlyCap = (string) ($site->outreach_monthly_cap ?? 20);
+        $this->outreachMonthlyCap = (string) OutreachGuard::capFor($site);
         $this->outreachFromEmail = (string) ($site->outreach_from_email ?? '');
         $this->outreachFromName = (string) ($site->outreach_from_name ?? '');
     }
@@ -154,8 +156,8 @@ class BusinessStep extends GatheringPage
             'sponsorship_budget_min' => trim($this->sponsorshipBudgetMin) !== '' ? max(0, (int) $this->sponsorshipBudgetMin) : null,
             'sponsorship_budget_max' => trim($this->sponsorshipBudgetMax) !== '' ? max(0, (int) $this->sponsorshipBudgetMax) : null,
             // The hard ceiling on outreach emails per month — never above 20, never below 1.
-            'outreach_monthly_cap' => max(1, min(20, (int) ($this->outreachMonthlyCap !== '' ? $this->outreachMonthlyCap : 20))),
-            'outreach_from_email' => $this->fromEmail($site),
+            'outreach_monthly_cap' => max(1, min(self::hardCap(), (int) ($this->outreachMonthlyCap !== '' ? $this->outreachMonthlyCap : self::hardCap()))),
+            'outreach_from_email' => Sender::onOwnDomain($site, $this->outreachFromEmail) ? strtolower(trim($this->outreachFromEmail)) : null,
             'outreach_from_name' => trim($this->outreachFromName) !== '' ? trim($this->outreachFromName) : null,
         ])->save();
 
@@ -381,19 +383,9 @@ class BusinessStep extends GatheringPage
         return count($chosen) === count($known) || $chosen === [] ? null : $chosen;
     }
 
-    /**
-     * The outreach sender: must be an address on the tenant's OWN domain — mail never goes out from anywhere
-     * else. Anything else is dropped (and the field shows empty on the next load, which is the signal).
-     */
-    private function fromEmail(Site $site): ?string
+    /** The platform ceiling on a tenant's monthly outreach cap (config). The sender rule lives in Sender. */
+    public static function hardCap(): int
     {
-        $email = strtolower(trim($this->outreachFromEmail));
-        if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-            return null;
-        }
-        $domain = strtolower((string) preg_replace('/^www\./', '', (string) parse_url((string) $site->domain_url, PHP_URL_HOST)));
-        $at = (string) substr($email, (int) strrpos($email, '@') + 1);
-
-        return $domain !== '' && ($at === $domain || str_ends_with($at, '.'.$domain)) ? $email : null;
+        return max(1, (int) config('launchpad.links.outreach.hard_cap', 20));
     }
 }

@@ -55,7 +55,7 @@
             <div class="g-grid">
                 <div class="g-field"><label>Sponsorship budget, $ per year <span style="opacity:.6">(from)</span></label><input class="g-input" type="number" min="0" wire:model="sponsorshipBudgetMin" placeholder="500"></div>
                 <div class="g-field"><label>&nbsp;<span style="opacity:.6">(to)</span></label><input class="g-input" type="number" min="0" wire:model="sponsorshipBudgetMax" placeholder="3000"></div>
-                <div class="g-field"><label>Outreach emails per month <span style="opacity:.6">(max 20)</span></label><input class="g-input" type="number" min="1" max="20" wire:model="outreachMonthlyCap"><div class="g-hint" style="margin-top:4px">A hard ceiling. Every email is reviewed and sent one at a time — never a blast.</div></div>
+                <div class="g-field"><label>Outreach emails per month <span style="opacity:.6">(max {{ \App\Filament\Pages\Gathering\BusinessStep::hardCap() }})</span></label><input class="g-input" type="number" min="1" max="{{ \App\Filament\Pages\Gathering\BusinessStep::hardCap() }}" wire:model="outreachMonthlyCap"><div class="g-hint" style="margin-top:4px">A hard ceiling. Every email is reviewed and sent one at a time — never a blast.</div></div>
             </div>
             <div class="g-grid">
                 <div class="g-field"><label>Outreach sender email <span style="opacity:.6">(must be on {{ $this->domainUrl !== '' ? parse_url($this->domainUrl, PHP_URL_HOST) : 'the site domain' }})</span></label><input class="g-input" type="email" wire:model="outreachFromEmail" placeholder="outreach@yourdomain.com"><div class="g-hint" style="margin-top:4px">Mail goes out from the client's own domain only. An address on any other domain is not saved.</div></div>
