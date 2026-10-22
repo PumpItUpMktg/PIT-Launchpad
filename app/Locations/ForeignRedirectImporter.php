@@ -38,6 +38,7 @@ class ForeignRedirectImporter
      *   unparsed: list<array{from: string, to: string, source: string, why: string}>,
      *   tables: list<array<string, mixed>>,
      *   options: list<array<string, mixed>>,
+     *   skipped_tables: list<array<string, mixed>>,
      *   total: int
      * }
      */
@@ -53,6 +54,19 @@ class ForeignRedirectImporter
             ->where('site_id', $site->id)->where('status', 'active')->get()
             ->keyBy(fn (Redirect $r): string => $this->path((string) $r->from_url));
 
+        // Chains inside the plugin's own set (/dublin-pa → /fallston-md/dublin-pa → /doylestown-pa/dublin-pa)
+        // collapse to the final destination, so an imported rule never lands on another redirect.
+        // A rule whose source is a live page of ours is bogus (it would be skipped below), so it is never a
+        // hop either — a chain ending on a live page ends there.
+        $hops = [];
+        foreach ($foreign['rules'] as $rule) {
+            $f = $this->path(trim((string) ($rule['from'] ?? '')), $host);
+            $t = $this->target(trim((string) ($rule['to'] ?? '')), $host);
+            if (is_string($f) && $f !== '' && $t !== '' && $t !== $f && ! isset($hops[$f]) && ! isset($liveSlugs[$f])) {
+                $hops[$f] = $t;
+            }
+        }
+
         $new = $covered = $conflict = $live = $unparsed = [];
         $seen = [];
         foreach ($foreign['rules'] as $rule) {
@@ -63,7 +77,9 @@ class ForeignRedirectImporter
             $code = in_array($code, [301, 302, 307, 308, 410], true) ? $code : 301;
             $hits = isset($rule['hits']) && is_numeric($rule['hits']) ? (int) $rule['hits'] : null;
 
-            if ($rawFrom === '' || preg_match('/[*^$()\[\]|\\\\]/', $rawFrom) === 1 || ! empty($rule['regex'])) {
+            // A pattern rule is one whose source really carries pattern characters; a plugin's regex flag
+            // alone is not trusted (every plain rule on one site came back flagged).
+            if ($rawFrom === '' || preg_match('/[*^$()\[\]|\\\\]/', $rawFrom) === 1) {
                 $unparsed[] = ['from' => $rawFrom, 'to' => $rawTo, 'source' => $source, 'why' => $rawFrom === '' ? 'no source path' : 'pattern rule'];
 
                 continue;
@@ -75,6 +91,9 @@ class ForeignRedirectImporter
                 continue;
             }
             $to = $code === 410 ? '' : $this->target($rawTo, $host);
+            if ($to !== '') {
+                $to = $this->collapse($from, $to, $hops);
+            }
             if ($code !== 410 && ($to === '' || $to === $from)) {
                 $unparsed[] = ['from' => $from, 'to' => $rawTo, 'source' => $source, 'why' => $to === '' ? 'no destination' : 'redirects to itself'];
 
@@ -106,8 +125,29 @@ class ForeignRedirectImporter
 
         return [
             'new' => $new, 'covered' => $covered, 'conflict' => $conflict, 'live' => $live, 'unparsed' => $unparsed,
-            'tables' => $foreign['tables'], 'options' => $foreign['options'], 'total' => count($foreign['rules']),
+            'tables' => $foreign['tables'], 'options' => $foreign['options'], 'skipped_tables' => $foreign['skipped_tables'],
+            'total' => count($foreign['rules']),
         ];
+    }
+
+    /**
+     * Follow a destination through the plugin's own rules to the end of the chain (bounded, cycle-safe).
+     *
+     * @param  array<string, string>  $hops
+     */
+    private function collapse(string $from, string $to, array $hops): string
+    {
+        $seen = [$from => true, $to => true];
+        for ($i = 0; $i < 5 && isset($hops[$to]); $i++) {
+            $next = $hops[$to];
+            if (isset($seen[$next])) {
+                break; // a loop — stop where we are
+            }
+            $seen[$next] = true;
+            $to = $next;
+        }
+
+        return $to;
     }
 
     /**

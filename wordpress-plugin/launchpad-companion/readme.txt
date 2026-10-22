@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.55
+Stable tag: 0.9.56
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,11 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.56 =
+* /redirects/foreign: a hit / 404 log table (301 Redirects Pro's wf301_redirect_logs) is never read as
+  rules (reported under skipped_tables); the regex flag is trusted only for a real truthy value — "no",
+  "0", "off" and "" are plain rules (every one of 262 real rules was being flagged as a pattern).
 
 = 0.9.55 =
 * GET /redirects/foreign (authed, read-only): the redirect rules OTHER plugins on the site hold, read

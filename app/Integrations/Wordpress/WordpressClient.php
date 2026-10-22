@@ -439,7 +439,7 @@ class WordpressClient
      * The redirect rules OTHER plugins on the site hold (301 Redirects Pro, Redirection, …), read straight
      * from their database storage by the companion — so a broken plugin UI is not needed to migrate them.
      *
-     * @return array{rules: list<array<string, mixed>>, tables: list<array<string, mixed>>, options: list<array<string, mixed>>}
+     * @return array{rules: list<array<string, mixed>>, tables: list<array<string, mixed>>, options: list<array<string, mixed>>, skipped_tables: list<array<string, mixed>>}
      */
     public function foreignRedirects(): array
     {
@@ -454,6 +454,7 @@ class WordpressClient
             'rules' => array_values(array_filter(is_array($json['rules'] ?? null) ? $json['rules'] : [], 'is_array')),
             'tables' => array_values(array_filter(is_array($json['tables'] ?? null) ? $json['tables'] : [], 'is_array')),
             'options' => array_values(array_filter(is_array($json['options'] ?? null) ? $json['options'] : [], 'is_array')),
+            'skipped_tables' => array_values(array_filter(is_array($json['skipped_tables'] ?? null) ? $json['skipped_tables'] : [], 'is_array')),
         ];
     }
 
