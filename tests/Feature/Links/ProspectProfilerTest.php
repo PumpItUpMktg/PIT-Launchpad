@@ -189,10 +189,13 @@ it('the Link prospects page shows the organisation and its offer on the row and 
     profileProspect($site, ['domain' => 'unread.org', 'url' => 'https://unread.org/sponsors']);
 
     Livewire::test(LinkProspectsPage::class)
-        ->assertSee('Montclair Little League')
-        ->assertSee('volunteer-run youth baseball league')
+        ->assertSee('Montclair Little League')                                                 // the card's top rows
         ->assertSee('Gold $2,500 · Silver $1,000 · Team sponsor $500 · website link offered')
         ->assertSee('https://www.montclairlittleleague.org/images/share.jpg')
+        ->call('openOffice', 'corporate')                                                      // no office behind the fixture → the corporate area
+        ->assertSee('volunteer-run youth baseball league')
+        ->assertSee('12 Park St, Montclair, NJ 07042')
+        ->assertSee('Dana Ruiz')
         ->assertSee('Read profiles')
         ->call('readProfiles')
         ->call('openKit', $league->id)

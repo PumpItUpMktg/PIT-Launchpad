@@ -78,80 +78,119 @@
                 </div>
             </x-filament::section>
 
-            <x-filament::section>
-                <table style="width:100%;border-collapse:collapse;font-size:.85rem">
-                    <thead>
-                        <tr style="text-align:left;color:var(--gray-500);font-size:.72rem;text-transform:uppercase">
-                            <th style="padding:.5rem">Domain</th><th>DR</th><th>Links to / near</th><th>Kind</th><th>Client</th><th>Status</th><th>Notes</th><th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($this->groups as $group)
-                            <tr><td colspan="8" style="padding:.75rem .5rem .35rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--gray-500);background:var(--gray-50)">{{ $group['label'] }} · {{ count($group['rows']) }}</td></tr>
-                        @foreach ($group['rows'] as $p)
-                            <tr style="border-top:1px solid var(--gray-100)">
-                                <td style="padding:.5rem;font-weight:500">
-                                    <div style="display:flex;gap:.6rem;align-items:flex-start">
-                                        @if ($p->thumbnail_url !== null)
-                                            <img src="{{ $p->thumbnail_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" style="width:44px;height:44px;object-fit:cover;border-radius:.375rem;border:1px solid var(--gray-200);flex:none;background:#fff" onerror="this.style.display='none'">
-                                        @endif
-                                        <div style="min-width:0">
-                                            {{ $p->profile['name'] ?? $p->domain }}
-                                            @if (($p->profile['name'] ?? null) !== null)<span style="font-weight:400;color:var(--gray-500);font-size:.75rem"> · {{ $p->domain }}</span>@endif
-                                            @if ($p->url !== null)
-                                                <div style="font-size:.72rem;font-weight:400;color:var(--gray-500);max-width:28rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ $p->url }}">{{ preg_replace('#^https?://(www\.)?#', '', $p->url) }}</div>
-                                            @endif
-                                            @if (($p->profile['overview'] ?? null) !== null)
-                                                <div style="font-size:.74rem;font-weight:400;color:var(--gray-600);max-width:32rem;margin-top:.15rem">{{ $p->profile['overview'] }}</div>
-                                            @endif
-                                            @php($offerLine = \App\Links\Profile\ProspectProfiler::offerLine($p->profile))
-                                            @if ($offerLine !== null)
-                                                <div style="font-size:.72rem;font-weight:500;color:{{ ($p->profile['offer']['website_link'] ?? '') === 'offered' ? '#15803d' : 'var(--gray-600)' }};margin-top:.15rem">{{ $offerLine }}</div>
-                                            @elseif ($p->profile_read_at !== null && $p->kind->isLane())
-                                                <div style="font-size:.72rem;font-weight:400;color:var(--gray-400);margin-top:.15rem">{{ $p->profile === null ? $p->profile_error : 'No offer stated on the page.' }}</div>
-                                            @endif
+            @if ($this->office === '')
+                {{-- One card per service area --}}
+                @php($cards = $this->officeCards)
+                @if ($cards === [])
+                    <x-filament::section><p style="font-size:.85rem;color:var(--gray-500)">Nothing in this view.</p></x-filament::section>
+                @else
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem">
+                        @foreach ($cards as $card)
+                            <div style="border:1px solid var(--gray-200);border-radius:.75rem;background:#fff;padding:1rem;display:flex;flex-direction:column;gap:.6rem">
+                                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+                                    <div style="min-width:0">
+                                        <div style="font-weight:600;font-size:.95rem">{{ $card['key'] === \App\Links\OfficeAttribution::CORPORATE ? 'Corporate · state-wide' : ($card['key'] === \App\Links\OfficeAttribution::COMPETITORS ? 'Competitor links' : $card['label'].' office') }}</div>
+                                        <div style="font-size:.72rem;color:var(--gray-500)">
+                                            @if ($card['key'] === \App\Links\OfficeAttribution::CORPORATE) {{ $card['label'] }}
+                                            @elseif ($card['key'] === \App\Links\OfficeAttribution::COMPETITORS) sites linking to competitors near you — no office
+                                            @else local sponsorships, memberships, dealer locators and job boards near this office @endif
                                         </div>
                                     </div>
-                                </td>
-                                <td style="color:var(--gray-500)">{{ $p->rank ?? '—' }}</td>
-                                <td style="font-size:.78rem">
-                                    @if ($p->kind->isLane())
-                                        <span style="color:var(--gray-500)">{{ $p->offices !== null && $p->offices !== [] ? implode(', ', $p->offices) : 'state-wide' }}</span>
-                                        @if ($p->locality > 0)<span title="how local the page reads: town +2, state +1" style="margin-left:.25rem;font-size:.68rem;color:#15803d">{{ str_repeat('●', $p->locality) }}</span>@endif
-                                    @else
-                                        <strong>{{ $p->competitor_count }}</strong> <span style="color:var(--gray-500)">{{ implode(', ', $p->competitors) }}</span>
-                                    @endif
-                                </td>
-                                <td><x-filament::badge :color="$kindColor($p->kind)">{{ $p->kind->label() }}</x-filament::badge></td>
-                                <td>
-                                    <select wire:change="setDecision('{{ $p->id }}', $event.target.value)" style="font-size:.8rem;border:1px solid {{ $p->client_decision === \App\Enums\ClientDecision::Interested ? '#16a34a' : 'var(--gray-300)' }};border-radius:.375rem;padding:.2rem .4rem">
-                                        <option value="" @selected($p->client_decision === null)>Undecided</option>
-                                        @foreach (\App\Enums\ClientDecision::cases() as $d)
-                                            <option value="{{ $d->value }}" @selected($p->client_decision === $d)>{{ $d->label() }}</option>
-                                        @endforeach
-                                    </select>
-                                    @if ($p->emails_sent > 0)<div style="font-size:.68rem;color:var(--gray-500)">{{ $p->emails_sent }} sent · {{ $p->last_emailed_at?->diffForHumans() }}</div>@endif
-                                </td>
-                                <td>
-                                    <select wire:change="setStatus('{{ $p->id }}', $event.target.value)" style="font-size:.8rem;border:1px solid var(--gray-300);border-radius:.375rem;padding:.2rem .4rem">
-                                        @foreach ($statuses as $st)
-                                            <option value="{{ $st->value }}" @selected($p->status === $st)>{{ $st->label() }}</option>
-                                        @endforeach
-                                    </select>
-                                </td>
-                                <td><input type="text" value="{{ $p->notes }}" placeholder="who, when, what they said" wire:change="setNotes('{{ $p->id }}', $event.target.value)" style="width:100%;font-size:.8rem;border:1px solid var(--gray-300);border-radius:.375rem;padding:.2rem .4rem"></td>
-                                <td style="text-align:right;white-space:nowrap">
-                                    <a href="{{ $p->url ?? 'https://'.$p->domain }}" target="_blank" rel="noopener" style="font-size:.75rem;color:#2563eb;text-decoration:underline;margin-right:.5rem">Open ↗</a>
-                                    <x-filament::button size="xs" color="gray" wire:click="openKit('{{ $p->id }}')">Pitch</x-filament::button>
-                                </td>
-                            </tr>
+                                    <x-filament::button size="xs" wire:click="openOffice('{{ $card['key'] }}')">Open</x-filament::button>
+                                </div>
+                                <div style="display:flex;flex-wrap:wrap;gap:.35rem;font-size:.72rem">
+                                    <x-filament::badge color="gray">{{ $card['count'] }} total</x-filament::badge>
+                                    @foreach ($card['by_kind'] as $label => $n)<x-filament::badge color="primary">{{ $n }} {{ strtolower($label) }}</x-filament::badge>@endforeach
+                                    @if ($card['interested'] > 0)<x-filament::badge color="success">{{ $card['interested'] }} client interested</x-filament::badge>@endif
+                                </div>
+                                <div style="display:flex;flex-direction:column;gap:.5rem;border-top:1px solid var(--gray-100);padding-top:.6rem">
+                                    @foreach ($card['top'] as $p)
+                                        <div style="display:flex;gap:.5rem;align-items:flex-start;font-size:.78rem">
+                                            @if ($p->thumbnail_url !== null)
+                                                <img src="{{ $p->thumbnail_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" style="width:36px;height:36px;object-fit:cover;border-radius:.375rem;border:1px solid var(--gray-200);flex:none;background:#fff" onerror="this.style.display='none'">
+                                            @else
+                                                <div style="width:36px;height:36px;border-radius:.375rem;background:var(--gray-100);flex:none"></div>
+                                            @endif
+                                            <div style="min-width:0">
+                                                <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ $p->profile['name'] ?? $p->domain }} <span style="font-weight:400;color:var(--gray-500)">· {{ $p->kind->label() }}</span></div>
+                                                @php($offerLine = \App\Links\Profile\ProspectProfiler::offerLine($p->profile))
+                                                <div style="color:var(--gray-500);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ $offerLine ?? ($p->profile['overview'] ?? ($p->kind->isLane() ? ($p->offices !== null && $p->offices !== [] ? implode(', ', $p->offices) : 'state-wide') : 'links to '.implode(', ', $p->competitors))) }}</div>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
                         @endforeach
-                        @empty
-                            <tr><td colspan="8" style="padding:1rem;color:var(--gray-500)">Nothing in this view.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </x-filament::section>
+                    </div>
+                @endif
+            @else
+                {{-- One service area: every opportunity as a card --}}
+                @php($g = $this->officeGroup)
+                <x-filament::section>
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem">
+                        <div>
+                            <button type="button" wire:click="closeOffice" style="border:0;background:none;color:#2563eb;cursor:pointer;font-size:.8rem;padding:0">← All service areas</button>
+                            <h2 style="font-size:1.05rem;font-weight:600;margin-top:.15rem">{{ $g['key'] === \App\Links\OfficeAttribution::CORPORATE ? 'Corporate · state-wide' : ($g['key'] === \App\Links\OfficeAttribution::COMPETITORS ? 'Competitor links' : $g['label'].' office') }} <span style="font-weight:400;color:var(--gray-500);font-size:.85rem">· {{ count($g['rows']) }}</span></h2>
+                            @if ($g['key'] === \App\Links\OfficeAttribution::CORPORATE)<div style="font-size:.75rem;color:var(--gray-500)">{{ $g['label'] }}</div>@endif
+                        </div>
+                    </div>
+                    @forelse ($g['rows'] as $p)
+                        @php($pf = $p->profile)
+                        @php($offerLine = \App\Links\Profile\ProspectProfiler::offerLine($pf))
+                        <div style="display:flex;gap:1rem;align-items:flex-start;padding:.9rem 0;border-top:1px solid var(--gray-100)">
+                            @if ($p->thumbnail_url !== null)
+                                <img src="{{ $p->thumbnail_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" style="width:112px;height:84px;object-fit:cover;border-radius:.5rem;border:1px solid var(--gray-200);flex:none;background:#fff" onerror="this.style.display='none'">
+                            @else
+                                <div style="width:112px;height:84px;border-radius:.5rem;background:var(--gray-100);flex:none;display:flex;align-items:center;justify-content:center;font-size:.7rem;color:var(--gray-400)">no image</div>
+                            @endif
+                            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:.3rem;font-size:.8rem">
+                                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.5rem">
+                                    <span style="font-weight:600;font-size:.95rem">{{ $pf['name'] ?? $p->domain }}</span>
+                                    @if (($pf['name'] ?? null) !== null)<span style="color:var(--gray-500)">{{ $p->domain }}</span>@endif
+                                    <x-filament::badge :color="$kindColor($p->kind)">{{ $p->kind->label() }}</x-filament::badge>
+                                    @if ($p->rank !== null)<span style="color:var(--gray-500);font-size:.72rem">DR {{ $p->rank }}</span>@endif
+                                    @if ($p->kind->isLane() && $p->locality > 0)<span title="how local the page reads" style="font-size:.68rem;color:#15803d">{{ str_repeat('●', $p->locality) }}</span>@endif
+                                </div>
+                                @if (($pf['overview'] ?? null) !== null)<div style="color:var(--gray-700)">{{ $pf['overview'] }}</div>@endif
+                                <div style="color:var(--gray-500)">
+                                    @if ($p->kind->isLane()) Near {{ $p->offices !== null && $p->offices !== [] ? implode(', ', $p->offices) : 'state-wide' }}
+                                    @else Links to {{ implode(', ', $p->competitors) }} @endif
+                                    @if (($pf['address'] ?? $pf['town'] ?? null) !== null) · {{ $pf['address'] ?? $pf['town'] }}@endif
+                                    @if (($pf['phone'] ?? null) !== null) · {{ $pf['phone'] }}@endif
+                                </div>
+                                @if (($pf['contacts'] ?? []) !== [] || $p->contact_email !== null)
+                                    <div style="color:var(--gray-600)">
+                                        @foreach ($pf['contacts'] ?? [] as $c){{ $c['name'] }}@if (($c['role'] ?? null) !== null) <em style="color:var(--gray-500)">({{ $c['role'] }})</em>@endif@if (! $loop->last), @endif @endforeach
+                                        @if ($p->contact_email !== null)<span style="color:var(--gray-500)">{{ ($pf['contacts'] ?? []) !== [] ? ' · ' : '' }}writing to {{ $p->contact_email }}</span>@endif
+                                    </div>
+                                @endif
+                                @if ($offerLine !== null)
+                                    <div style="font-weight:500;color:{{ ($pf['offer']['website_link'] ?? '') === 'offered' ? '#15803d' : 'var(--gray-700)' }}">{{ $pf['offer']['summary'] ?? $offerLine }}@if (($pf['offer']['summary'] ?? null) !== null) <span style="font-weight:400;color:var(--gray-500)">· {{ $offerLine }}</span>@endif</div>
+                                @elseif ($p->profile_read_at !== null && $p->kind->isLane())
+                                    <div style="color:var(--gray-400)">{{ $pf === null ? $p->profile_error : 'No offer stated on the page.' }}</div>
+                                @elseif ($p->kind->isLane())
+                                    <div style="color:var(--gray-400)">Profile not read yet — open Pitch → Read profile, or Read profiles above.</div>
+                                @endif
+                                <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:.2rem">
+                                    <select wire:change="setDecision('{{ $p->id }}', $event.target.value)" style="font-size:.78rem;border:1px solid {{ $p->client_decision === \App\Enums\ClientDecision::Interested ? '#16a34a' : 'var(--gray-300)' }};border-radius:.375rem;padding:.2rem .4rem">
+                                        <option value="" @selected($p->client_decision === null)>Client: undecided</option>
+                                        @foreach (\App\Enums\ClientDecision::cases() as $d)<option value="{{ $d->value }}" @selected($p->client_decision === $d)>Client: {{ $d->label() }}</option>@endforeach
+                                    </select>
+                                    <select wire:change="setStatus('{{ $p->id }}', $event.target.value)" style="font-size:.78rem;border:1px solid var(--gray-300);border-radius:.375rem;padding:.2rem .4rem">
+                                        @foreach ($statuses as $st)<option value="{{ $st->value }}" @selected($p->status === $st)>{{ $st->label() }}</option>@endforeach
+                                    </select>
+                                    <input type="text" value="{{ $p->notes }}" placeholder="who, when, what they said" wire:change="setNotes('{{ $p->id }}', $event.target.value)" style="flex:1;min-width:12rem;font-size:.78rem;border:1px solid var(--gray-300);border-radius:.375rem;padding:.2rem .4rem">
+                                    @if ($p->emails_sent > 0)<span style="font-size:.7rem;color:var(--gray-500)">{{ $p->emails_sent }} sent · {{ $p->last_emailed_at?->diffForHumans() }}</span>@endif
+                                    <a href="{{ $p->url ?? 'https://'.$p->domain }}" target="_blank" rel="noopener" style="font-size:.78rem;color:#2563eb;text-decoration:underline">Open ↗</a>
+                                    <x-filament::button size="xs" color="gray" wire:click="openKit('{{ $p->id }}')">Pitch</x-filament::button>
+                                </div>
+                            </div>
+                        </div>
+                    @empty
+                        <p style="font-size:.85rem;color:var(--gray-500)">Nothing in this view for this service area.</p>
+                    @endforelse
+                </x-filament::section>
+            @endif
         </div>
 
         @php($ak = $this->activeKit)
