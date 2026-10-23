@@ -11,6 +11,7 @@ use App\Jobs\EnhanceJob;
 use App\Jobs\ResolveJobGeography;
 use App\Models\Job;
 use App\Models\Site;
+use Illuminate\Support\Facades\Bus;
 
 /**
  * Operator-side counterpart to {@see CaptureIntake}: turns a {@see ManualJobData} entry into a persisted
@@ -56,17 +57,23 @@ final class ManualJobIntake
             'source_description' => $raw, // seed the editable AI source from the raw input
             'performed_at' => $data->performedAt,
             'primary_photo_index' => 0,
+            'import_key' => $data->importKey,
         ]);
         $job->save();
 
         $this->storePhotos($site, $job, $data->photos);
         $this->snapshotJobTypes($job, $data->jobTypes);
 
-        // Coordinates always exist here (geocoded), so geography resolves exactly like a GPS capture.
-        ResolveJobGeography::dispatch($job->id);
-
         if ($raw !== null) {
+            // Coordinates always exist here (geocoded), so geography resolves exactly like a GPS capture.
+            ResolveJobGeography::dispatch($job->id);
             EnhanceJob::dispatch($job->id);
+        } elseif ($data->jobTypes !== []) {
+            // No notes but a service: the write-up is composed from facts — the town must be resolved first,
+            // so the enhancement runs after geography, in order.
+            Bus::chain([new ResolveJobGeography($job->id), new EnhanceJob($job->id)])->dispatch();
+        } else {
+            ResolveJobGeography::dispatch($job->id);
         }
 
         return $job;

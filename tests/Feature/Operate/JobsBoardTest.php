@@ -9,6 +9,7 @@ use App\Jobs\EnhanceJob;
 use App\Jobs\PublishJob;
 use App\Jobs\UnpublishJob;
 use App\Models\Job;
+use App\Models\JobType;
 use App\Models\Service;
 use App\Models\Site;
 use App\Models\User;
@@ -170,7 +171,7 @@ it('offers the site services as pickable job types (synced from the catalog)', f
 
     $html = Livewire::test(JobsBoard::class)->call('toggleAddJob')->assertOk()->html();
 
-    expect($html)->toContain('Sump Pump Replacement')->toContain('French Drain')->toContain('Import CSV');
+    expect($html)->toContain('Sump Pump Replacement')->toContain('French Drain')->toContain('Preview import');
 });
 
 it('adds a previous job from the board with services picked from the catalog', function () {
@@ -216,6 +217,33 @@ it('imports a CSV from the board and matches service_types to the catalog', func
     $jane = $jobs->firstWhere('client_name_full', 'Jane Homeowner');
     expect($jane->jobTypes()->orderBy('label')->pluck('label')->all())->toBe(['French Drain', 'Sump Pump Replacement'])
         ->and($jane->jobTypes()->where('slug', 'sump-pump-replacement')->value('job_type_id'))->not->toBeNull();
+});
+
+it('previews a CSV on the board — tags matched to the catalog, a stray one pre-mapped to its closest row — then imports with the mapping', function () {
+    Bus::fake();
+    bindBoardGeocoder();
+    $site = Site::factory()->create();
+    $svc = Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Replacement']);
+    app(ActiveTenant::class)->set($site->id);
+    $csv = 'client_name,address,performed_at,service_types
+Jane Homeowner,"12 Main St",2025-06-01,Sump pump replace
+';
+
+    $page = Livewire::test(JobsBoard::class)
+        ->call('toggleAddJob')
+        ->set('csvFile', UploadedFile::fake()->createWithContent('jobs.csv', $csv))
+        ->call('previewCsv')
+        ->assertSee('1 row(s)')
+        ->assertSee('Sump pump replace')
+        ->assertSee('closest: Sump Pump Replacement')
+        ->assertSee('Import 1 job(s)');
+    $vocabId = JobType::withoutGlobalScopes()->where('site_id', $site->id)->where('service_id', $svc->id)->value('id');
+    expect($page->get('csvMapping')['Sump pump replace'])->toBe($vocabId);   // pre-filled with the closest row
+
+    $page->call('importCsv')->assertSet('csvPreview', null);
+    $jane = Job::withoutGlobalScopes()->where('site_id', $site->id)->sole();
+    expect($jane->jobTypes()->pluck('label')->all())->toBe(['Sump Pump Replacement'])
+        ->and($jane->jobTypes()->value('job_type_id'))->toBe($vocabId);
 });
 
 it('edits a queued job in place: client, date, services, write-up', function () {

@@ -28,10 +28,10 @@ class JobReviewActions
     /** The operator-editable fields on the review screen (raw_description is intentionally NOT here). */
     private const EDITABLE = ['source_description', 'enhanced_description', 'post_title', 'meta_description'];
 
-    /** Whether this job may be approved right now — reviewed AND carrying a write-up. */
+    /** Whether this job may be approved right now — reviewed, carrying a write-up, and not flagged as a near-copy. */
     public function canApprove(Job $job): bool
     {
-        return $job->status === JobStatus::Review && $job->hasDraft();
+        return $job->status === JobStatus::Review && $job->hasDraft() && $job->similar_to_job_id === null;
     }
 
     /**
@@ -95,6 +95,9 @@ class JobReviewActions
             if (array_key_exists($field, $edits)) {
                 $fill[$field] = $edits[$field] === null ? null : (string) $edits[$field];
             }
+        }
+        if (array_key_exists('enhanced_description', $edits) && trim((string) $edits['enhanced_description']) !== trim((string) $job->enhanced_description)) {
+            $fill['similar_to_job_id'] = null;   // an operator rewrite is their own words — the near-copy flag no longer applies
         }
 
         if (array_key_exists('primary_photo_index', $edits)) {

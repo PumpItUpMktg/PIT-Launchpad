@@ -159,13 +159,45 @@
                             <button type="button" class="jb-btn" wire:click="downloadTemplate">↓ Template</button>
                         </div>
                         <div class="jb-row">
-                            <input type="file" class="jb-field" style="max-width:340px;" wire:model="csvFile" accept=".csv,text/csv">
-                            <button type="button" class="jb-btn primary" wire:click="importCsv" wire:loading.attr="disabled" wire:target="csvFile,importCsv">
-                                <span wire:loading.remove wire:target="importCsv">Import CSV</span>
-                                <span wire:loading wire:target="importCsv">Importing…</span>
+                            <input type="file" class="jb-field" style="max-width:340px;" wire:model="csvFile" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
+                            <button type="button" class="jb-btn primary" wire:click="previewCsv" wire:loading.attr="disabled" wire:target="csvFile,previewCsv">
+                                <span wire:loading.remove wire:target="previewCsv">Preview import</span>
+                                <span wire:loading wire:target="previewCsv">Reading…</span>
                             </button>
                         </div>
-                        <div class="jb-hint">Columns: client_name, address, performed_at, service_types (; separated — matched to the services above), description. Each row is geocoded and lands here for review.</div>
+                        <div class="jb-hint">The template's columns, or a CRM export as it comes (first / last name, street / city / state / ZIP, Tags, Created Date, J-ID). Each row is geocoded and lands here for review; a row with no notes gets a facts-only write-up from its service, town and date.</div>
+                        @if ($csvPreview !== null)
+                            <div class="jb-split" style="margin-top:.75rem;">
+                                <div class="jb-lbl">{{ $csvPreview['rows'] }} row(s)@if ($csvPreview['already_imported'] > 0) · {{ $csvPreview['already_imported'] }} already imported (skipped)@endif · {{ count($csvPreview['tags']) }} service tag(s) — each must match a service in the catalog, or be imported as a new one, or be left off</div>
+                                <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+                                    <thead><tr style="text-align:left;color:var(--gray-500);font-size:.72rem;text-transform:uppercase"><th style="padding:.35rem .5rem">Tag in the file</th><th>Rows</th><th>Maps to</th></tr></thead>
+                                    <tbody>
+                                        @foreach ($csvPreview['tags'] as $t)
+                                            <tr style="border-top:1px solid var(--gray-100)">
+                                                <td style="padding:.35rem .5rem;font-weight:500">{{ $t['tag'] }}@if ($t['job_type_id'] !== null) <span class="jb-svc" style="background:#dcfce7;color:#166534">matches</span>@elseif ($t['suggestions'] !== []) <span class="jb-svc" style="background:#fef3c7;color:#92400e">closest: {{ $t['suggestions'][0]['label'] }}</span>@else <span class="jb-svc" style="background:#fee2e2;color:#991b1b">not in the catalog</span>@endif</td>
+                                                <td style="color:var(--gray-500)">{{ $t['count'] }}</td>
+                                                <td>
+                                                    <select wire:model="csvMapping.{{ $t['tag'] }}" class="jb-field" style="max-width:360px;font-size:.85rem">
+                                                        @foreach ($csvPreview['options'] as $o)
+                                                            <option value="{{ $o['id'] }}">{{ $o['label'] }}</option>
+                                                        @endforeach
+                                                        <option value="{{ \App\JobCapture\Capture\CsvJobImporter::AS_NEW }}">Import as a new service: "{{ $t['tag'] }}"</option>
+                                                        <option value="{{ \App\JobCapture\Capture\CsvJobImporter::SKIP }}">Leave it off these jobs</option>
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                                <div class="jb-row" style="margin-top:.5rem;">
+                                    <button type="button" class="jb-btn primary" wire:click="importCsv" wire:loading.attr="disabled" wire:target="importCsv">
+                                        <span wire:loading.remove wire:target="importCsv">Import {{ $csvPreview['rows'] - $csvPreview['already_imported'] }} job(s)</span>
+                                        <span wire:loading wire:target="importCsv">Importing…</span>
+                                    </button>
+                                    <button type="button" class="jb-btn" wire:click="cancelCsv">Cancel</button>
+                                </div>
+                            </div>
+                        @endif
                     </div>
                 @endif
             </div>
@@ -191,7 +223,7 @@
                             </div>
                             @if ($editingId !== $j['id'] && $rejectingId !== $j['id'] && $placingId !== $j['id'])
                                 <div class="jb-act">
-                                    <button type="button" class="jb-btn primary" wire:click="approve('{{ $j['id'] }}')" @disabled(! $j['has_draft']) title="{{ $j['has_draft'] ? 'Approve into publishing' : 'Needs a write-up before it can be approved' }}">Approve &amp; publish</button>
+                                    <button type="button" class="jb-btn primary" wire:click="approve('{{ $j['id'] }}')" @disabled(! $j['has_draft'] || $j['similar_to'] !== null) title="{{ $j['similar_to'] !== null ? 'Reads too like an earlier write-up — edit it or Re-enhance before approving' : ($j['has_draft'] ? 'Approve into publishing' : 'Needs a write-up before it can be approved') }}">Approve &amp; publish</button>
                                     <button type="button" class="jb-btn" wire:click="reEnhance('{{ $j['id'] }}')">Re-enhance</button>
                                     <button type="button" class="jb-btn" wire:click="startEdit('{{ $j['id'] }}')">Edit</button>
                                     <button type="button" class="jb-btn" wire:click="startPlace('{{ $j['id'] }}')" title="Move the job to its real address">Re-place</button>
@@ -277,7 +309,9 @@
                             <div class="jb-desc">
                                 <div class="jb-col"><div class="l">Tech notes (raw)</div><div class="t">{{ $j['raw'] ?: '—' }}</div></div>
                                 <div class="jb-col"><div class="l">Source (seed)</div><div class="t">{{ $j['source'] ?: '—' }}</div></div>
-                                <div class="jb-col"><div class="l">Write-up</div><div class="t">{{ $j['enhanced'] ?: '— not enhanced yet —' }}</div></div>
+                                <div class="jb-col"><div class="l">Write-up @if ($j['facts_only'])<span class="jb-svc" title="No notes existed: written from the service, town and season only — nothing about this job is claimed">facts-only · {{ str_replace('_', ' ', (string) $j['angle']) }}</span>@endif</div>
+                                    @if ($j['similar_to'] !== null)<div class="jb-hint" style="color:#b45309">Reads too like an earlier write-up for this service — edit it or Re-enhance before approving.</div>@endif
+                                    <div class="t">{{ $j['enhanced'] ?: '— not enhanced yet —' }}</div></div>
                             </div>
                         @endif
 

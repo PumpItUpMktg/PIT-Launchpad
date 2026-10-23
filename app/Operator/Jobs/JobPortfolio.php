@@ -138,6 +138,9 @@ class JobPortfolio
             'status' => $job->status->value,
             'status_label' => $job->status->label(),
             'has_draft' => $job->hasDraft(),
+            'facts_only' => (bool) $job->facts_only,
+            'angle' => $job->write_up_angle,
+            'similar_to' => $job->similar_to_job_id,
         ];
     }
 
