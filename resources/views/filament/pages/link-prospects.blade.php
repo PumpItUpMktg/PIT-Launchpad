@@ -38,6 +38,7 @@
                     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
                         <x-filament::button size="sm" color="gray" wire:click="findProspects" wire:confirm="Run the competitor intersect for this site? One backlink-index call.">Find prospects</x-filament::button>
                         <x-filament::button size="sm" wire:click="findLocalOpportunities" wire:confirm="Search every office's town and county for sponsorship, membership, dealer-locator and job-board pages? A few dozen searches.">Find local opportunities</x-filament::button>
+                        <x-filament::button size="sm" color="gray" wire:click="readProfiles" wire:confirm="Read who / where / contacts / offer for up to 40 unread opportunities in this view? Two page reads and one short model call each.">Read profiles</x-filament::button>
                     </div>
                 </div>
                 @php($run = $this->lastRun)
@@ -89,10 +90,28 @@
                             <tr><td colspan="8" style="padding:.75rem .5rem .35rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--gray-500);background:var(--gray-50)">{{ $group['label'] }} · {{ count($group['rows']) }}</td></tr>
                         @foreach ($group['rows'] as $p)
                             <tr style="border-top:1px solid var(--gray-100)">
-                                <td style="padding:.5rem;font-weight:500">{{ $p->domain }}
-                                    @if ($p->url !== null)
-                                        <div style="font-size:.72rem;font-weight:400;color:var(--gray-500);max-width:28rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ $p->url }}">{{ preg_replace('#^https?://(www\.)?#', '', $p->url) }}</div>
-                                    @endif
+                                <td style="padding:.5rem;font-weight:500">
+                                    <div style="display:flex;gap:.6rem;align-items:flex-start">
+                                        @if ($p->thumbnail_url !== null)
+                                            <img src="{{ $p->thumbnail_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" style="width:44px;height:44px;object-fit:cover;border-radius:.375rem;border:1px solid var(--gray-200);flex:none;background:#fff" onerror="this.style.display='none'">
+                                        @endif
+                                        <div style="min-width:0">
+                                            {{ $p->profile['name'] ?? $p->domain }}
+                                            @if (($p->profile['name'] ?? null) !== null)<span style="font-weight:400;color:var(--gray-500);font-size:.75rem"> · {{ $p->domain }}</span>@endif
+                                            @if ($p->url !== null)
+                                                <div style="font-size:.72rem;font-weight:400;color:var(--gray-500);max-width:28rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ $p->url }}">{{ preg_replace('#^https?://(www\.)?#', '', $p->url) }}</div>
+                                            @endif
+                                            @if (($p->profile['overview'] ?? null) !== null)
+                                                <div style="font-size:.74rem;font-weight:400;color:var(--gray-600);max-width:32rem;margin-top:.15rem">{{ $p->profile['overview'] }}</div>
+                                            @endif
+                                            @php($offerLine = \App\Links\Profile\ProspectProfiler::offerLine($p->profile))
+                                            @if ($offerLine !== null)
+                                                <div style="font-size:.72rem;font-weight:500;color:{{ ($p->profile['offer']['website_link'] ?? '') === 'offered' ? '#15803d' : 'var(--gray-600)' }};margin-top:.15rem">{{ $offerLine }}</div>
+                                            @elseif ($p->profile_read_at !== null && $p->kind->isLane())
+                                                <div style="font-size:.72rem;font-weight:400;color:var(--gray-400);margin-top:.15rem">{{ $p->profile === null ? $p->profile_error : 'No offer stated on the page.' }}</div>
+                                            @endif
+                                        </div>
+                                    </div>
                                 </td>
                                 <td style="color:var(--gray-500)">{{ $p->rank ?? '—' }}</td>
                                 <td style="font-size:.78rem">
@@ -200,6 +219,62 @@
                             </div>
                         @endif
                     </div>
+
+                    @php($pf = $prospect->profile)
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.5rem">
+                        <h3 style="font-size:.8rem;text-transform:uppercase;color:var(--gray-500)">The organisation</h3>
+                        <x-filament::button size="xs" color="gray" wire:click="readProfile">{{ $prospect->profile_read_at === null ? 'Read profile' : 'Re-read' }}</x-filament::button>
+                    </div>
+                    @if ($pf !== null)
+                        <div style="display:flex;gap:.75rem;align-items:flex-start;font-size:.8rem">
+                            @if ($prospect->thumbnail_url !== null)
+                                <img src="{{ $prospect->thumbnail_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" style="width:96px;height:72px;object-fit:cover;border-radius:.375rem;border:1px solid var(--gray-200);flex:none;background:#fff" onerror="this.style.display='none'">
+                            @endif
+                            <div style="display:flex;flex-direction:column;gap:.25rem;min-width:0">
+                                <div><strong>{{ $pf['name'] ?? $prospect->domain }}</strong>@if (($pf['org_kind'] ?? null) !== null) <span style="color:var(--gray-500)">· {{ $pf['org_kind'] }}</span>@endif</div>
+                                @if (($pf['overview'] ?? null) !== null)<div style="color:var(--gray-600)">{{ $pf['overview'] }}</div>@endif
+                                @if (($pf['address'] ?? $pf['town'] ?? null) !== null)<div style="color:var(--gray-500)">{{ $pf['address'] ?? $pf['town'] }}</div>@endif
+                                @if (($pf['phone'] ?? null) !== null)<div style="color:var(--gray-500)">{{ $pf['phone'] }}</div>@endif
+                                @if (($pf['contacts'] ?? []) !== [])
+                                    <div>People:
+                                        @foreach ($pf['contacts'] as $c)
+                                            <span style="white-space:nowrap">{{ $c['name'] }}@if (($c['role'] ?? null) !== null) <em style="color:var(--gray-500)">({{ $c['role'] }})</em>@endif
+                                            @if (($c['email'] ?? null) !== null) <button type="button" wire:click="pickContact('{{ $c['email'] }}')" style="border:0;background:none;color:#2563eb;text-decoration:underline;cursor:pointer;font-size:.75rem">{{ $c['email'] }}</button>@endif</span>@if (! $loop->last), @endif
+                                        @endforeach
+                                    </div>
+                                @endif
+                                @if (($pf['emails'] ?? []) !== [])
+                                    <div>Emails on the page:
+                                        @foreach ($pf['emails'] as $e)<button type="button" wire:click="pickContact('{{ $e }}')" style="border:0;background:none;color:#2563eb;text-decoration:underline;cursor:pointer;font-size:.75rem">{{ $e }}</button>@if (! $loop->last), @endif @endforeach
+                                    </div>
+                                @endif
+                                @if (($pf['social'] ?? []) !== [])
+                                    <div style="color:var(--gray-500)">@foreach ($pf['social'] as $k => $u)<a href="{{ $u }}" target="_blank" rel="noopener" style="margin-right:.5rem;text-decoration:underline">{{ ucfirst($k) }}</a>@endforeach</div>
+                                @endif
+                                @php($offer = $pf['offer'] ?? null)
+                                @if (is_array($offer) && ($offer['kind'] ?? 'none') !== 'none')
+                                    <div style="margin-top:.25rem;padding:.5rem .6rem;border-radius:.375rem;background:#fff;border:1px solid var(--gray-200)">
+                                        <div style="font-weight:600">{{ ucfirst($offer['kind']) }} offer · <span style="color:{{ ($offer['website_link'] ?? '') === 'offered' ? '#15803d' : (($offer['website_link'] ?? '') === 'implied' ? '#b45309' : 'var(--gray-500)') }}">{{ match ($offer['website_link'] ?? '') { 'offered' => 'website link offered', 'implied' => 'link implied (logo / listing on their site)', default => 'no link mentioned' } }}</span></div>
+                                        @if (($offer['summary'] ?? null) !== null)<div style="color:var(--gray-600)">{{ $offer['summary'] }}</div>@endif
+                                        @foreach ($offer['levels'] ?? [] as $l)
+                                            <div style="margin-top:.2rem"><strong>{{ $l['name'] }}</strong>@if (($l['price'] ?? '') !== '') <span style="color:var(--gray-600)">{{ $l['price'] }}</span>@endif
+                                                @if (($l['includes'] ?? []) !== [])<span style="color:var(--gray-500)"> — {{ implode('; ', $l['includes']) }}</span>@endif</div>
+                                        @endforeach
+                                        @if (($offer['benefits'] ?? []) !== [])<div style="color:var(--gray-500);margin-top:.2rem">Includes: {{ implode(', ', array_map(fn ($b) => str_replace('_', ' ', $b), $offer['benefits'])) }}</div>@endif
+                                        @if (($offer['deadline'] ?? null) !== null)<div style="color:var(--gray-500)">Deadline: {{ $offer['deadline'] }}</div>@endif
+                                        @if (($offer['apply_url'] ?? null) !== null)<div><a href="{{ $offer['apply_url'] }}" target="_blank" rel="noopener" style="text-decoration:underline;color:#2563eb">Application / details ↗</a></div>@endif
+                                    </div>
+                                @elseif ($prospect->kind->isLane())
+                                    <div style="color:var(--gray-400)">No sponsorship or membership offer stated on the page{{ ($pf['pages_read'] ?? []) !== [] ? 's read' : '' }}.</div>
+                                @endif
+                                <div style="font-size:.7rem;color:var(--gray-400)">Read {{ $prospect->profile_read_at?->diffForHumans() }}{{ $prospect->profile_model_ok === false ? ' · '.$prospect->profile_error : '' }}@if (($pf['pages_read'] ?? []) !== []) · {{ count($pf['pages_read']) }} page(s)@endif</div>
+                            </div>
+                        </div>
+                    @elseif ($prospect->profile_read_at !== null)
+                        <p style="font-size:.78rem;color:#b45309">{{ $prospect->profile_error }}</p>
+                    @else
+                        <p style="font-size:.78rem;color:var(--gray-400)">Who they are, where, who to talk to, and what a sponsor or member gets — read from their page, nothing added.</p>
+                    @endif
 
                     @php($guard = $this->sendGuard)
                     @php($sent = $this->sentEmails)

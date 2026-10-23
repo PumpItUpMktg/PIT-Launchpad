@@ -46,14 +46,24 @@
                 <h3 class="{{ $loop->first ? '' : 'mt-6 ' }}text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ $r['office_key'] === \App\Links\OfficeAttribution::CORPORATE ? $r['office'] : ($r['office_key'] === \App\Links\OfficeAttribution::COMPETITORS ? 'Sites that link to companies near you' : $r['office'].' office') }}</h3>
             @endif
             <div class="flex flex-col gap-2 border-b border-gray-100 py-4 last:border-0 sm:flex-row sm:items-start sm:justify-between dark:border-white/10">
-                <div class="min-w-0">
+                <div class="flex min-w-0 gap-3">
+                    @if ($r['thumbnail_url'] !== null)
+                        <img src="{{ $r['thumbnail_url'] }}" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-14 w-20 flex-none rounded-md border border-gray-200 bg-white object-cover dark:border-white/10" onerror="this.style.display='none'">
+                    @endif
+                    <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
-                        <a href="{{ $r['url'] }}" target="_blank" rel="noopener" class="font-semibold text-gray-950 underline-offset-2 hover:underline dark:text-white">{{ $r['domain'] }}</a>
+                        <a href="{{ $r['url'] }}" target="_blank" rel="noopener" class="font-semibold text-gray-950 underline-offset-2 hover:underline dark:text-white">{{ $r['name'] ?? $r['domain'] }}</a>
+                        @if ($r['name'] !== null)<span class="text-xs text-gray-500 dark:text-gray-400">{{ $r['domain'] }}</span>@endif
                         <x-filament::badge color="gray">{{ $r['kind_label'] }}</x-filament::badge>
                         @if ($r['near'] !== null)<span class="text-xs text-gray-500 dark:text-gray-400">near {{ $r['near'] }}</span>@endif
                     </div>
+                    @if ($r['overview'] !== null)<p class="mt-1 text-sm text-gray-700 dark:text-gray-200">{{ $r['overview'] }}</p>@endif
                     <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">{{ $r['what'] }}</p>
+                    @if ($r['offer_line'] !== null)
+                        <p class="mt-1 text-sm font-medium {{ $r['website_link'] === 'offered' ? 'text-green-700 dark:text-green-400' : 'text-gray-700 dark:text-gray-200' }}">What you get: {{ $r['offer_summary'] ?? $r['offer_line'] }}@if ($r['offer_summary'] !== null) <span class="font-normal text-gray-500 dark:text-gray-400">· {{ $r['offer_line'] }}</span>@endif</p>
+                    @endif
                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ $r['status_text'] }}@if ($r['decided_at'] !== null) · decided {{ $r['decided_at']->toFormattedDateString() }}@endif</p>
+                    </div>
                 </div>
                 <div class="flex shrink-0 gap-2">
                     @if ($r['decision'] === null && $r['open'])
