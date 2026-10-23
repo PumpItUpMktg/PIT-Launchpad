@@ -127,6 +127,30 @@ it('the import preview matches every tag to the catalog, suggests the closest ro
     expect($r['imported'])->toBe(1)->and($byKey('5')->jobTypes()->count())->toBe(0);
 });
 
+it('a file bigger than one run is imported by running it again: already-imported rows never count against the cap, the preview says what this run and the next will do', function () {
+    Queue::fake();
+    Bus::fake();
+    bindTolerantGeocoder();
+    $site = Site::factory()->create();
+    $lines = ['J-ID,First Name,Last Name,Tags,Service Street 1,Service City,Service State,Service ZIP code'];
+    foreach (range(1, CsvJobImporter::MAX_ROWS + 2) as $i) {
+        $lines[] = "{$i},Ann,Lee {$i},Sump Pump Installation,{$i} Main St,Trappe,PA,19426";
+    }
+    $csv = implode("\n", $lines)."\n";
+
+    $preview = app(CsvJobImporter::class)->preview($site, $csv);
+    expect($preview['rows'])->toBe(CsvJobImporter::MAX_ROWS + 2)->and($preview['this_run'])->toBe(CsvJobImporter::MAX_ROWS)->and($preview['remaining'])->toBe(2);
+
+    $first = app(CsvJobImporter::class)->import($site, $csv);
+    expect($first['imported'])->toBe(CsvJobImporter::MAX_ROWS)->and($first['truncated'])->toBeTrue();
+
+    $again = app(CsvJobImporter::class)->preview($site, $csv);
+    expect($again['already_imported'])->toBe(CsvJobImporter::MAX_ROWS)->and($again['this_run'])->toBe(2)->and($again['remaining'])->toBe(0);
+    $second = app(CsvJobImporter::class)->import($site, $csv);
+    expect($second['imported'])->toBe(2)->and($second['truncated'])->toBeFalse()
+        ->and(Job::withoutGlobalScopes()->where('site_id', $site->id)->count())->toBe(CsvJobImporter::MAX_ROWS + 2);
+});
+
 it('writes a previous job with no notes from facts only: the service, the catalog\'s account of it, the town and county, the season, one angle — under rules that forbid invented findings', function () {
     $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
     $service = Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Maintenance', 'short_description' => 'A yearly check and test of the pump, float, check valve and discharge line.',

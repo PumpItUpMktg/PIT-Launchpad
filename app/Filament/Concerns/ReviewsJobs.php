@@ -538,7 +538,7 @@ trait ReviewsJobs
             ? $skipped.' row'.($skipped === 1 ? '' : 's').' skipped ('.collect($result['skipped'])->take(3)->map(fn (array $s): string => 'row '.$s['row'].': '.$s['reason'])->implode('; ').($skipped > 3 ? '…' : '').')'
             : null;
         if ($result['truncated']) {
-            $body = trim(($body ?? '').' Only the first '.CsvJobImporter::MAX_ROWS.' rows were imported — split larger files.');
+            $body = trim(($body ?? '').' '.CsvJobImporter::MAX_ROWS.' per run: preview and import the same file again for the next batch — rows already in are skipped.');
         }
 
         Notification::make()

@@ -56,7 +56,11 @@ final class CsvJobImporter
      * carry it, the catalog row it matches (by slug, case-insensitive), or — when it matches nothing — the
      * closest catalog rows as suggestions so the operator can map it rather than import a stray twin.
      *
-     * @return array{rows: int, already_imported: int, tags: list<array{tag: string, count: int, job_type_id: string|null, label: string|null, suggestions: list<array{id: string, label: string}>}>, options: list<array{id: string, label: string, slug: string}>}
+     * `this_run` is how many a run imports (new rows, capped at MAX_ROWS); `remaining` how many the next run of
+     * the same file picks up — already-imported rows never count against the cap, so a big file is imported
+     * by running it again until `remaining` is 0.
+     *
+     * @return array{rows: int, already_imported: int, this_run: int, remaining: int, tags: list<array{tag: string, count: int, job_type_id: string|null, label: string|null, suggestions: list<array{id: string, label: string}>}>, options: list<array{id: string, label: string, slug: string}>}
      */
     public function preview(Site $site, string $csv): array
     {
@@ -71,9 +75,6 @@ final class CsvJobImporter
         $already = 0;
         foreach ($reader->getRecords($header) as $record) {
             $rows++;
-            if ($rows > self::MAX_ROWS) {
-                break;
-            }
             $get = fn (string $field): string => trim((string) ($record[$columns[$field] ?? ''] ?? ''));
             $key = $get('import_key');
             if ($key !== '' && Job::withoutGlobalScopes()->where('site_id', $site->id)->where('import_key', $key)->exists()) {
@@ -97,7 +98,9 @@ final class CsvJobImporter
             ];
         }
 
-        return ['rows' => min($rows, self::MAX_ROWS), 'already_imported' => $already, 'tags' => $tags, 'options' => $options];
+        $new = max(0, $rows - $already);
+
+        return ['rows' => $rows, 'already_imported' => $already, 'this_run' => min($new, self::MAX_ROWS), 'remaining' => max(0, $new - self::MAX_ROWS), 'tags' => $tags, 'options' => $options];
     }
 
     /**
@@ -113,14 +116,21 @@ final class CsvJobImporter
         $skipped = [];
         $truncated = false;
         $row = 0;
+        $attempted = 0;   // rows this run tried to import — already-imported rows pass through without counting
 
         foreach ($reader->getRecords($header) as $record) {
             $row++;
-            if ($row > self::MAX_ROWS) {
+            $get = fn (string $field): string => trim((string) ($record[$columns[$field] ?? ''] ?? ''));
+            $importKey = $get('import_key');
+            if ($importKey !== '' && Job::withoutGlobalScopes()->where('site_id', $site->id)->where('import_key', $importKey)->exists()) {
+                $skipped[] = ['row' => $row, 'reason' => "already imported ({$importKey})"];
+
+                continue;
+            }
+            if (++$attempted > self::MAX_ROWS) {
                 $truncated = true;
                 break;
             }
-            $get = fn (string $field): string => trim((string) ($record[$columns[$field] ?? ''] ?? ''));
 
             $client = $get('client_name');
             if ($client === '') {
@@ -132,12 +142,6 @@ final class CsvJobImporter
             }
             if ($client === '' || $address === '') {
                 $skipped[] = ['row' => $row, 'reason' => 'missing client name or address'];
-
-                continue;
-            }
-            $importKey = $get('import_key');
-            if ($importKey !== '' && Job::withoutGlobalScopes()->where('site_id', $site->id)->where('import_key', $importKey)->exists()) {
-                $skipped[] = ['row' => $row, 'reason' => "already imported ({$importKey})"];
 
                 continue;
             }
