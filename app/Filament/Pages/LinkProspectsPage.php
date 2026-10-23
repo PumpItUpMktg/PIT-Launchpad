@@ -8,6 +8,7 @@ use App\Enums\LinkProspectStatus;
 use App\Jobs\FindLinkProspects;
 use App\Jobs\FindLocalOpportunities;
 use App\Jobs\FindProspectContact;
+use App\Links\OfficeAttribution;
 use App\Links\Outreach\FollowUpComposer;
 use App\Links\Outreach\GuardResult;
 use App\Links\Outreach\OutreachGuard;
@@ -119,6 +120,31 @@ class LinkProspectsPage extends Page
         return $q->orderByDesc('competitor_count')->orderByDesc('locality')->orderByDesc('rank')->orderBy('domain')->get()->all();
     }
 
+    /**
+     * The rows grouped by office: each office's local opportunities under it, state-wide ones under the
+     * corporate location only, competitor-link rows last.
+     *
+     * @return list<array{key: string, label: string, rows: list<LinkProspect>}>
+     */
+    public function getGroupsProperty(): array
+    {
+        $site = $this->site();
+        $rows = $this->prospects;
+        if ($site === null || $rows === []) {
+            return [];
+        }
+        $attribution = app(OfficeAttribution::class)->for($site, collect($rows));
+        $groups = [];
+        foreach ($rows as $p) {
+            $a = $attribution[(string) $p->id];
+            $groups[$a['key']] ??= ['key' => $a['key'], 'label' => $a['label'], 'order' => $a['order'], 'rows' => []];
+            $groups[$a['key']]['rows'][] = $p;
+        }
+        usort($groups, fn (array $x, array $y): int => $x['order'] <=> $y['order']);
+
+        return array_map(fn (array $g): array => ['key' => $g['key'], 'label' => $g['label'], 'rows' => $g['rows']], $groups);
+    }
+
     /** @return array{count: int, last_found_at: Carbon|null, by_status: array<string, int>} */
     public function getSummaryProperty(): array
     {
@@ -191,8 +217,25 @@ class LinkProspectsPage extends Page
     public function openKit(string $prospectId): void
     {
         $this->activeProspectId = $prospectId;
-        $this->contactEmailInput = (string) $this->activeProspect()?->contact_email;
+        $prospect = $this->activeProspect();
+        $this->contactEmailInput = (string) $prospect?->contact_email;
+        // A state-level body is approached once, by the company; a local one defaults to the office that found it.
+        $this->kitLocationId = $prospect !== null && ! self::isStateLevel($prospect) ? (string) ($prospect->location_id ?? '') : '';
         $this->prefillSend();
+    }
+
+    /** True for the open prospect when it is a state-level organisation (found by a state search, not an office's). */
+    public function getStateLevelProperty(): bool
+    {
+        $prospect = $this->activeProspect();
+
+        return $prospect !== null && self::isStateLevel($prospect);
+    }
+
+    /** A state-level body: an opportunity found by a state search — no office behind it. One tenant, one approach. */
+    public static function isStateLevel(LinkProspect $prospect): bool
+    {
+        return $prospect->kind->isLane() && $prospect->location_id === null;
     }
 
     public function closeKit(): void
@@ -204,6 +247,10 @@ class LinkProspectsPage extends Page
 
     public function updatedKitLocationId(): void
     {
+        $prospect = $this->activeProspect();
+        if ($prospect !== null && self::isStateLevel($prospect)) {
+            $this->kitLocationId = '';   // the picker is locked for a state-level body: the company speaks, once
+        }
         $this->prefillSend();
     }
 

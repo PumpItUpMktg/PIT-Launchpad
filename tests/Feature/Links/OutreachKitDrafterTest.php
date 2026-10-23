@@ -92,3 +92,13 @@ it('drafts a prospect pitch for an office or for the brand, each kept separately
         ->and($forBrand->payload['nap']['business_name'])->toBe('Sump Pump Gurus')
         ->and(OutreachKit::withoutGlobalScope(SiteScope::class)->count())->toBe(2);
 });
+
+it('the company kit speaks from the corporate address — a state-level body is approached once by the business, never per office', function () {
+    [$site] = kitSite();
+    $site->forceFill(['corporate_street' => '10 Main St', 'corporate_city' => 'Clifton', 'corporate_state' => 'NJ', 'corporate_postal_code' => '07011', 'phone' => '(973) 555-0100'])->save();
+    $prospect = LinkProspect::withoutGlobalScope(SiteScope::class)->create(['site_id' => $site->id, 'domain' => 'njbuilders.org', 'competitors' => [], 'competitor_count' => 0, 'kind' => LinkProspectKind::Membership, 'status' => LinkProspectStatus::New, 'found_at' => now(), 'offices' => ['NJ'], 'location_id' => null]);
+    $kit = kitModel('{"short_description":"s","long_description":"l","categories":[],"pitch_subject":"Joining the association","pitch_body":"Hello"}')->forProspect($prospect, null);
+
+    expect($kit->payload['nap'])->toMatchArray(['business_name' => 'Sump Pump Gurus', 'address' => '10 Main St', 'city' => 'Clifton', 'state' => 'NJ', 'postal' => '07011', 'phone' => '(973) 555-0100'])
+        ->and($kit->payload['link_url'])->toBe('https://sumppumpgurus.com/');
+});

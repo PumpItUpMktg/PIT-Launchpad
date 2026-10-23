@@ -5,6 +5,7 @@ namespace App\Client;
 use App\Enums\ClientDecision;
 use App\Enums\LinkProspectKind;
 use App\Enums\LinkProspectStatus;
+use App\Links\OfficeAttribution;
 use App\Links\Outreach\OutreachGuard;
 use App\Models\LinkProspect;
 use App\Models\Scopes\SiteScope;
@@ -29,10 +30,15 @@ class LinkOpportunities
      */
     public function for(Site $site): array
     {
-        $rows = LinkProspect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)
+        $prospects = LinkProspect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)
             ->whereNotIn('status', [LinkProspectStatus::Dismissed->value])
-            ->orderByRaw('CASE WHEN client_decision IS NULL THEN 0 ELSE 1 END')->orderByDesc('locality')->orderByDesc('competitor_count')->orderBy('domain')
-            ->get()->map(fn (LinkProspect $p): array => $this->row($p, $site));
+            ->orderByDesc('locality')->orderByDesc('competitor_count')->orderBy('domain')
+            ->get();
+        // Listed by office: each office's local opportunities under it, state-wide ones under the corporate
+        // location only (one approach per organisation for the whole business), competitor links last.
+        $attribution = app(OfficeAttribution::class)->for($site, $prospects);
+        $rows = $prospects->map(fn (LinkProspect $p): array => $this->row($p, $site) + ['office' => $attribution[(string) $p->id]['label'], 'office_key' => $attribution[(string) $p->id]['key'], 'office_order' => $attribution[(string) $p->id]['order']])
+            ->sortBy(fn (array $r, int $i): array => [$r['office_order'], $i])->values();
 
         $toReview = $rows->filter(fn (array $r): bool => $r['decision'] === null && $r['open'])->values()->all();
         $interested = $rows->filter(fn (array $r): bool => $r['decision'] === ClientDecision::Interested->value)->values()->all();

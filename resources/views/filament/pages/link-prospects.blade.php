@@ -85,7 +85,9 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($rows as $p)
+                        @forelse ($this->groups as $group)
+                            <tr><td colspan="8" style="padding:.75rem .5rem .35rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--gray-500);background:var(--gray-50)">{{ $group['label'] }} · {{ count($group['rows']) }}</td></tr>
+                        @foreach ($group['rows'] as $p)
                             <tr style="border-top:1px solid var(--gray-100)">
                                 <td style="padding:.5rem;font-weight:500">{{ $p->domain }}
                                     @if ($p->url !== null)
@@ -124,6 +126,7 @@
                                     <x-filament::button size="xs" color="gray" wire:click="openKit('{{ $p->id }}')">Pitch</x-filament::button>
                                 </td>
                             </tr>
+                        @endforeach
                         @empty
                             <tr><td colspan="8" style="padding:1rem;color:var(--gray-500)">Nothing in this view.</td></tr>
                         @endforelse
@@ -144,12 +147,17 @@
                         </div>
                         <button wire:click="closeKit" style="border:0;background:none;font-size:1.4rem;cursor:pointer;color:var(--gray-500)">&times;</button>
                     </div>
-                    <label style="font-size:.8rem;display:block"><span style="color:var(--gray-500)">Speak for</span>
-                        <select wire:model.live="kitLocationId" style="width:100%;font-size:.8rem;border:1px solid var(--gray-300);border-radius:.375rem;padding:.3rem .4rem">
-                            <option value="">The brand (links to the home page)</option>
-                            @foreach ($this->offices as $o)<option value="{{ $o['id'] }}">{{ $o['name'] }} office</option>@endforeach
-                        </select>
-                    </label>
+                    @if ($this->stateLevel)
+                        <div style="font-size:.78rem;color:var(--gray-500);padding:.5rem .6rem;border-radius:.375rem;background:var(--gray-100)"><strong>Speaks for the company</strong> from the corporate address. A state-level organisation is approached once by the business, never once per office — one sponsorship or membership per organisation.</div>
+                    @else
+                        <label style="font-size:.8rem;display:block"><span style="color:var(--gray-500)">Speak for</span>
+                            <select wire:model.live="kitLocationId" style="width:100%;font-size:.8rem;border:1px solid var(--gray-300);border-radius:.375rem;padding:.3rem .4rem">
+                                <option value="">The company (corporate address, links to the home page)</option>
+                                @foreach ($this->offices as $o)<option value="{{ $o['id'] }}">{{ $o['name'] }} office</option>@endforeach
+                            </select>
+                            <span style="font-size:.7rem;color:var(--gray-400)">One email per organisation for the whole business, whichever office speaks.</span>
+                        </label>
+                    @endif
                     @php($kit = $ak['kit'])
                     <div style="display:flex;justify-content:space-between;align-items:center">
                         <h3 style="font-size:.8rem;text-transform:uppercase;color:var(--gray-500)">Pitch</h3>

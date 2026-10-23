@@ -243,6 +243,29 @@ it('the Business step saves the link-building fields with the guardrails: cap cl
         ->and($site->outreach_from_email)->toBe('outreach@sumppumpgurus.com');
 });
 
+it('the Link prospects table groups rows by office, with state-wide bodies under the corporate location only and competitor links last', function () {
+    Filament::setCurrentPanel('admin');
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = opportunitySite();
+    $site->forceFill(['corporate_city' => 'Clifton', 'corporate_state' => 'NJ'])->save();
+    app(ActiveTenant::class)->set((string) $site->id);
+    [$montclair, $clifton] = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->orderBy('created_at')->get()->all();
+    $mk = fn (string $domain, array $o) => LinkProspect::withoutGlobalScope(SiteScope::class)->create(array_merge([
+        'site_id' => $site->id, 'domain' => $domain, 'kind' => LinkProspectKind::Sponsorship->value, 'status' => LinkProspectStatus::New->value,
+        'competitors' => [], 'competitor_count' => 0, 'first_seen' => '2026-10-01', 'found_at' => now(),
+    ], $o));
+    $mk('njbuilders.org', ['kind' => LinkProspectKind::Membership->value, 'offices' => ['NJ'], 'location_id' => null]);
+    $mk('cliftonrotary.org', ['location_id' => $clifton->id, 'offices' => ['Clifton, NJ']]);
+    $mk('montclairlittleleague.org', ['location_id' => $montclair->id, 'offices' => ['Montclair, NJ']]);
+    $mk('njhomeblog.com', ['kind' => LinkProspectKind::Local->value, 'competitors' => ['rival.com'], 'competitor_count' => 1]);
+
+    $groups = Livewire::test(LinkProspectsPage::class)
+        ->assertSeeInOrder(['Montclair office', 'montclairlittleleague.org', 'Clifton office', 'cliftonrotary.org', 'Corporate (Clifton, NJ)', 'njbuilders.org', 'Competitor links', 'njhomeblog.com'])
+        ->instance()->groups;
+    expect(array_column($groups, 'key'))->toBe([$montclair->id, $clifton->id, 'corporate', 'competitors'])
+        ->and(array_map(fn ($g) => count($g['rows']), $groups))->toBe([1, 1, 1, 1]);
+});
+
 it('the Link prospects page queues the opportunity search and filters by lane', function () {
     Queue::fake();
     Filament::setCurrentPanel('admin');
