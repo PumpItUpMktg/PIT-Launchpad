@@ -2,12 +2,14 @@
 
 use App\Client\LinkOpportunities;
 use App\Console\Commands\ReadProspectProfilesCommand;
+use App\ContentEngine\Drafting\VoiceResolver;
 use App\Enums\LinkProspectKind;
 use App\Enums\LinkProspectStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\LinkProspectsPage;
 use App\Jobs\ReadProspectProfile;
 use App\Jobs\ReadProspectProfiles;
+use App\Links\OutreachKitDrafter;
 use App\Links\Profile\PageFacts;
 use App\Links\Profile\ProspectProfiler;
 use App\Models\LinkProspect;
@@ -140,6 +142,34 @@ it('keeps the facts and says so when the model does not answer; an unreadable pa
     (new ProspectProfiler(new FakeClaudeClient(MODEL_JSON)))->read($down);
     $down->refresh();
     expect($down->profile)->toBeNull()->and($down->profile_read_at)->not->toBeNull()->and($down->profile_error)->toBe('The page could not be read.');
+});
+
+it('a press row is profiled as a PR opportunity: tips address, story form, what they accept, whether articles link out — and the pitch brief asks for coverage, never a link', function () {
+    Http::fake([
+        'https://montclairlocal.news/' => Http::response('<html><head><title>Montclair Local</title></head><body><a href="/submit-a-story">Submit a story</a><p>Independent nonprofit news for Montclair, NJ. Tips: tips@montclairlocal.news</p></body></html>'),
+        'https://montclairlocal.news/submit-a-story' => Http::response('<html><body>Send press releases and community announcements to tips@montclairlocal.news or use the form. Sponsored content available.</body></html>'),
+    ]);
+    $site = profileSite();
+    $prospect = profileProspect($site, ['domain' => 'montclairlocal.news', 'url' => 'https://montclairlocal.news/', 'kind' => LinkProspectKind::Press->value]);
+    $model = new FakeClaudeClient('{"name":"Montclair Local","overview":"An independent nonprofit newsroom covering Montclair, NJ: town government, schools, business and weather.","org_kind":"media","address":null,"town":"Montclair, NJ","contacts":[{"name":"Sam Lee","role":"Editor","email":null}],"press":{"is_press":true,"coverage_area":"Montclair, NJ","tips_email":"Tips@MontclairLocal.news","submit_url":"https://montclairlocal.news/submit-a-story","press_releases":true,"announcements":true,"sponsored_content":true,"links_out":true,"beats":["government","schools","business","weather"]},"offer":{"kind":"none","levels":[],"benefits":[],"website_link":"not_mentioned","deadline":null,"apply_url":null,"summary":null}}');
+
+    (new ProspectProfiler($model))->read($prospect);
+    $prospect->refresh();
+    expect($model->prompts[0])->toContain('local news outlet')->toContain('PR opportunity')->toContain('PAGE 2 (https://montclairlocal.news/submit-a-story)');
+    $pr = $prospect->profile['press'];
+    expect($pr['is_press'])->toBeTrue()
+        ->and($pr['tips_email'])->toBe('tips@montclairlocal.news')
+        ->and($pr['submit_url'])->toBe('https://montclairlocal.news/submit-a-story')
+        ->and($pr['press_releases'])->toBeTrue()->and($pr['links_out'])->toBeTrue()
+        ->and($pr['beats'])->toBe(['government', 'schools', 'business', 'weather']);
+    expect(ProspectProfiler::offerLine($prospect->profile))->toBe('PR: news tips: tips@montclairlocal.news · press releases accepted · community announcements · sponsored posts sold · articles link out');
+    expect($prospect->contact_email)->toBe('tips@montclairlocal.news');
+
+    // The kit brief for a press row asks for coverage and offers the business as a local source — never a link.
+    $drafter = new OutreachKitDrafter($kitModel = new FakeClaudeClient('{"short_description":"s","long_description":"l","categories":[],"pitch_subject":"A local source for storm season","pitch_body":"Hello"}'), app(VoiceResolver::class));
+    $drafter->forProspect($prospect, null);
+    expect($kitModel->prompts[0])->toContain('LOCAL SOURCE')->toContain('never asking for a link');
+    expect(LinkOpportunities::explain(LinkProspectKind::Press, $site))->toContain('PR opportunity');
 });
 
 it('the batch reads unread lane rows only, most local first, bounded, one lane when asked; the command reports each', function () {

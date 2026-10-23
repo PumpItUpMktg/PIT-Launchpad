@@ -118,6 +118,7 @@ class LinkOpportunities
             LinkProspectKind::Membership => 'A chamber, association or business group with a member directory. Usually annual dues; members are listed with a website link.',
             LinkProspectKind::DealerLocator => 'A manufacturer or program with a dealer / installer locator. Being listed is normally free for businesses that carry the brand.',
             LinkProspectKind::JobBoard => 'A job or training board that lists employer partners. Normally free; you would post openings there and your profile links to your site.',
+            LinkProspectKind::Press => 'A local news site — a PR opportunity. We would offer you as a local source or pitch a story or announcement; a mention there usually comes with a link. Free; some also sell sponsored posts.',
             LinkProspectKind::Directory => 'A directory that lists local businesses. We would ask to be listed, usually free.',
             LinkProspectKind::Editorial => 'A news, community or government site that already links to nearby companies. We would ask for a mention where it fits.',
             LinkProspectKind::National => 'A larger site that links to nearby companies. We would ask for a listing or a mention where it fits.',

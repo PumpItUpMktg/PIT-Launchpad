@@ -85,7 +85,10 @@ it('builds one de-duplicated search plan per lane from the offices, their counti
         ->toContain('Essex County NJ workforce development employer partners')
         ->toContain('sump pump contractors association NJ members')
         ->toContain('Zoeller find a dealer NJ')
-        ->toContain('Zoeller authorized installer locator NJ');
+        ->toContain('Zoeller authorized installer locator NJ')
+        ->toContain('Montclair NJ local news')
+        ->toContain('Essex County NJ newspaper')
+        ->toContain('Clifton NJ community news submit a story');
     // The state-level searches run once for NJ, not once per office.
     expect(array_count_values(array_map('strtolower', $queries)))->each->toBe(1);
     expect(array_filter($plan, fn ($q) => $q['lane'] === LinkProspectKind::DealerLocator))->not->toBeEmpty();
@@ -151,6 +154,40 @@ it('keeps the local opportunity pages, drops national / aggregator / platform / 
         ->and($run->kept)->toBe(3)
         ->and($run->dropped_spam)->toBe(1)
         ->and($run->dropped_rank)->toBe(2);
+});
+
+it('press is local or nothing: a town paper is kept as a PR opportunity, national and network outlets are dropped by name, a paper seen from offices in two states is dropped by the data', function () {
+    $site = opportunitySite();
+    // A third office in another state, so a metro paper can show up across a state line.
+    $pa = [['long_name' => 'Trooper', 'short_name' => 'Trooper', 'types' => ['locality', 'political']], ['long_name' => 'Pennsylvania', 'short_name' => 'PA', 'types' => ['administrative_area_level_1', 'political']]];
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper office', 'address_components' => $pa, 'home_county_geoid' => '42091', 'county_geoids' => []]);
+    $serp = new MockSerpProvider;
+    $serp->setResults('Montclair NJ local news', new SerpResultSet('Montclair NJ local news', [
+        new SerpResult(1, 'https://montclairlocal.news/', 'montclairlocal.news'),
+        new SerpResult(2, 'https://patch.com/new-jersey/montclair', 'patch.com'),
+        new SerpResult(3, 'https://www.nj.com/essex/', 'www.nj.com'),
+        new SerpResult(4, 'https://www.metrodailynews.com/nj', 'www.metrodailynews.com'),
+    ]));
+    $serp->setResults('Trooper PA local news', new SerpResultSet('Trooper PA local news', [
+        new SerpResult(1, 'https://www.metrodailynews.com/pa', 'www.metrodailynews.com'),
+        new SerpResult(2, 'https://trooperweekly.com/', 'trooperweekly.com'),
+    ]));
+    app()->instance(SerpProvider::class, $serp);
+    $asked = [];
+    app()->instance(BacklinkProvider::class, opportunityBacklinks([], $asked));
+
+    $result = app(LocalOpportunityFinder::class)->run($site);
+
+    $rows = LinkProspect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()->keyBy('domain');
+    expect($rows->keys()->sort()->values()->all())->toBe(['montclairlocal.news', 'trooperweekly.com'])
+        ->and($rows['montclairlocal.news']->kind)->toBe(LinkProspectKind::Press)
+        ->and($rows['montclairlocal.news']->offices)->toBe(['Montclair, NJ'])
+        ->and($result['by_lane'])->toBe(['press' => 2])
+        ->and($result['dropped_national'])->toBe(3);   // patch.com + nj.com by name, metrodailynews.com by two states
+    expect(LocalOpportunityFinder::isNationalPress('patch.com'))->toBeTrue()
+        ->and(LocalOpportunityFinder::isNationalPress('www.nj.com'))->toBeTrue()    // a subdomain of a national outlet is still national
+        ->and(LocalOpportunityFinder::isNationalPress('nj.com'))->toBeTrue()
+        ->and(LocalOpportunityFinder::isNationalPress('montclairlocal.news'))->toBeFalse();
 });
 
 it('a re-run refreshes the page and offices but keeps the operator\'s status and notes, and never relabels a competitor-intersect row', function () {
@@ -233,7 +270,7 @@ it('the Business step saves the link-building fields with the guardrails: cap cl
         ->and($site->outreach_from_name)->toBe('Eric at Sump Pump Gurus');
 
     Livewire::test(BusinessStep::class)
-        ->set('linkLanes', ['sponsorship', 'membership', 'dealer_locator', 'job_board'])
+        ->set('linkLanes', ['sponsorship', 'membership', 'dealer_locator', 'job_board', 'press'])
         ->set('outreachMonthlyCap', '12')
         ->set('outreachFromEmail', 'Outreach@SumpPumpGurus.com')
         ->call('save');

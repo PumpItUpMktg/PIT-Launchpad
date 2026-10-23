@@ -17,6 +17,7 @@ enum LinkProspectKind: string
     case Membership = 'membership';
     case DealerLocator = 'dealer_locator';
     case JobBoard = 'job_board';
+    case Press = 'press';
 
     public function label(): string
     {
@@ -29,13 +30,14 @@ enum LinkProspectKind: string
             self::Membership => 'Membership',
             self::DealerLocator => 'Dealer locator',
             self::JobBoard => 'Job / training board',
+            self::Press => 'Local press / PR',
         };
     }
 
     /** The lanes the local-opportunity discovery pass searches, in the order they are worth a tenant's time. */
     public static function lanes(): array
     {
-        return [self::DealerLocator, self::Sponsorship, self::Membership, self::JobBoard];
+        return [self::DealerLocator, self::Sponsorship, self::Membership, self::JobBoard, self::Press];
     }
 
     public function isLane(): bool
