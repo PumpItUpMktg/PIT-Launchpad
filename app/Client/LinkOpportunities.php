@@ -7,6 +7,7 @@ use App\Enums\LinkProspectKind;
 use App\Enums\LinkProspectStatus;
 use App\Links\OfficeAttribution;
 use App\Links\Outreach\OutreachGuard;
+use App\Links\Profile\ProspectProfiler;
 use App\Models\LinkProspect;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -93,6 +94,12 @@ class LinkOpportunities
             'open' => $p->status->isOpen(),
             'emails_sent' => (int) $p->emails_sent,
             'last_emailed_at' => $p->last_emailed_at,
+            'name' => $p->profile['name'] ?? null,
+            'overview' => $p->profile['overview'] ?? null,
+            'thumbnail_url' => $p->thumbnail_url,
+            'offer_line' => ProspectProfiler::offerLine($p->profile),
+            'offer_summary' => $p->profile['offer']['summary'] ?? null,
+            'website_link' => $p->profile['offer']['website_link'] ?? null,
         ];
     }
 

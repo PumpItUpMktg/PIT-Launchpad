@@ -111,6 +111,7 @@ use App\KeywordGenerator\Pipeline\KeywordPipeline;
 use App\KeywordGenerator\Pipeline\SitePipelineRefresher;
 use App\KeywordGenerator\Tracking\PositionTracker;
 use App\Links\OutreachKitDrafter;
+use App\Links\Profile\ProspectProfiler;
 use App\Listeners\SyncWireframeKitsOnMigrate;
 use App\Local\Proof\JobCaptureLocalJobs;
 use App\Local\Proof\LocalJobProvider;
@@ -668,6 +669,11 @@ class AppServiceProvider extends ServiceProvider
         // scoring model, one call per post.
         // § Links — the outreach kit writes short copy; the cheap scoring model is enough.
         $this->app->when(OutreachKitDrafter::class)
+            ->needs(ClaudeClient::class)
+            ->give(fn () => $this->app->make(ClaudeClientFactory::class)->scoring());
+
+        // § Links — the organisation profile reads one page and structures what it says; the cheap model is enough.
+        $this->app->when(ProspectProfiler::class)
             ->needs(ClaudeClient::class)
             ->give(fn () => $this->app->make(ClaudeClientFactory::class)->scoring());
 

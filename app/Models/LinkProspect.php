@@ -28,6 +28,11 @@ use Illuminate\Support\Carbon;
  * @property ClientDecision|null $client_decision the client's call; outreach goes only to Interested
  * @property Carbon|null $client_decided_at
  * @property string|null $client_decided_by
+ * @property array<string, mixed>|null $profile the organisation profile (ProspectProfiler): who, where, contacts, offer
+ * @property Carbon|null $profile_read_at
+ * @property bool|null $profile_model_ok
+ * @property string|null $profile_error
+ * @property string|null $thumbnail_url
  * @property int $emails_sent
  * @property Carbon|null $last_emailed_at
  * @property string $id
@@ -67,6 +72,9 @@ class LinkProspect extends Model
             'contact_checked_at' => 'datetime',
             'client_decision' => ClientDecision::class,
             'client_decided_at' => 'datetime',
+            'profile' => 'array',
+            'profile_read_at' => 'datetime',
+            'profile_model_ok' => 'boolean',
             'emails_sent' => 'integer',
             'last_emailed_at' => 'datetime',
         ];

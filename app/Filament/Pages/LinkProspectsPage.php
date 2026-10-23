@@ -8,6 +8,8 @@ use App\Enums\LinkProspectStatus;
 use App\Jobs\FindLinkProspects;
 use App\Jobs\FindLocalOpportunities;
 use App\Jobs\FindProspectContact;
+use App\Jobs\ReadProspectProfile;
+use App\Jobs\ReadProspectProfiles;
 use App\Links\OfficeAttribution;
 use App\Links\Outreach\FollowUpComposer;
 use App\Links\Outreach\GuardResult;
@@ -286,6 +288,35 @@ class LinkProspectsPage extends Page
     {
         $this->contactEmailInput = $email;
         $this->setContact();
+    }
+
+    /** Queue one read of the open prospect's organisation profile (who, where, contacts, offer, thumbnail). */
+    public function readProfile(): void
+    {
+        $prospect = $this->activeProspect();
+        if ($prospect === null) {
+            return;
+        }
+        ReadProspectProfile::dispatch((string) $prospect->id);
+        Notification::make()->success()->title('Reading the organisation')->body('Two page reads and one short model call on the worker. Reopen the panel in a minute.')->send();
+    }
+
+    /** Queue a batch of profile reads for the working tenant: unread first, most local first, bounded per click. */
+    public function readProfiles(): void
+    {
+        $site = $this->site();
+        if ($site === null) {
+            return;
+        }
+        $kind = LinkProspectKind::tryFrom($this->kind)?->isLane() === true ? $this->kind : null;
+        $n = count(ReadProspectProfiles::pending((string) $site->id, $kind, ReadProspectProfiles::DEFAULT_LIMIT));
+        if ($n === 0) {
+            Notification::make()->warning()->title('Nothing unread')->body('Every open opportunity in this view already has a profile.')->send();
+
+            return;
+        }
+        ReadProspectProfiles::dispatch((string) $site->id, $kind, ReadProspectProfiles::DEFAULT_LIMIT);
+        Notification::make()->success()->title("Reading {$n} organisation profile(s)")->body('Up to '.ReadProspectProfiles::DEFAULT_LIMIT.' per click, unread first, most local first — on the worker. Reload in a few minutes.')->send();
     }
 
     /** Queue one read of the prospect's page for a contact address. */
