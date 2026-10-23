@@ -7,6 +7,7 @@ use App\Enums\LinkProspectStatus;
 use App\Filament\Client\Pages\LinkOpportunities as LinkOpportunitiesPage;
 use App\Links\Outreach\OutreachGuard;
 use App\Models\LinkProspect;
+use App\Models\Location;
 use App\Models\OutreachEmail;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -58,6 +59,22 @@ it('shows the client every open opportunity in plain words, split by their decis
     // Honest framing: nothing on the board promises a ranking.
     $text = strtolower(json_encode($board, JSON_THROW_ON_ERROR));
     expect($text)->not->toContain('guarantee')->not->toContain('rank #1')->not->toContain('first page');
+});
+
+it('lists local opportunities under the office that found them and state-wide ones under the corporate location only', function () {
+    ['site' => $site] = ClientHarness::make();
+    $site->forceFill(['corporate_city' => 'Clifton', 'corporate_state' => 'NJ'])->save();
+    $montclair = Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair office']);
+    $trooper = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper office']);
+    loProspect($site, 'njbuilders.org', ['kind' => LinkProspectKind::Membership->value, 'offices' => ['NJ'], 'location_id' => null, 'locality' => 1]);
+    loProspect($site, 'trooperlittleleague.org', ['location_id' => $trooper->id, 'offices' => ['Trooper, PA'], 'locality' => 3]);
+    loProspect($site, 'montclairrotary.org', ['location_id' => $montclair->id, 'offices' => ['Montclair, NJ'], 'locality' => 2]);
+    loProspect($site, 'njhomeblog.com', ['kind' => LinkProspectKind::Local->value, 'url' => null, 'offices' => null, 'locality' => 0, 'competitors' => ['rival.com'], 'competitor_count' => 1]);
+
+    $rows = app(LinkOpportunities::class)->for($site->fresh())['to_review'];
+    expect(array_column($rows, 'domain'))->toBe(['montclairrotary.org', 'trooperlittleleague.org', 'njbuilders.org', 'njhomeblog.com'])
+        ->and(array_column($rows, 'office'))->toBe(['Montclair office', 'Trooper office', 'Corporate (Clifton, NJ) · state-wide organisations, approached once by the business', 'Competitor links (no office — sites linking to competitors near you)'])
+        ->and(array_column($rows, 'office_key'))->toBe([$montclair->id, $trooper->id, 'corporate', 'competitors']);
 });
 
 it('the client decides — Interested, Pass, or back to undecided — only on their own site\'s open prospects', function () {

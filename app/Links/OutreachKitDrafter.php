@@ -132,15 +132,27 @@ final class OutreachKitDrafter
     /** @return array<string, mixed> */
     private function nap(Site $site, ?Location $location): array
     {
-        $profile = $location === null ? null : LocationNapProfile::withoutGlobalScope(SiteScope::class)->where('location_id', $location->id)->first();
+        if ($location === null) {
+            // The company speaks for itself — from the corporate address. State-level bodies (an association,
+            // a manufacturer) are approached once by the company, never once per office.
+            return [
+                'business_name' => (string) $site->brand_name,
+                'address' => trim((string) $site->corporate_street),
+                'city' => trim((string) $site->corporate_city), 'state' => trim((string) $site->corporate_state), 'postal' => trim((string) $site->corporate_postal_code),
+                'phone' => trim((string) $site->phone),
+                'hours' => null, 'categories' => [],
+                'description_short' => null, 'description_long' => null,
+            ];
+        }
+        $profile = LocationNapProfile::withoutGlobalScope(SiteScope::class)->where('location_id', $location->id)->first();
         if ($profile === null) {
-            ['city' => $city, 'state' => $state] = $location?->cityState() ?? ['city' => '', 'state' => ''];
+            ['city' => $city, 'state' => $state] = $location->cityState();
 
             return [
                 'business_name' => (string) $site->brand_name,
-                'address' => trim((string) ($location->address ?? '')),
+                'address' => trim((string) $location->address),
                 'city' => $city, 'state' => $state, 'postal' => '',
-                'phone' => trim((string) ($location->phone ?? '')),
+                'phone' => trim((string) $location->phone),
                 'hours' => null, 'categories' => [],
                 'description_short' => null, 'description_long' => null,
             ];

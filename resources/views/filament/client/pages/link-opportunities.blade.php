@@ -42,6 +42,9 @@
 
     <x-filament::section>
         @forelse ($list as $r)
+            @if ($loop->first || $list[$loop->index - 1]['office_key'] !== $r['office_key'])
+                <h3 class="{{ $loop->first ? '' : 'mt-6 ' }}text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ $r['office_key'] === \App\Links\OfficeAttribution::CORPORATE ? $r['office'] : ($r['office_key'] === \App\Links\OfficeAttribution::COMPETITORS ? 'Sites that link to companies near you' : $r['office'].' office') }}</h3>
+            @endif
             <div class="flex flex-col gap-2 border-b border-gray-100 py-4 last:border-0 sm:flex-row sm:items-start sm:justify-between dark:border-white/10">
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">

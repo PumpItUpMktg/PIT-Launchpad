@@ -15,6 +15,7 @@ use App\Links\Outreach\OutreachSender;
 use App\Links\Outreach\Sender;
 use App\Mail\OutreachMail;
 use App\Models\LinkProspect;
+use App\Models\Location;
 use App\Models\OutreachEmail;
 use App\Models\OutreachKit;
 use App\Models\Scopes\SiteScope;
@@ -246,6 +247,41 @@ it('the contact finder takes a mailto on the page, then an address on the contac
     $manual = outreachProspect($site, ['domain' => 'manual.org', 'url' => 'https://cliftonchamber.org/join', 'contact_email' => 'dana@manual.org', 'contact_source' => 'manual']);
     (new FindProspectContact($manual->id))->handle($finder);
     expect($manual->fresh()->contact_email)->toBe('dana@manual.org')->and($manual->fresh()->contact_candidates)->toBe(['membership@cliftonchamber.org', 'president@cliftonchamber.org']);
+});
+
+it('one organisation, one approach for the whole business: a state-level body speaks for the company with the office picker locked, a local one defaults to the office that found it, and a second office\'s kit cannot send a second pitch', function () {
+    Queue::fake();
+    Filament::setCurrentPanel('admin');
+    $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
+    $site = outreachSite();
+    app(ActiveTenant::class)->set((string) $site->id);
+    $office = Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair office']);
+    $other = Location::factory()->create(['site_id' => $site->id, 'name' => 'Clifton office']);
+    $state = outreachProspect($site, ['domain' => 'njbuilders.org', 'kind' => LinkProspectKind::Membership->value, 'offices' => ['NJ'], 'location_id' => null, 'contact_email' => 'join@njbuilders.org']);
+    $local = outreachProspect($site, ['location_id' => $office->id, 'offices' => ['Montclair, NJ', 'Clifton, NJ']]);
+    outreachKit($site, $local);
+
+    expect(LinkProspectsPage::isStateLevel($state))->toBeTrue()->and(LinkProspectsPage::isStateLevel($local))->toBeFalse();
+
+    $page = Livewire::test(LinkProspectsPage::class)
+        ->call('openKit', $state->id)
+        ->assertSet('kitLocationId', '')
+        ->assertSee('Speaks for the company')
+        ->assertDontSee('Speak for</span>', false)
+        ->set('kitLocationId', (string) $office->id)      // the picker is locked: a stray value is ignored
+        ->assertSet('kitLocationId', '')
+        ->call('openKit', $local->id)
+        ->assertSet('kitLocationId', (string) $office->id)  // the office that found it
+        ->assertSee('Speak for');
+
+    // The pitch goes once per organisation, whichever office speaks: a second kit for the other office cannot send again.
+    $page->set('sendSubject', 'From Montclair')->set('sendBody', 'Hello')->call('approveAndSend');
+    expect(OutreachEmail::withoutGlobalScope(SiteScope::class)->count())->toBe(1);
+    OutreachKit::withoutGlobalScope(SiteScope::class)->create(['site_id' => $site->id, 'location_id' => $other->id, 'target_kind' => OutreachKit::PROSPECT, 'target_domain' => $local->domain,
+        'payload' => ['pitch_subject' => 'From Clifton', 'pitch_body' => 'Hello again'], 'model' => 'scoring', 'model_ok' => true, 'drafted_at' => now()]);
+    $page->set('kitLocationId', (string) $other->id)->set('sendKind', OutreachEmail::PITCH)->set('sendSubject', 'From Clifton')->set('sendBody', 'Hello again')->call('approveAndSend');
+    expect(OutreachEmail::withoutGlobalScope(SiteScope::class)->count())->toBe(1);
+    Queue::assertPushed(SendOutreachEmail::class, 1);
 });
 
 it('the Link prospects page records the client decision, pre-fills the send box from the kit, and Approve & send queues one email', function () {
