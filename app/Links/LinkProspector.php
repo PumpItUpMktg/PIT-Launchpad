@@ -104,8 +104,12 @@ final class LinkProspector
 
         // A prospect nobody has touched (still `new`) that this run did not return was an artefact of an
         // earlier, worse competitor set: drop it. Contacted / acquired / dismissed rows are the operator's.
+        // Only the intersect's own rows: a local-opportunity row (sponsorship, membership, dealer locator,
+        // job board) came from the other search and is never this run's to prune.
         $pruned = LinkProspect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)
-            ->where('status', LinkProspectStatus::New->value)->where('found_at', '<', $now)->delete();
+            ->where('status', LinkProspectStatus::New->value)->where('found_at', '<', $now)
+            ->whereNotIn('kind', array_map(fn (LinkProspectKind $k): string => $k->value, LinkProspectKind::lanes()))
+            ->delete();
 
         $result = ['targets' => $targets, 'returned' => count($rows), 'kept' => $kept, 'new' => $new, 'refreshed' => $refreshed, 'pruned' => $pruned,
             'dropped_spam' => $droppedSpam, 'dropped_rank' => $droppedRank, 'excluded_competitors' => $this->targets->dropped];

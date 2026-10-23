@@ -156,6 +156,21 @@ it('the command names the competitors before the index call, so a refused inters
     expect(LinkProspect::withoutGlobalScope(SiteScope::class)->count())->toBe(0);
 });
 
+it('never prunes a local-opportunity row — the intersect drops only its own untouched competitor-link rows', function () {
+    $site = prospectSite();
+    LinkProspect::withoutGlobalScope(SiteScope::class)->create(['site_id' => $site->id, 'domain' => 'montclairlittleleague.org', 'kind' => LinkProspectKind::Sponsorship, 'status' => LinkProspectStatus::New,
+        'url' => 'https://montclairlittleleague.org/sponsors', 'offices' => ['Montclair, NJ'], 'locality' => 2, 'competitors' => [], 'competitor_count' => 0, 'found_at' => now()->subHour()]);
+    LinkProspect::withoutGlobalScope(SiteScope::class)->create(['site_id' => $site->id, 'domain' => 'oldintersect.org', 'kind' => LinkProspectKind::Local, 'status' => LinkProspectStatus::New,
+        'competitors' => ['gone.com'], 'competitor_count' => 1, 'found_at' => now()->subHour()]);
+    $asked = [];
+    app()->instance(BacklinkProvider::class, intersectProvider([], $asked));
+
+    $r = app(LinkProspector::class)->run($site);
+
+    expect($r['pruned'])->toBe(1);
+    expect(LinkProspect::withoutGlobalScope(SiteScope::class)->pluck('domain')->all())->toBe(['montclairlittleleague.org']);
+});
+
 it('drops the untouched prospects an earlier run produced when the latest run no longer returns them, and keeps the worked ones', function () {
     $site = prospectSite();
     $asked = [];
