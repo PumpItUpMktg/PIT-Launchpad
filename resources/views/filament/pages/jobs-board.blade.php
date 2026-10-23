@@ -168,7 +168,7 @@
                         <div class="jb-hint">The template's columns, or a CRM export as it comes (first / last name, street / city / state / ZIP, Tags, Created Date, J-ID). Each row is geocoded and lands here for review; a row with no notes gets a facts-only write-up from its service, town and date.</div>
                         @if ($csvPreview !== null)
                             <div class="jb-split" style="margin-top:.75rem;">
-                                <div class="jb-lbl">{{ $csvPreview['rows'] }} row(s)@if ($csvPreview['already_imported'] > 0) · {{ $csvPreview['already_imported'] }} already imported (skipped)@endif · {{ count($csvPreview['tags']) }} service tag(s) — each must match a service in the catalog, or be imported as a new one, or be left off</div>
+                                <div class="jb-lbl">{{ $csvPreview['rows'] }} row(s)@if ($csvPreview['already_imported'] > 0) · {{ $csvPreview['already_imported'] }} already imported (skipped)@endif@if ($csvPreview['remaining'] > 0) · this run imports {{ $csvPreview['this_run'] }}, then preview and import the same file again for the next {{ min($csvPreview['remaining'], \App\JobCapture\Capture\CsvJobImporter::MAX_ROWS) }}@endif · {{ count($csvPreview['tags']) }} service tag(s) — each must match a service in the catalog, or be imported as a new one, or be left off</div>
                                 <table style="width:100%;border-collapse:collapse;font-size:.85rem">
                                     <thead><tr style="text-align:left;color:var(--gray-500);font-size:.72rem;text-transform:uppercase"><th style="padding:.35rem .5rem">Tag in the file</th><th>Rows</th><th>Maps to</th></tr></thead>
                                     <tbody>
@@ -191,7 +191,7 @@
                                 </table>
                                 <div class="jb-row" style="margin-top:.5rem;">
                                     <button type="button" class="jb-btn primary" wire:click="importCsv" wire:loading.attr="disabled" wire:target="importCsv">
-                                        <span wire:loading.remove wire:target="importCsv">Import {{ $csvPreview['rows'] - $csvPreview['already_imported'] }} job(s)</span>
+                                        <span wire:loading.remove wire:target="importCsv">Import {{ $csvPreview['this_run'] }} job(s)</span>
                                         <span wire:loading wire:target="importCsv">Importing…</span>
                                     </button>
                                     <button type="button" class="jb-btn" wire:click="cancelCsv">Cancel</button>
