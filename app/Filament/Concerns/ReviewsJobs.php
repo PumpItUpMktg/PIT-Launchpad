@@ -112,6 +112,12 @@ trait ReviewsJobs
     /** The CSV bulk-import upload (a single Livewire file). */
     public mixed $csvFile = null;
 
+    /** The import preview (rows + every service tag with its catalog match or suggestions), or null before "Preview". */
+    public ?array $csvPreview = null;
+
+    /** The operator's choice per tag: a job-type id, CsvJobImporter::AS_NEW, or CsvJobImporter::SKIP. @var array<string, string> */
+    public array $csvMapping = [];
+
     /** Load the enhanced source into the editor for one job. */
     public function startEdit(string $id): void
     {
@@ -477,6 +483,38 @@ trait ReviewsJobs
         return $site !== null && $this->user()->canSeeSite((string) $site->id) ? $site : null;
     }
 
+    /**
+     * Preview an upload before importing: how many rows, how many already in, and every service tag with the
+     * catalog row it matches — or, when it matches nothing, the closest rows to map it to. Nothing is written.
+     */
+    public function previewCsv(): void
+    {
+        if (! $this->can(Capability::EditContent) || $this->siteId === null) {
+            return;
+        }
+        $site = $this->workingSite();
+        if ($site === null || ! $this->csvFile instanceof TemporaryUploadedFile) {
+            Notification::make()->title('Choose a CSV file first.')->warning()->send();
+
+            return;
+        }
+        $preview = app(CsvJobImporter::class)->preview($site, (string) $this->csvFile->get());
+        $mapping = [];
+        foreach ($preview['tags'] as $t) {
+            // Pre-fill: the match when there is one, else the best suggestion, else "import as new".
+            $mapping[$t['tag']] = $t['job_type_id'] ?? ($t['suggestions'][0]['id'] ?? CsvJobImporter::AS_NEW);
+        }
+        $this->csvPreview = $preview;
+        $this->csvMapping = $mapping;
+    }
+
+    public function cancelCsv(): void
+    {
+        $this->csvPreview = null;
+        $this->csvMapping = [];
+        $this->csvFile = null;
+    }
+
     /** Import previous jobs in bulk from an uploaded CSV — each row becomes a captured job in this queue. */
     public function importCsv(): void
     {
@@ -490,8 +528,10 @@ trait ReviewsJobs
             return;
         }
 
-        $result = app(CsvJobImporter::class)->import($site, (string) $this->csvFile->get());
+        $result = app(CsvJobImporter::class)->import($site, (string) $this->csvFile->get(), $this->csvMapping);
         $this->csvFile = null;
+        $this->csvPreview = null;
+        $this->csvMapping = [];
 
         $skipped = count($result['skipped']);
         $body = $skipped > 0

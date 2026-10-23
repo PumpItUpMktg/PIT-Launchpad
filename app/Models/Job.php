@@ -52,6 +52,10 @@ use Illuminate\Support\Str;
  * @property Carbon|null $indexnow_submitted_at when the live job URL was accepted by IndexNow (drives the "Submitted to Bing" pill)
  * @property string|null $last_publish_error
  * @property string|null $reject_reason
+ * @property bool $facts_only the write-up was composed from facts (service, town, season) — no tech notes existed
+ * @property string|null $write_up_angle the angle a facts-only write-up took (JobEnhancer::ANGLES)
+ * @property string|null $similar_to_job_id flagged: reads too like this earlier job; blocks approve until edited / re-enhanced
+ * @property string|null $import_key the source system's id for an imported row (re-import never duplicates)
  */
 class Job extends Model
 {
@@ -73,6 +77,7 @@ class Job extends Model
     protected function casts(): array
     {
         return [
+            'facts_only' => 'boolean',
             'source' => JobSource::class,
             'status' => JobStatus::class,
             'performed_at' => 'date',

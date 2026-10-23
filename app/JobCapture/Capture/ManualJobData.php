@@ -20,5 +20,7 @@ final class ManualJobData
         public readonly ?string $rawDescription = null,
         public readonly array $jobTypes = [],
         public readonly array $photos = [],
+        /** The source system's id (a CRM job id) — a re-import of the same row is skipped. */
+        public readonly ?string $importKey = null,
     ) {}
 }
