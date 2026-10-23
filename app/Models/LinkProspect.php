@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Enums\ClientDecision;
 use App\Enums\LinkProspectKind;
 use App\Enums\LinkProspectStatus;
 use App\Models\Concerns\BelongsToSite;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -20,6 +22,14 @@ use Illuminate\Support\Carbon;
  * @property list<string>|null $offices
  * @property int $locality 0–3
  * @property string|null $contact_email
+ * @property string|null $contact_source mailto | page | manual
+ * @property list<string>|null $contact_candidates
+ * @property Carbon|null $contact_checked_at
+ * @property ClientDecision|null $client_decision the client's call; outreach goes only to Interested
+ * @property Carbon|null $client_decided_at
+ * @property string|null $client_decided_by
+ * @property int $emails_sent
+ * @property Carbon|null $last_emailed_at
  * @property string $id
  * @property string $site_id
  * @property string $domain
@@ -53,6 +63,18 @@ class LinkProspect extends Model
             'status' => LinkProspectStatus::class,
             'first_seen' => 'date',
             'found_at' => 'datetime',
+            'contact_candidates' => 'array',
+            'contact_checked_at' => 'datetime',
+            'client_decision' => ClientDecision::class,
+            'client_decided_at' => 'datetime',
+            'emails_sent' => 'integer',
+            'last_emailed_at' => 'datetime',
         ];
+    }
+
+    /** @return HasMany<OutreachEmail, $this> */
+    public function emails(): HasMany
+    {
+        return $this->hasMany(OutreachEmail::class, 'link_prospect_id');
     }
 }
