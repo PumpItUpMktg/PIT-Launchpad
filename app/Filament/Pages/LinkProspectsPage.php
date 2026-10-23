@@ -68,6 +68,10 @@ class LinkProspectsPage extends Page
     #[Url]
     public string $kind = 'all';
 
+    /** '' = the cards (one per service area); else an office id, 'corporate' or 'competitors' = that area's own view. */
+    #[Url]
+    public string $office = '';
+
     /** The prospect whose kit is open in the side panel. */
     public ?string $activeProspectId = null;
 
@@ -145,6 +149,71 @@ class LinkProspectsPage extends Page
         usort($groups, fn (array $x, array $y): int => $x['order'] <=> $y['order']);
 
         return array_map(fn (array $g): array => ['key' => $g['key'], 'label' => $g['label'], 'rows' => $g['rows']], $groups);
+    }
+
+    /**
+     * One card per service area: the office (or Corporate / Competitor links), how many opportunities in each
+     * lane, and the strongest three — with their thumbnails and offer lines — to glance at.
+     *
+     * @return list<array{key: string, label: string, count: int, by_kind: array<string, int>, interested: int, top: list<LinkProspect>}>
+     */
+    public function getOfficeCardsProperty(): array
+    {
+        $cards = [];
+        foreach ($this->getGroupsProperty() as $g) {
+            $byKind = [];
+            $interested = 0;
+            foreach ($g['rows'] as $p) {
+                $byKind[$p->kind->label()] = ($byKind[$p->kind->label()] ?? 0) + 1;
+                if ($p->client_decision === ClientDecision::Interested) {
+                    $interested++;
+                }
+            }
+            $top = $g['rows'];
+            usort($top, fn (LinkProspect $a, LinkProspect $b): int => [$b->profile !== null ? 1 : 0, $b->locality, (int) $b->rank] <=> [$a->profile !== null ? 1 : 0, $a->locality, (int) $a->rank]);
+            $cards[] = ['key' => $g['key'], 'label' => $g['label'], 'count' => count($g['rows']), 'by_kind' => $byKind, 'interested' => $interested, 'top' => array_slice($top, 0, 3)];
+        }
+
+        return $cards;
+    }
+
+    /** The open service area's own rows (the group whose key is `$office`), or [] on the cards view. */
+    public function getOfficeGroupProperty(): ?array
+    {
+        if ($this->office === '') {
+            return null;
+        }
+        foreach ($this->getGroupsProperty() as $g) {
+            if ($g['key'] === $this->office) {
+                return $g;
+            }
+        }
+
+        return ['key' => $this->office, 'label' => $this->officeLabel($this->office), 'rows' => []];
+    }
+
+    public function openOffice(string $key): void
+    {
+        $this->office = $key;
+    }
+
+    public function closeOffice(): void
+    {
+        $this->office = '';
+    }
+
+    private function officeLabel(string $key): string
+    {
+        $site = $this->site();
+        if ($key === OfficeAttribution::CORPORATE) {
+            return $site !== null ? OfficeAttribution::corporateLabel($site) : 'Corporate';
+        }
+        if ($key === OfficeAttribution::COMPETITORS) {
+            return 'Competitor links';
+        }
+        $name = $site === null ? null : Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($key)->value('name');
+
+        return is_string($name) && $name !== '' ? $name : 'Office';
     }
 
     /** @return array{count: int, last_found_at: Carbon|null, by_status: array<string, int>} */

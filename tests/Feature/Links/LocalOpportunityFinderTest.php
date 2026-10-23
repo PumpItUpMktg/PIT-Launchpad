@@ -259,11 +259,33 @@ it('the Link prospects table groups rows by office, with state-wide bodies under
     $mk('montclairlittleleague.org', ['location_id' => $montclair->id, 'offices' => ['Montclair, NJ']]);
     $mk('njhomeblog.com', ['kind' => LinkProspectKind::Local->value, 'competitors' => ['rival.com'], 'competitor_count' => 1]);
 
-    $groups = Livewire::test(LinkProspectsPage::class)
-        ->assertSeeInOrder(['Montclair office', 'montclairlittleleague.org', 'Clifton office', 'cliftonrotary.org', 'Corporate (Clifton, NJ)', 'njbuilders.org', 'Competitor links', 'njhomeblog.com'])
-        ->instance()->groups;
+    // The landing is one card per service area, in office order, then Corporate, then Competitor links — each with its strongest rows.
+    $page = Livewire::test(LinkProspectsPage::class)
+        ->assertSet('office', '')
+        ->assertSeeInOrder(['Montclair office', 'montclairlittleleague.org', 'Clifton office', 'cliftonrotary.org', 'Corporate · state-wide', 'njbuilders.org', 'Competitor links', 'njhomeblog.com']);
+    $groups = $page->instance()->groups;
     expect(array_column($groups, 'key'))->toBe([$montclair->id, $clifton->id, 'corporate', 'competitors'])
         ->and(array_map(fn ($g) => count($g['rows']), $groups))->toBe([1, 1, 1, 1]);
+    $cards = $page->instance()->officeCards;
+    expect(array_column($cards, 'count'))->toBe([1, 1, 1, 1])
+        ->and($cards[0]['by_kind'])->toBe(['Sponsorship' => 1])
+        ->and($cards[2]['by_kind'])->toBe(['Membership' => 1])
+        ->and($cards[2]['label'])->toContain('Corporate (Clifton, NJ)');
+
+    // Click-through: one service area, only its rows, as cards with the row controls; back returns to the cards.
+    $page->call('openOffice', (string) $clifton->id)
+        ->assertSet('office', (string) $clifton->id)
+        ->assertSee('All service areas')
+        ->assertSee('Clifton office')
+        ->assertSee('cliftonrotary.org')
+        ->assertDontSee('montclairlittleleague.org')
+        ->assertDontSee('njbuilders.org')
+        ->assertSee('Pitch')
+        ->call('openOffice', 'corporate')
+        ->assertSee('Corporate · state-wide')->assertSee('njbuilders.org')->assertDontSee('cliftonrotary.org')
+        ->call('closeOffice')
+        ->assertSet('office', '')
+        ->assertSee('Montclair office');
 });
 
 it('the Link prospects page queues the opportunity search and filters by lane', function () {
