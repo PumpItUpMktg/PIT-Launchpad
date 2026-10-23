@@ -36,6 +36,18 @@ final class LocalOpportunityFinder
         'membership' => ['member', 'chamber', 'association', 'directory', 'join'],
         'dealer_locator' => ['dealer', 'installer', 'locator', 'where-to-buy', 'find-a-', 'contractor-locator', 'pro-locator', 'certified'],
         'job_board' => ['career', 'job', 'employ', 'apprentice', 'workforce', 'hiring', 'trade-school', 'training'],
+        'press' => ['news', 'patch', 'gazette', 'times', 'journal', 'press', 'herald', 'courier', 'tribune', 'submit-a-story', 'news-tip', 'press-release', 'daily', 'weekly'],
+    ];
+
+    /**
+     * Press is local or it is nothing: national and state-wide outlets, and the networks whose town pages
+     * sit on one national domain, are dropped by name — and any press domain that turns up for offices in
+     * more than one state is dropped by the data. Two states means a metro or regional outlet, not a town's.
+     */
+    private const NATIONAL_PRESS = [
+        'nj.com', 'patch.com', 'nytimes.com', 'nypost.com', 'nydailynews.com', 'washingtonpost.com', 'usatoday.com', 'apnews.com', 'reuters.com',
+        'cnn.com', 'foxnews.com', 'nbcnews.com', 'cbsnews.com', 'abcnews.go.com', 'msn.com', 'yahoo.com', 'news.google.com', 'bing.com',
+        'inquirer.com', 'philly.com', 'baltimoresun.com', 'newsday.com', 'tapinto.net', 'wikipedia.org', 'wikimedia.org',
     ];
 
     public function __construct(
@@ -77,6 +89,11 @@ final class LocalOpportunityFinder
                         continue;
                     }
                     $lane = $this->lane($r->url, $q['lane']);
+                    if ($lane === LinkProspectKind::Press && self::isNationalPress($domain)) {
+                        $droppedNational++;
+
+                        continue;
+                    }
                     $locality = $this->locality($r->url, $q['office']);
                     $score = $locality * 10 + max(0, 20 - $r->position);
                     if (! isset($candidates[$domain]) || $score > $candidates[$domain]['score']) {
@@ -96,6 +113,15 @@ final class LocalOpportunityFinder
         } catch (Throwable $e) {
             $this->record($site, ['status' => LinkProspectRun::FAILED, 'error' => Str::limit($e->getMessage(), 500), 'queries' => count($plan), 'returned' => $returned]);
             throw $e;
+        }
+
+        // Press is local or it is nothing: an outlet that came up for offices in more than one state is a
+        // metro or regional paper, not a town's — dropped as national.
+        foreach ($candidates as $domain => $c) {
+            if ($c['lane'] === LinkProspectKind::Press && count(self::statesOf($c['offices'])) > 1) {
+                unset($candidates[$domain]);
+                $droppedNational++;
+            }
         }
 
         // Authority for the strongest candidates (bounded), then store.
@@ -151,6 +177,32 @@ final class LocalOpportunityFinder
     }
 
     /** The lane a result page belongs to: what the URL says about itself, else the lane of the search that found it. */
+    public static function isNationalPress(string $domain): bool
+    {
+        foreach (self::NATIONAL_PRESS as $n) {
+            if ($domain === $n || str_ends_with($domain, '.'.$n)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** The states behind office labels ("Montclair, NJ" → NJ; a bare "NJ" → NJ). @param list<string> $offices @return list<string> */
+    private static function statesOf(array $offices): array
+    {
+        $states = [];
+        foreach ($offices as $o) {
+            $parts = array_map('trim', explode(',', $o));
+            $st = strtoupper((string) end($parts));
+            if (preg_match('/^[A-Z]{2}$/', $st) === 1) {
+                $states[$st] = true;
+            }
+        }
+
+        return array_keys($states);
+    }
+
     private function lane(string $url, LinkProspectKind $fromQuery): LinkProspectKind
     {
         $path = strtolower((string) parse_url($url, PHP_URL_PATH)).' '.strtolower((string) parse_url($url, PHP_URL_HOST));

@@ -43,9 +43,11 @@ final class ProspectProfiler
         $pages = [['url' => $start, 'text' => $facts['text']]];
 
         // One hop: a packages / levels / join page for the offer, else a contact page for the people.
-        $hopWords = $prospect->kind === LinkProspectKind::Membership
-            ? ['membership', 'join', 'dues', 'benefits', 'contact']
-            : ['sponsor', 'package', 'level', 'tier', 'partner', 'donat', 'support', 'contact'];
+        $hopWords = match ($prospect->kind) {
+            LinkProspectKind::Membership => ['membership', 'join', 'dues', 'benefits', 'contact'],
+            LinkProspectKind::Press => ['submit', 'tip', 'press-release', 'announcement', 'advertis', 'about', 'contact', 'staff'],
+            default => ['sponsor', 'package', 'level', 'tier', 'partner', 'donat', 'support', 'contact'],
+        };
         $hop = PageFacts::linkMatching($facts['links'], $hopWords, $start);
         if ($hop !== null && rtrim($hop, '/') !== rtrim($start, '/')) {
             $html2 = $this->fetch($hop);
@@ -70,6 +72,7 @@ final class ProspectProfiler
             'contacts' => [],
             'social' => $facts['social'],
             'offer' => ['kind' => 'none', 'levels' => [], 'benefits' => [], 'website_link' => self::LINK_NOT_MENTIONED, 'deadline' => null, 'apply_url' => null, 'summary' => null],
+            'press' => null,
             'pages_read' => array_column($pages, 'url'),
         ];
 
@@ -106,6 +109,29 @@ final class ProspectProfiler
     /** One line a person can read on a card: "Gold $2,500 · Silver $1,000 · website link offered". */
     public static function offerLine(?array $profile): ?string
     {
+        $press = $profile['press'] ?? null;
+        if (is_array($press) && ($press['is_press'] ?? false) === true) {
+            $parts = [];
+            if (($press['tips_email'] ?? null) !== null) {
+                $parts[] = 'news tips: '.$press['tips_email'];
+            } elseif (($press['submit_url'] ?? null) !== null) {
+                $parts[] = 'story form on the site';
+            }
+            if (($press['press_releases'] ?? null) === true) {
+                $parts[] = 'press releases accepted';
+            }
+            if (($press['announcements'] ?? null) === true) {
+                $parts[] = 'community announcements';
+            }
+            if (($press['sponsored_content'] ?? null) === true) {
+                $parts[] = 'sponsored posts sold';
+            }
+            $parts[] = match ($press['links_out'] ?? null) {
+                true => 'articles link out', false => 'articles do not link out', default => 'linking unknown'
+            };
+
+            return 'PR: '.implode(' · ', $parts);
+        }
         $offer = $profile['offer'] ?? null;
         if (! is_array($offer) || ($offer['kind'] ?? 'none') === 'none') {
             return null;
@@ -149,7 +175,10 @@ final class ProspectProfiler
     {
         $json = fn (mixed $v): string => (string) json_encode($v, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $parts = [];
-        $parts[] = 'Profile the organisation behind these page(s) for a local business deciding whether to approach them as a '.($prospect->kind === LinkProspectKind::Membership ? 'member' : 'sponsor').'.';
+        $press = $prospect->kind === LinkProspectKind::Press;
+        $parts[] = $press
+            ? 'Profile the local news outlet behind these page(s) for a local business deciding whether to pitch them a story or offer itself as a local source (a PR opportunity).'
+            : 'Profile the organisation behind these page(s) for a local business deciding whether to approach them as a '.($prospect->kind === LinkProspectKind::Membership ? 'member' : 'sponsor').'.';
         $parts[] = 'FACTS ALREADY TAKEN FROM THE PAGE (do not restate; use them to name people and places): '.$json(['title' => $facts['title'], 'emails' => $facts['emails'], 'phones' => $facts['phones'], 'social' => array_keys($facts['social'])]);
         foreach ($pages as $i => $p) {
             $parts[] = 'PAGE '.($i + 1).' ('.$p['url'].") TEXT:\n".Str::limit($p['text'], $i === 0 ? 9000 : 5000, "\n[truncated]");
@@ -158,7 +187,9 @@ final class ProspectProfiler
             .'benefits is drawn ONLY from this list: '.implode(', ', self::BENEFITS).'. '
             .'website_link is "offered" when the page says sponsors/members get a link to their website, "implied" when it says logos or listings appear on their website without saying "link", else "not_mentioned". '
             .'contacts are named people with a role on the page (sponsorship chair, membership director, executive director…), email only when it sits next to the name.';
-        $parts[] = 'Return ONLY JSON: {"name":"<organisation name>","overview":"<2 sentences, plain words, what they are and do>","org_kind":"<league|chamber|association|nonprofit|school|government|manufacturer|business|media|other>","address":"<street, town, state zip or null>","town":"<town, ST or null>","contacts":[{"name":"","role":"","email":null}],"offer":{"kind":"<sponsorship|membership|donation|none>","levels":[{"name":"","price":"","includes":["<plain words>"]}],"benefits":["<from the list>"],"website_link":"<offered|implied|not_mentioned>","deadline":null,"apply_url":null,"summary":"<one sentence on what a sponsor/member gets, or null>"}}';
+        $parts[] = $press
+            ? 'Return ONLY JSON: {"name":"<outlet name>","overview":"<2 sentences, plain words: what it covers and for whom>","org_kind":"media","address":"<street, town, state zip or null>","town":"<town, ST or null>","contacts":[{"name":"","role":"<editor|reporter|publisher…>","email":null}],"press":{"is_press":<true when this is a news / community-news outlet, false otherwise>,"coverage_area":"<towns or county it covers, or null>","tips_email":"<the news-tip / editor address on the page or null>","submit_url":"<a submit-a-story / press-release / announcement form URL or null>","press_releases":<true|false|null — does it accept press releases>,"announcements":<true|false|null — community announcements or calendar>,"sponsored_content":<true|false|null — sells sponsored posts or business features>,"links_out":<true|false|null — do its articles link to businesses>,"beats":["<local beats it covers, e.g. weather, home, business, schools>"]},"offer":{"kind":"none","levels":[],"benefits":[],"website_link":"not_mentioned","deadline":null,"apply_url":null,"summary":null}}'
+            : 'Return ONLY JSON: {"name":"<organisation name>","overview":"<2 sentences, plain words, what they are and do>","org_kind":"<league|chamber|association|nonprofit|school|government|manufacturer|business|media|other>","address":"<street, town, state zip or null>","town":"<town, ST or null>","contacts":[{"name":"","role":"","email":null}],"offer":{"kind":"<sponsorship|membership|donation|none>","levels":[{"name":"","price":"","includes":["<plain words>"]}],"benefits":["<from the list>"],"website_link":"<offered|implied|not_mentioned>","deadline":null,"apply_url":null,"summary":"<one sentence on what a sponsor/member gets, or null>"}}';
 
         return implode("\n\n", $parts);
     }
@@ -200,6 +231,20 @@ final class ProspectProfiler
         }
         $kind = $str($offer['kind'] ?? null, 20);
         $link = $str($offer['website_link'] ?? null, 20);
+        $bool = fn (mixed $v): ?bool => is_bool($v) ? $v : null;
+        $pressIn = is_array($d['press'] ?? null) ? $d['press'] : null;
+        $tips = $pressIn !== null ? $str($pressIn['tips_email'] ?? null, 120) : null;
+        $press = $pressIn === null ? null : [
+            'is_press' => ($pressIn['is_press'] ?? null) === true,
+            'coverage_area' => $str($pressIn['coverage_area'] ?? null, 160),
+            'tips_email' => $tips !== null && filter_var($tips, FILTER_VALIDATE_EMAIL) !== false ? strtolower($tips) : null,
+            'submit_url' => $str($pressIn['submit_url'] ?? null, 500),
+            'press_releases' => $bool($pressIn['press_releases'] ?? null),
+            'announcements' => $bool($pressIn['announcements'] ?? null),
+            'sponsored_content' => $bool($pressIn['sponsored_content'] ?? null),
+            'links_out' => $bool($pressIn['links_out'] ?? null),
+            'beats' => array_slice(array_values(array_filter(array_map(fn ($x) => $str($x, 40), is_array($pressIn['beats'] ?? null) ? $pressIn['beats'] : []))), 0, 8),
+        ];
 
         return [
             'name' => $str($d['name'] ?? null, 120),
@@ -208,6 +253,7 @@ final class ProspectProfiler
             'address' => $str($d['address'] ?? null, 160),
             'town' => $str($d['town'] ?? null, 80),
             'contacts' => $contacts,
+            'press' => $press,
             'offer' => [
                 'kind' => in_array($kind, ['sponsorship', 'membership', 'donation'], true) ? $kind : 'none',
                 'levels' => $levels,

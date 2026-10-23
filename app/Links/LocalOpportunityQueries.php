@@ -72,6 +72,13 @@ final class LocalOpportunityQueries
                 $add(LinkProspectKind::JobBoard, "{$county} County {$state} workforce development employer partners", $office->id, $label);
                 $add(LinkProspectKind::JobBoard, "{$county} County {$state} trade school employer partners", $office->id, $label);
             }
+            if (in_array(LinkProspectKind::Press, $lanes, true)) {
+                $add(LinkProspectKind::Press, "{$city} {$state} local news", $office->id, $label);
+                $add(LinkProspectKind::Press, "{$city} {$state} community news submit a story", $office->id, $label);
+                if ($county !== null) {
+                    $add(LinkProspectKind::Press, "{$county} County {$state} newspaper", $office->id, $label);
+                }
+            }
         }
 
         foreach (array_keys($states) as $state) {

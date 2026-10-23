@@ -11,6 +11,7 @@
         \App\Enums\LinkProspectKind::Membership => 'primary',
         \App\Enums\LinkProspectKind::DealerLocator => 'primary',
         \App\Enums\LinkProspectKind::JobBoard => 'primary',
+        \App\Enums\LinkProspectKind::Press => 'warning',
         default => 'gray',
     };
 @endphp
@@ -291,7 +292,21 @@
                                     <div style="color:var(--gray-500)">@foreach ($pf['social'] as $k => $u)<a href="{{ $u }}" target="_blank" rel="noopener" style="margin-right:.5rem;text-decoration:underline">{{ ucfirst($k) }}</a>@endforeach</div>
                                 @endif
                                 @php($offer = $pf['offer'] ?? null)
-                                @if (is_array($offer) && ($offer['kind'] ?? 'none') !== 'none')
+                                @php($pr = $pf['press'] ?? null)
+                                @if (is_array($pr) && ($pr['is_press'] ?? false) === true)
+                                    <div style="margin-top:.25rem;padding:.5rem .6rem;border-radius:.375rem;background:#fff;border:1px solid var(--gray-200)">
+                                        <div style="font-weight:600">PR opportunity · <span style="color:{{ ($pr['links_out'] ?? null) === true ? '#15803d' : 'var(--gray-500)' }}">{{ match ($pr['links_out'] ?? null) { true => 'articles link out', false => 'articles do not link out', default => 'linking unknown' } }}</span></div>
+                                        @if (($pr['coverage_area'] ?? null) !== null)<div style="color:var(--gray-600)">Covers {{ $pr['coverage_area'] }}</div>@endif
+                                        @if (($pr['tips_email'] ?? null) !== null)<div>News tips: <button type="button" wire:click="pickContact('{{ $pr['tips_email'] }}')" style="border:0;background:none;color:#2563eb;text-decoration:underline;cursor:pointer;font-size:.8rem">{{ $pr['tips_email'] }}</button></div>@endif
+                                        @if (($pr['submit_url'] ?? null) !== null)<div><a href="{{ $pr['submit_url'] }}" target="_blank" rel="noopener" style="text-decoration:underline;color:#2563eb">Submit a story / press release ↗</a></div>@endif
+                                        <div style="color:var(--gray-500);margin-top:.2rem">
+                                            {{ ($pr['press_releases'] ?? null) === true ? 'Press releases accepted' : (($pr['press_releases'] ?? null) === false ? 'No press releases' : 'Press releases: not stated') }}
+                                            · {{ ($pr['announcements'] ?? null) === true ? 'community announcements' : 'no announcements section stated' }}
+                                            · {{ ($pr['sponsored_content'] ?? null) === true ? 'sells sponsored posts' : 'sponsored posts: not stated' }}
+                                        </div>
+                                        @if (($pr['beats'] ?? []) !== [])<div style="color:var(--gray-500)">Beats: {{ implode(', ', $pr['beats']) }}</div>@endif
+                                    </div>
+                                @elseif (is_array($offer) && ($offer['kind'] ?? 'none') !== 'none')
                                     <div style="margin-top:.25rem;padding:.5rem .6rem;border-radius:.375rem;background:#fff;border:1px solid var(--gray-200)">
                                         <div style="font-weight:600">{{ ucfirst($offer['kind']) }} offer · <span style="color:{{ ($offer['website_link'] ?? '') === 'offered' ? '#15803d' : (($offer['website_link'] ?? '') === 'implied' ? '#b45309' : 'var(--gray-500)') }}">{{ match ($offer['website_link'] ?? '') { 'offered' => 'website link offered', 'implied' => 'link implied (logo / listing on their site)', default => 'no link mentioned' } }}</span></div>
                                         @if (($offer['summary'] ?? null) !== null)<div style="color:var(--gray-600)">{{ $offer['summary'] }}</div>@endif
