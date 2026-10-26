@@ -23,6 +23,7 @@ class CoverLegacy404sCommand extends Command
     protected $signature = 'launchpad:cover-legacy-404s
         {--site= : Site id or brand name (required)}
         {--from= : Path to a file of legacy URLs, one per line (e.g. a Search Console 404 export); # comments and blanks ignored}
+        {--paths= : Legacy paths typed inline, comma- or space-separated (e.g. /category/old-one/,/tag/radon/) — for a console with no file upload}
         {--apply : Persist the 301 redirect rows}
         {--limit=25 : How many rows to print per reason group}';
 
@@ -53,6 +54,13 @@ class CoverLegacy404sCommand extends Command
             }
             $extraUrls = $this->readUrls($from);
             $this->line(sprintf('  Read %d URL(s) from %s.', count($extraUrls), $from));
+        }
+
+        $inline = trim((string) $this->option('paths'));
+        if ($inline !== '') {
+            $typed = array_values(array_filter(array_map('trim', preg_split('/[\s,]+/', $inline) ?: []), fn (string $p): bool => $p !== ''));
+            $extraUrls = array_values(array_unique([...$extraUrls, ...$typed]));
+            $this->line(sprintf('  %d path(s) typed inline.', count($typed)));
         }
 
         $plan = $planner->planCoverage($site, $extraUrls);

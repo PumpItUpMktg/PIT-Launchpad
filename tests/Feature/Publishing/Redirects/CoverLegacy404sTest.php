@@ -76,6 +76,41 @@ it('covers every legacy url with a 301 — cascade match, else hub, else home', 
         ->and($reasons['/check-valve-care'])->toBe('fallback_home');
 });
 
+it('sends a blog archive with no page of its own to the blog index, a category that matches a live page to that page, and falls back as before when the site has no blog', function () {
+    $site = cov404Site();
+    Content::factory()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'blog', 'title' => 'Blog', 'page_type' => PageType::Utility]);
+
+    $plan = app(LegacyRedirectPlanner::class)->planCoverage($site, [
+        '/category/backup-solutions/',                       // nothing of its own → the blog index
+        '/tag/radon-testing/',                               // same
+        '/category/sump-pump-installation/',                 // the category of a live page → that page
+        '/category/installation-and-diy-tips/page/3/',       // a paged archive → the blog index
+        '/feed/',
+    ]);
+    $to = collect($plan['redirect'])->keyBy('from');
+    expect($to['/category/backup-solutions']['to'])->toBe('/blog')->and($to['/category/backup-solutions']['reason'])->toBe('archive_blog')
+        ->and($to['/tag/radon-testing']['to'])->toBe('/blog')
+        ->and($to['/category/sump-pump-installation']['to'])->toBe('/sump-pump-installation')
+        ->and($to['/category/installation-and-diy-tips/page/3']['to'])->toBe('/blog')
+        ->and($to['/feed']['to'])->toBe('/blog');
+    expect(LegacyRedirectPlanner::isArchive('/category/x/'))->toBeTrue()
+        ->and(LegacyRedirectPlanner::isArchive('/author/eric'))->toBeTrue()
+        ->and(LegacyRedirectPlanner::isArchive('/sump-pump-repair/'))->toBeFalse();
+
+    // Without a blog page the old fallback stands (closest hub, else home) — never a dead "/blog".
+    $noBlog = cov404Site();
+    $plan2 = app(LegacyRedirectPlanner::class)->planCoverage($noBlog, ['/category/backup-solutions/']);
+    expect($plan2['redirect'][0]['to'])->not->toBe('/blog')->and($plan2['redirect'][0]['reason'])->toStartWith('fallback_');
+
+    // The command takes the paths inline for a console with no file upload.
+    CurrentSite::set($site->id);   // back to the first tenant (the second fixture locked its own)
+    $this->artisan('launchpad:cover-legacy-404s --site='.$site->id.' --paths="/category/backup-solutions/, /tag/radon-testing/" --apply')
+        ->expectsOutputToContain('2 path(s) typed inline.')
+        ->assertSuccessful();
+    expect(Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('from_url', '/category/backup-solutions')->value('to_url'))->toBe('/blog')
+        ->and(Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('from_url', '/tag/radon-testing')->value('to_url'))->toBe('/blog');
+});
+
 it('unions the supplied 404 list with the GSC impression inventory', function () {
     $site = cov404Site();
     cov404Daily($site, 'https://spg.example/old-writeup/', 140); // in GSC, not in the list

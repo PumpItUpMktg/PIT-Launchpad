@@ -209,8 +209,14 @@ class LegacyRedirectPlanner
             }
 
             $topQuery = $this->inventory->topQuery($site, $url);
-            $target = $this->route($path, $topQuery, $livePaths, $leafToPath, $keywordToPath, $locationPages)
-                ?? $this->fallbackTarget($this->denumber($this->leaf($path)), $leafToPath);
+            $target = $this->route($path, $topQuery, $livePaths, $leafToPath, $keywordToPath, $locationPages);
+            if ($target === null) {
+                // A blog archive (a category, tag or author page, a paged index) with no page of its own to
+                // route to belongs on the blog index, not the home page — when the site has one.
+                $target = self::isArchive($path) && isset($livePaths['/blog'])
+                    ? ['to' => '/blog', 'code' => 301, 'reason' => 'archive_blog']
+                    : $this->fallbackTarget($this->denumber($this->leaf($path)), $leafToPath);
+            }
 
             $redirect[] = [
                 'from' => '/'.$key, 'to' => $target['to'], 'code' => 301,
@@ -479,6 +485,16 @@ class LegacyRedirectPlanner
         $path = strtolower(trim($path, '/'));
 
         return $path === '' ? '' : '/'.$path;
+    }
+
+    /** A WordPress blog archive path: category / tag / author archives, a paged index, a feed. */
+    public static function isArchive(string $path): bool
+    {
+        $path = '/'.ltrim(strtolower($path), '/');
+
+        return preg_match('#^/(category|tag|author)(/|$)#', $path) === 1
+            || preg_match('#/page/\d+/?$#', $path) === 1
+            || preg_match('#/feed/?$#', $path) === 1;
     }
 
     /** Normalize an already-path-ish key (existing redirect from_url) for comparison. */
