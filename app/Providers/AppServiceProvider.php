@@ -114,9 +114,9 @@ use App\Links\OutreachKitDrafter;
 use App\Links\Profile\ProspectProfiler;
 use App\Listeners\SyncWireframeKitsOnMigrate;
 use App\Local\Proof\JobCaptureLocalJobs;
+use App\Local\Proof\JobCaptureServiceJobs;
 use App\Local\Proof\LocalJobProvider;
 use App\Local\Proof\LocalReviewProvider;
-use App\Local\Proof\NullServiceJobs;
 use App\Local\Proof\ServiceJobProvider;
 use App\Local\Proof\ServiceReviewProvider;
 use App\Locations\Dma\MetroResolver;
@@ -550,7 +550,9 @@ class AppServiceProvider extends ServiceProvider
         // the job-type ↔ service mapping is wired.)
         $this->app->bind(LocalJobProvider::class, JobCaptureLocalJobs::class);
         $this->app->bind(ServiceReviewProvider::class, DbServiceReviewProvider::class);
-        $this->app->bind(ServiceJobProvider::class, NullServiceJobs::class);
+        // Service pages show the site's recent published jobs for THAT service (matched through the job-type
+        // vocabulary's catalog link, else the label's slug) — newest first.
+        $this->app->bind(ServiceJobProvider::class, JobCaptureServiceJobs::class);
         // Card-facing GSC: the real bridge onto the shared Google grant (PR-A). It reports "connected"
         // only once the grant is live AND the Site has a GSC property picked; until then connected() is
         // false and the cards show the honest connect/collecting prompt (same as the old Null default).
