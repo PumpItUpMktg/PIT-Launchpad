@@ -17,6 +17,7 @@ use App\Local\Proof\LocalReviewProvider;
 use App\Local\Proof\NullLocalReviews;
 use App\Local\Proof\ServiceJobProvider;
 use App\Local\Proof\ServiceReviewProvider;
+use App\Locations\Sources\TownSourceResolver;
 use App\Models\Content;
 use App\Models\ConversionConfig;
 use App\Models\CoverageArea;
@@ -925,6 +926,7 @@ final class BlockContentAssembler
             googleReviews: $isTown ? [] : $this->googleReviews($location),
             jobs: $this->locationJobs($content, $location, $isTown),
             localPosts: $this->localPosts($content, $city),
+            sources: $isTown ? $this->localSources($content, $city) : [],
             faqs: $this->faqItems($slots, $this->offersEmergency($content)),
             trustStats: $this->trustStats($content),
             address: $address,
@@ -969,6 +971,26 @@ final class BlockContentAssembler
     }
 
     /** Normalize a town label for matching a coverage row: drop a trailing ", ST", lower-case. */
+    /**
+     * A TOWN page's official local sources (municipality, county, FEMA flood map), resolved once by
+     * {@see TownSourceResolver} and kept on the town's coverage area — found by the page's geo_id, else by
+     * the town's name. Empty until resolved ⇒ the section omits.
+     *
+     * @return list<array{label: string, url: string}>
+     */
+    private function localSources(Content $content, string $city): array
+    {
+        $q = CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $content->site_id);
+        $geo = trim((string) $content->geo_id);
+        $area = $geo !== '' ? (clone $q)->where('geo_id', $geo)->first() : null;
+        if ($area === null && trim($city) !== '') {
+            $key = $this->townKey($city);
+            $area = (clone $q)->get()->first(fn (CoverageArea $a): bool => $this->townKey((string) $a->name) === $key);
+        }
+
+        return TownSourceResolver::forPage($area);
+    }
+
     private function townKey(string $name): string
     {
         return mb_strtolower(trim((string) preg_replace('/,\s*[A-Za-z]{2}\.?$/', '', trim($name))));

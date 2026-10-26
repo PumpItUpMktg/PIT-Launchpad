@@ -251,6 +251,39 @@ it('a TOWN page measures recent jobs from its OWN centroid, not the parent offic
         ->toContain('lp-jobs');
 });
 
+it('a TOWN page cites its resolved official local sources as plain links before the FAQ; a hub and an unresolved town show no section', function () {
+    $site = locRelaySite();
+    $parent = locRelayLocation($site, ['lat' => 40.12, 'lng' => -75.34]);
+    CoverageArea::factory()->create([
+        'site_id' => $site->id, 'name' => 'Neptune', 'state' => 'NJ', 'type' => MunicipalityType::CountySubdivision,
+        'geo_id' => '3401799999', 'lat' => 40.20, 'lng' => -74.03, 'source_location_ids' => [$parent->id],
+        'local_sources' => [
+            ['key' => 'municipality', 'label' => 'Neptune, NJ — official municipal website', 'url' => 'https://www.neptunetownship.org/'],
+            ['key' => 'county', 'label' => 'Monmouth County, NJ — official website', 'url' => 'https://www.co.monmouth.nj.us/'],
+            ['key' => 'flood_map', 'label' => 'FEMA flood map search for Neptune, NJ', 'url' => 'https://msc.fema.gov/portal/search?AddressQuery=Neptune%2C%20NJ'],
+            ['key' => 'stray', 'label' => 'Not https', 'url' => 'http://insecure.example/'],
+        ],
+        'local_sources_resolved_at' => now(),
+    ]);
+    $town = locRelayPage($site, $parent, ['location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => '3401799999', 'title' => 'Neptune, NJ', 'slug' => 'neptune-nj']);
+
+    $markup = app(BlockContentAssembler::class)->compose($town->fresh(), $town->slot_payload, []);
+    expect($markup)->toContain('lp-local-sources')
+        ->toContain('Official resources for Neptune')
+        ->toContain('href="https://www.neptunetownship.org/">Neptune, NJ — official municipal website</a>')
+        ->toContain('https://www.co.monmouth.nj.us/')
+        ->toContain('msc.fema.gov/portal/search?AddressQuery=Neptune%2C%20NJ')
+        ->not->toContain('insecure.example');
+    expect(strpos($markup, 'lp-local-sources'))->toBeLessThan((int) strpos($markup, 'Common questions'));   // before the FAQ
+
+    // The parent hub cites nothing (hubs carry the county list instead); a town without resolved sources drops the section.
+    $hub = locRelayPage($site, $parent, ['title' => 'Trooper, PA', 'slug' => 'trooper-pa']);
+    expect(app(BlockContentAssembler::class)->compose($hub->fresh(), $hub->slot_payload, []))->not->toContain('lp-local-sources');
+    CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Oaks', 'state' => 'PA', 'type' => MunicipalityType::CountySubdivision, 'geo_id' => '4209155000', 'lat' => 40.13, 'lng' => -75.45, 'source_location_ids' => [$parent->id]]);
+    $oaks = locRelayPage($site, $parent, ['location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => '4209155000', 'title' => 'Oaks, PA', 'slug' => 'oaks-pa']);
+    expect(app(BlockContentAssembler::class)->compose($oaks->fresh(), $oaks->slot_payload, []))->not->toContain('lp-local-sources');
+});
+
 it('builds the LocalBusiness node — areaServed from served towns, storefront-gated address/geo/hasMap, no review props', function () {
     $site = locRelaySite();
     $storefront = locRelayLocation($site, [
