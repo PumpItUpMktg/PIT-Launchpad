@@ -421,6 +421,31 @@ final class BlockSections
     }
 
     /**
+     * The official local sources a TOWN page cites (§ Locations): the municipality's own site, the county's,
+     * the FEMA flood-map search — two or three real, government sources, resolved upstream, as plain followed
+     * links (editorial citations, never paid). Empty → '' (the section drops; no header over nothing).
+     *
+     * @param  list<array{label: string, url: string}>  $links
+     */
+    public function localSources(string $eyebrow, string $heading, string $lead, array $links): string
+    {
+        $links = array_values(array_filter($links, fn (array $l): bool => trim($l['label']) !== '' && trim($l['url']) !== ''));
+        if ($links === []) {
+            return '';
+        }
+        $items = array_map(
+            fn (array $l): string => '<a href="'.$this->attr($l['url']).'">'.$this->text($l['label']).'</a>',
+            $links,
+        );
+
+        return $this->b->group([
+            $this->sectionHead($eyebrow, $heading),
+            $lead !== '' ? $this->b->paragraph($this->text($lead), ['className' => 'lp-sources-lead']) : '',
+            $this->b->list($items, ['className' => 'lp-sources']),
+        ], ['align' => 'full', 'className' => 'lp-local-sources']);
+    }
+
+    /**
      * The "areas we serve" list on a location hub — internal LINKS to each town page under it (the
      * hub → town spine). One clean line of pipe-separated town links, largest town first (the caller
      * sorts by census size tier), the ", ST" suffix dropped for readability — a scannable sentence, not

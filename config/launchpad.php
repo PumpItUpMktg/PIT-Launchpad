@@ -934,6 +934,10 @@ return [
     // (`queue:work --queue=publish`), or the Queue board shows the lane silent and nothing publishes.
     'publish' => [
         'queue' => env('LAUNCHPAD_PUBLISH_QUEUE'),
+        // After a Job Capture job publishes, the pages that would show it (its services' pages, the location
+        // pages within the neighbour radius) are re-pushed — once per site per window, so a batch of jobs
+        // landing together re-pushes each page once. 0 = never re-push automatically.
+        'job_repush_delay_minutes' => (int) env('LAUNCHPAD_JOB_REPUSH_DELAY_MINUTES', 5),
     ],
 
     'legacy_redirect' => [

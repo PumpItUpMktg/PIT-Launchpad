@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * One municipality in a tenant's authoritative service-area coverage set (the union of
@@ -33,6 +34,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $band the roll-out band ({@see CoverageBand}): the size tier for a county market, a distance ring (ring5…) for a proximity one; null = ungrouped
  * @property bool $page_selected in the location-page drip pool
  * @property string $source county (auto) | manual (owner-added, directed → priority page candidate)
+ * @property list<array{key: string, label: string, url: string, verified_at?: string}>|null $local_sources the official local sources the town page cites (TownSourceResolver)
+ * @property Carbon|null $local_sources_resolved_at
  */
 class CoverageArea extends Model
 {
@@ -84,6 +87,8 @@ class CoverageArea extends Model
             'distance_miles' => 'decimal:2',
             'source_location_ids' => 'array',
             'page_selected' => 'boolean',
+            'local_sources' => 'array',
+            'local_sources_resolved_at' => 'datetime',
         ];
     }
 }

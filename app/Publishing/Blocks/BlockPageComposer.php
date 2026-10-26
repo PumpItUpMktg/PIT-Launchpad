@@ -1009,6 +1009,7 @@ final class BlockPageComposer
      * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $reviews  real local reviews (provider-fed; empty ⇒ omitted, never a placeholder)
      * @param  list<array{title?: string, description?: string, photo?: string, town?: string, date?: string}>  $jobs  real nearby jobs (provider-fed; empty ⇒ omitted, never a placeholder)
      * @param  list<array{question?: string, answer?: string}>  $faqs  the drafted local Q&A pairs
+     * @param  list<array{label: string, url: string}>  $sources  a TOWN page's official local sources (resolved upstream; empty ⇒ omitted)
      * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats for the hero trust row
      * @param  bool  $preview  operator proof-view — drafted sections show labeled placeholders; the provider-gated reviews/jobs stay strictly data-gated even here
      */
@@ -1047,6 +1048,7 @@ final class BlockPageComposer
         array $reviews = [],
         array $jobs = [],
         array $localPosts = [],
+        array $sources = [],
         array $faqs = [],
         array $trustStats = [],
         ?string $address = null,
@@ -1224,6 +1226,17 @@ final class BlockPageComposer
             posts: $localPosts,
         );
 
+        // A TOWN page cites its official local sources (municipality, county, flood map) — resolved upstream,
+        // government domains only; two or three real links or the section drops. Below the fold, before the FAQ.
+        $sourcesBlock = $isTown && $sources !== []
+            ? $this->sections->localSources(
+                eyebrow: 'Local resources',
+                heading: $city !== '' ? 'Official resources for '.$city : 'Official local resources',
+                lead: $city !== '' ? 'For permits, stormwater questions and flood risk in '.$city.', these are the official sources we point homeowners to.' : '',
+                links: $sources,
+            )
+            : '';
+
         $faq = $this->sections->faqAccordion(
             eyebrow: 'Local answers',
             heading: 'Common questions',
@@ -1244,7 +1257,7 @@ final class BlockPageComposer
         // Rhythm: hero + closing CTA are the colored bands; the NAP leads the body (contact truths
         // first), the areas-served link grid follows the coverage prose (prose intro → the real
         // linked towns). Gated reviews/jobs dropping out never puts two colored bands adjacent.
-        return $this->join([$hero, $nap, $map, $introBlock, $conditions, $services, $keywordSections, $coverageBlock, $areas, $googleBlock, $reviewsBlock, $jobsBlock, $localBlock, $faq, $cta]);
+        return $this->join([$hero, $nap, $map, $introBlock, $conditions, $services, $keywordSections, $coverageBlock, $areas, $googleBlock, $reviewsBlock, $jobsBlock, $localBlock, $sourcesBlock, $faq, $cta]);
     }
 
     /** @param list<string> $blocks */

@@ -53,7 +53,7 @@ final class JobCaptureLocalJobs implements LocalJobProvider
             ->filter(fn (Job $job): bool => $this->isNear($job, $townKeys, $lat, $lng, $radius))
             ->sortByDesc(fn (Job $job): int => ($job->performed_at ?? $job->created_at)?->getTimestamp() ?? 0)
             ->take(self::MAX)
-            ->map(fn (Job $job): LocalJob => $this->toLocalJob($job))
+            ->map(fn (Job $job): LocalJob => $this->card($job))
             ->values()
             ->all();
     }
@@ -79,7 +79,7 @@ final class JobCaptureLocalJobs implements LocalJobProvider
             ->filter(fn (Job $job): bool => $miles($job) <= $radius)
             ->sortBy(fn (Job $job): float => $miles($job))
             ->take(self::MAX)
-            ->map(fn (Job $job): LocalJob => $this->toLocalJob($job))
+            ->map(fn (Job $job): LocalJob => $this->card($job))
             ->values()
             ->all();
     }
@@ -126,7 +126,8 @@ final class JobCaptureLocalJobs implements LocalJobProvider
         return $this->haversineMiles($lat, $lng, (float) $job->lat_jittered, (float) $job->lng_jittered) <= $radius;
     }
 
-    private function toLocalJob(Job $job): LocalJob
+    /** The public-safe card for a published job — shared with the service-page provider. */
+    public function card(Job $job): LocalJob
     {
         $description = trim((string) $job->meta_description);
         if ($description === '') {

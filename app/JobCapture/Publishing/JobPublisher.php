@@ -6,6 +6,7 @@ use App\Enums\JobStatus;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
 use App\Jobs\PingJobIndexNow;
+use App\Jobs\RepushJobPages;
 use App\Models\Job;
 
 /**
@@ -52,6 +53,10 @@ final class JobPublisher
         if (config('services.indexnow.ping_on_publish')) {
             PingJobIndexNow::dispatch($job->id);
         }
+
+        // The pages that show this job (its services' pages, the location pages nearby) render at push time,
+        // so they are re-pushed — debounced per site, once per batch, after a short delay.
+        RepushJobPages::after((string) $job->site_id);
     }
 
     /**
