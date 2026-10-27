@@ -14,6 +14,7 @@ class ResolveTownSourcesCommand extends Command
         {--site= : The site ULID}
         {--limit=60 : How many towns to resolve this run (max 500)}
         {--force : Resolve again, including towns already resolved}
+        {--revalidate : Re-check every resolved town\'s picks against the current rules (no search); re-search only the towns that lose a pick}
         {--queue : Run on the worker in chunks instead of here}';
 
     protected $description = 'Resolve the official local sources a town page cites: the municipality\'s website, the county\'s, the FEMA flood-map search (one search each, government domains only, checked live).';
@@ -28,6 +29,26 @@ class ResolveTownSourcesCommand extends Command
         }
         $limit = (int) $this->option('limit');
         $force = (bool) $this->option('force');
+        if ((bool) $this->option('revalidate')) {
+            if ((bool) $this->option('queue')) {
+                ResolveTownSources::dispatch((string) $site->id, $limit, false, true);
+                $this->line("<info>{$site->brand_name}</info> — re-validation queued on the worker.");
+
+                return self::SUCCESS;
+            }
+            $checked = $redone = 0;
+            foreach (ResolveTownSources::resolved((string) $site->id) as $area) {
+                $checked++;
+                if ($resolver->revalidate($area)) {
+                    $redone++;
+                    $sources = $resolver->resolve($area->fresh() ?? $area);
+                    $this->line(sprintf('  ↻ %-28s %s', $area->name.', '.$area->state, implode(' · ', array_map(fn (array $s): string => $s['key'].': '.$s['url'], $sources))));
+                }
+            }
+            $this->line(sprintf('Re-validated %d town(s); %d lost a pick under the current rules and were re-resolved.', $checked, $redone));
+
+            return self::SUCCESS;
+        }
         $pending = ResolveTownSources::pending((string) $site->id, $limit, $force);
         if ($pending === []) {
             $this->line("<info>{$site->brand_name}</info> — every town is resolved.");
