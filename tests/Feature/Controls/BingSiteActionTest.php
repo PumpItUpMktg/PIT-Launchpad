@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\UserRole;
+use App\Filament\Resources\ConnectionsResource;
 use App\Filament\Resources\ConnectionsResource\Pages\ListConnections;
 use App\Models\Site;
 use App\Models\User;
@@ -40,9 +41,17 @@ test('the connections page renders the Bing site action for an operator', functi
         ->assertActionExists('bingSite');
 });
 
-test('the Bing site action is disabled without an agency API key', function () {
+test('without an agency API key the Bing site action still opens — and explains the setup instead of a silent disabled button; nothing is saved', function () {
     config()->set('services.bing.api_key', '');
+    $site = Site::factory()->create(['bing_site_url' => null]);
+    app(ActiveTenant::class)->set($site->id);
 
+    $action = ConnectionsResource::bingSiteAction();
+    expect($action->isDisabled())->toBeFalse()
+        ->and((string) $action->getModalHeading())->toBe('Bing Webmaster Tools is not connected yet')
+        ->and((string) $action->getModalDescription())->toContain('BING_WEBMASTER_API_KEY')->toContain('Import from Google Search Console');
     Livewire::test(ListConnections::class)
-        ->assertActionDisabled('bingSite');
+        ->assertActionEnabled('bingSite')
+        ->callAction('bingSite');
+    expect($site->fresh()->bing_site_url)->toBeNull();
 });
