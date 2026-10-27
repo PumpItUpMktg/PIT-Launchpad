@@ -262,21 +262,34 @@ class ConnectionsResource extends Resource
      * Point a tenant at its verified Bing Webmaster Tools site URL — the `siteUrl` the agency BWT API key
      * reads for this tenant (the Bing twin of the Google-properties action). Unlike Google there's no
      * OAuth/property list: the site is verified in BWT out-of-band (easiest via BWT's "import from Google
-     * Search Console"), so this is just the verified URL (defaults to the tenant's domain). Disabled until
-     * the agency BWT API key is configured (BING_WEBMASTER_API_KEY) — without it the seam stays mock.
+     * Search Console"), so this is just the verified URL (defaults to the tenant's domain). Until the
+     * agency BWT API key is configured (BING_WEBMASTER_API_KEY) the button still opens — a silent disabled
+     * button told nobody anything — but shows the setup steps instead of the form, with nothing to save.
      */
     public static function bingSiteAction(): Action
     {
         $keyMissing = trim((string) config('services.bing.api_key', '')) === '';
 
+        if ($keyMissing) {
+            return Action::make('bingSite')
+                ->label('Set tenant Bing site')
+                ->icon('heroicon-o-globe-alt')
+                ->modalHeading('Bing Webmaster Tools is not connected yet')
+                ->modalDescription('This needs the agency\'s Bing Webmaster Tools API key before a tenant site can be set. '
+                    .'1) In Bing Webmaster Tools open Settings → API access and generate the key. '
+                    .'2) Add it to the environment as BING_WEBMASTER_API_KEY and redeploy. '
+                    .'3) Verify the tenant\'s site in Bing Webmaster Tools (easiest: "Import from Google Search Console"). '
+                    .'Then this button saves the verified site URL. Until then the cards show "Submitted to Bing" only.')
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel('Close')
+                ->action(fn () => null);
+        }
+
         return Action::make('bingSite')
             ->label('Set tenant Bing site')
             ->icon('heroicon-o-globe-alt')
             ->modalSubmitActionLabel('Save Bing site')
-            ->disabled($keyMissing)
-            ->modalDescription($keyMissing
-                ? 'Set BING_WEBMASTER_API_KEY (Settings → API access in Bing Webmaster Tools) to enable this. The seam stays mock until then.'
-                : 'Enter this tenant\'s verified Bing Webmaster Tools site URL. Verify the site in BWT first — easiest is "Import from Google Search Console". Once impressions arrive, the card\'s "Submitted to Bing" pill becomes "In Bing".')
+            ->modalDescription('Enter this tenant\'s verified Bing Webmaster Tools site URL. Verify the site in BWT first — easiest is "Import from Google Search Console". Once impressions arrive, the card\'s "Submitted to Bing" pill becomes "In Bing".')
             ->schema([
                 // No tenant picker — the LOCKED tenant; its current Bing URL (or domain) prefills below.
                 TextInput::make('bing_site_url')
