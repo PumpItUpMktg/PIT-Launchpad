@@ -3,6 +3,7 @@
 namespace App\Locations;
 
 use App\Enums\SizeTier;
+use App\Locations\Sources\TownSourceResolver;
 use App\Models\CoverageArea;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
@@ -19,6 +20,10 @@ use Illuminate\Support\Facades\DB;
  *    snapshotted by GEOID before the delete and re-applied to the surviving towns. New
  *    towns default unselected; a town whose county was removed drops out (its selection
  *    goes with it — correct).
+ *  - **Resolved local sources survive recompute** the same way: a town's official sources
+ *    (municipality, county, flood map — {@see TownSourceResolver}) are
+ *    keyed by GEOID across the rebuild, so a recompute never costs the searches again or blanks
+ *    the citations on the town and job pages.
  *  - **size_tier is (re)derived** from population + the tenant's current thresholds on every
  *    write — for the freshly written county rows AND, in a cheap pass, the manual rows.
  *  - **band is (re)derived** the same way ({@see CoverageBand}): the size tier for a town whose
@@ -32,13 +37,17 @@ final class CoverageWriter
             $thresholds = $site->coverageThresholds();
             $locations = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get()->keyBy('id');
 
-            // Snapshot the drip-pool selection by GEOID so it survives the rebuild.
+            // Snapshot the drip-pool selection AND the resolved local sources by GEOID so they survive the rebuild.
             /** @var array<string, bool> $selectedByGeoId */
-            $selectedByGeoId = CoverageArea::withoutGlobalScope(SiteScope::class)
-                ->where('site_id', $site->id)
-                ->pluck('page_selected', 'geo_id')
-                ->map(fn ($v) => (bool) $v)
-                ->all();
+            $selectedByGeoId = [];
+            /** @var array<string, array{sources: mixed, at: mixed}> $sourcesByGeoId */
+            $sourcesByGeoId = [];
+            foreach (CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get(['geo_id', 'page_selected', 'local_sources', 'local_sources_resolved_at']) as $prior) {
+                $selectedByGeoId[(string) $prior->geo_id] = (bool) $prior->page_selected;
+                if ($prior->local_sources_resolved_at !== null) {
+                    $sourcesByGeoId[(string) $prior->geo_id] = ['sources' => $prior->local_sources, 'at' => $prior->local_sources_resolved_at];
+                }
+            }
 
             // Dedup the incoming computed towns by GEOID (a town reached via multiple
             // counties/locations is ONE row) — guards the (site_id, geo_id) unique index
@@ -76,6 +85,8 @@ final class CoverageWriter
                     'size_tier' => $tier,
                     'band' => CoverageBand::forArea($locations[$m->sourceLocationIds[0] ?? ''] ?? null, $m->distanceMiles, $tier),
                     'page_selected' => $selectedByGeoId[$m->geoId] ?? false,
+                    'local_sources' => $sourcesByGeoId[$m->geoId]['sources'] ?? null,
+                    'local_sources_resolved_at' => $sourcesByGeoId[$m->geoId]['at'] ?? null,
                     'source' => 'county',
                 ]);
             }
