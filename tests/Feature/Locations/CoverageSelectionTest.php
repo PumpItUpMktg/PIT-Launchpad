@@ -53,6 +53,22 @@ test('page_selected survives a recompute; new towns default unselected', functio
         ->and(csAreas($site)->where('geo_id', '3401351210')->value('page_selected'))->toBe(false);
 });
 
+test('a town\'s resolved local sources survive a recompute (keyed by GEOID); a new town starts unresolved', function () {
+    $site = Site::factory()->create();
+    $loc = Location::factory()->create(['site_id' => $site->id]);
+    $writer = new CoverageWriter;
+    $writer->write($site, tierResult($loc->id));
+    $sources = [['key' => 'municipality', 'label' => 'Town — official municipal website', 'url' => 'https://www.town.gov/', 'verified_at' => '2026-10-26T12:00:00+00:00']];
+    csAreas($site)->where('geo_id', '3401305580')->update(['local_sources' => json_encode($sources), 'local_sources_resolved_at' => '2026-10-26 12:00:00']);
+
+    $writer->write($site, tierResult($loc->id));
+
+    $kept = csAreas($site)->where('geo_id', '3401305580')->first();
+    expect($kept->local_sources)->toBe($sources)
+        ->and($kept->local_sources_resolved_at?->toDateTimeString())->toBe('2026-10-26 12:00:00')
+        ->and(csAreas($site)->where('geo_id', '3401351210')->value('local_sources_resolved_at'))->toBeNull();
+});
+
 test('a town whose county is removed drops out (selection goes with it)', function () {
     $site = Site::factory()->create();
     $loc = Location::factory()->create(['site_id' => $site->id]);
