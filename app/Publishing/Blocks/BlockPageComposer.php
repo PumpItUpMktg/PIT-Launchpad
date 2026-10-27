@@ -1010,6 +1010,7 @@ final class BlockPageComposer
      * @param  list<array{title?: string, description?: string, photo?: string, town?: string, date?: string}>  $jobs  real nearby jobs (provider-fed; empty ⇒ omitted, never a placeholder)
      * @param  list<array{question?: string, answer?: string}>  $faqs  the drafted local Q&A pairs
      * @param  list<array{label: string, url: string}>  $sources  a TOWN page's official local sources (resolved upstream; empty ⇒ omitted)
+     * @param  list<array{role: string, label: string, url: string}>  $community  an office HUB's won relationships — sponsorships, memberships, listings (empty ⇒ omitted)
      * @param  list<array{value?: string, label?: string}>  $trustStats  substantiated proof stats for the hero trust row
      * @param  bool  $preview  operator proof-view — drafted sections show labeled placeholders; the provider-gated reviews/jobs stay strictly data-gated even here
      */
@@ -1049,6 +1050,7 @@ final class BlockPageComposer
         array $jobs = [],
         array $localPosts = [],
         array $sources = [],
+        array $community = [],
         array $faqs = [],
         array $trustStats = [],
         ?string $address = null,
@@ -1226,6 +1228,17 @@ final class BlockPageComposer
             posts: $localPosts,
         );
 
+        // An office hub names the organisations the business sponsors, belongs to or is listed with (won link
+        // relationships, resolved upstream) — plain followed links; a town page never carries it.
+        $communityBlock = ! $isTown && $community !== []
+            ? $this->sections->community(
+                eyebrow: 'In the community',
+                heading: $city !== '' ? 'Part of '.$city.'\'s community' : 'Part of the community',
+                lead: 'The local organisations we sponsor, belong to and work with.',
+                items: $community,
+            )
+            : '';
+
         // A TOWN page cites its official local sources (municipality, county, flood map) — resolved upstream,
         // government domains only; two or three real links or the section drops. Below the fold, before the FAQ.
         $sourcesBlock = $isTown && $sources !== []
@@ -1257,7 +1270,7 @@ final class BlockPageComposer
         // Rhythm: hero + closing CTA are the colored bands; the NAP leads the body (contact truths
         // first), the areas-served link grid follows the coverage prose (prose intro → the real
         // linked towns). Gated reviews/jobs dropping out never puts two colored bands adjacent.
-        return $this->join([$hero, $nap, $map, $introBlock, $conditions, $services, $keywordSections, $coverageBlock, $areas, $googleBlock, $reviewsBlock, $jobsBlock, $localBlock, $sourcesBlock, $faq, $cta]);
+        return $this->join([$hero, $nap, $map, $introBlock, $conditions, $services, $keywordSections, $coverageBlock, $areas, $googleBlock, $reviewsBlock, $jobsBlock, $communityBlock, $localBlock, $sourcesBlock, $faq, $cta]);
     }
 
     /** @param list<string> $blocks */

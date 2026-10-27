@@ -51,6 +51,27 @@ class Test_Job_Store extends WP_UnitTestCase
         $this->assertContains('Sump Pump Repair', wp_get_object_terms($post->ID, JobCpt::TAX_SERVICE, ['fields' => 'names']));
     }
 
+    public function test_the_towns_sources_render_under_the_write_up_as_https_links_only(): void
+    {
+        $r = ( new JobStore() )->upsert(array_merge($this->payload(), ['job_id' => 'JOB0000000000000000000009', 'sources' => [
+            ['label' => 'Bedminster, NJ — official municipal website', 'url' => 'https://www.bedminster.us/'],
+            ['label' => 'Somerset County, NJ — official website', 'url' => 'https://www.co.somerset.nj.us/'],
+            ['label' => 'Not secure', 'url' => 'http://insecure.example/'],
+            ['label' => '', 'url' => 'https://nolabel.example/'],
+        ]]));
+        $content = get_post($r['wp_post_id'])->post_content;
+        $this->assertStringContainsString('Local resources for Bedminster', $content);
+        $this->assertStringContainsString('<a href="https://www.bedminster.us/">Bedminster, NJ — official municipal website</a>', $content);
+        $this->assertStringContainsString('https://www.co.somerset.nj.us/', $content);
+        $this->assertStringNotContainsString('insecure.example', $content);
+        $this->assertStringNotContainsString('nolabel.example', $content);
+        $this->assertCount(2, get_post_meta($r['wp_post_id'], Meta::JOB_DATA, true)['sources']);
+
+        // No sources → no heading over nothing.
+        $plain = ( new JobStore() )->upsert(array_merge($this->payload(), ['job_id' => 'JOB0000000000000000000010']));
+        $this->assertStringNotContainsString('Local resources', get_post($plain['wp_post_id'])->post_content);
+    }
+
     public function test_a_past_job_is_dated_from_performed_at_and_a_live_one_from_the_push(): void
     {
         $past = ( new JobStore() )->upsert(array_merge($this->payload(), ['job_id' => 'JOB0000000000000000000002', 'performed_at' => '2026-04-14']));

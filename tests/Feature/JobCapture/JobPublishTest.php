@@ -2,10 +2,13 @@
 
 use App\Enums\ConnectionProvider;
 use App\Enums\JobStatus;
+use App\Enums\MunicipalityType;
 use App\JobCapture\Publishing\JobPublisher;
 use App\Jobs\PingJobIndexNow;
 use App\Models\Connection;
+use App\Models\CoverageArea;
 use App\Models\Job;
+use App\Models\JobCity;
 use App\Models\Site;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -52,6 +55,37 @@ test('it publishes an approved job to WordPress — keyed on the ULID, jittered 
         ->and($captured['location']['lat'])->not->toEqual((float) $job->lat_true)   // never the true point
         ->and($captured['images'][0]['alt'])->toBe('A new sump pump')
         ->and($captured['performed_at'])->toBeNull();                        // a capture-time job carries no work date
+});
+
+test('the job blob carries the town\'s official local sources — by the town\'s Census id, else by name — so the job page cites what the town page cites', function () {
+    $captured = null;
+    Http::fake(['*/launchpad/v1/job' => function ($request) use (&$captured) {
+        $captured = $request->data();
+
+        return Http::response(['wp_post_id' => 78, 'status' => 'publish']);
+    }]);
+    $job = publishableJob();
+    $city = JobCity::factory()->create(['name' => 'Bedminster', 'state' => 'NJ', 'place_geoid' => '3403504330']);
+    $job->forceFill(['job_city_id' => $city->id])->save();
+    $sources = [
+        ['key' => 'municipality', 'label' => 'Bedminster, NJ — official municipal website', 'url' => 'https://www.bedminster.us/'],
+        ['key' => 'flood_map', 'label' => 'FEMA flood map search for Bedminster, NJ', 'url' => 'https://msc.fema.gov/portal/search?AddressQuery=Bedminster%2C%20NJ'],
+    ];
+    CoverageArea::factory()->create(['site_id' => $job->site_id, 'name' => 'Bedminster', 'state' => 'NJ', 'type' => MunicipalityType::CountySubdivision, 'geo_id' => '3403504330', 'source_location_ids' => [], 'local_sources' => $sources, 'local_sources_resolved_at' => now()]);
+
+    app(JobPublisher::class)->publish($job);
+    expect($captured['sources'])->toBe([['label' => $sources[0]['label'], 'url' => $sources[0]['url']], ['label' => $sources[1]['label'], 'url' => $sources[1]['url']]]);
+
+    // A town whose Census id differs but whose name and state match still finds its row; no row → no sources.
+    $job2 = publishableJob();
+    $city2 = JobCity::factory()->create(['name' => 'Far Hills', 'state' => 'NJ', 'place_geoid' => '3403522770']);
+    $job2->forceFill(['job_city_id' => $city2->id])->save();
+    CoverageArea::factory()->create(['site_id' => $job2->site_id, 'name' => 'Far Hills', 'state' => 'NJ', 'type' => MunicipalityType::Place, 'geo_id' => '3403522771', 'source_location_ids' => [], 'local_sources' => [$sources[1]], 'local_sources_resolved_at' => now()]);
+    app(JobPublisher::class)->publish($job2);
+    expect($captured['sources'])->toHaveCount(1);
+    $job3 = publishableJob();
+    app(JobPublisher::class)->publish($job3);
+    expect($captured['sources'])->toBe([]);
 });
 
 test('a backfilled past job pushes the day the work was done, so the plugin can date the post from it', function () {

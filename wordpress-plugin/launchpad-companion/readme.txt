@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.57
+Stable tag: 0.9.58
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,11 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.58 =
+* A job post renders the town's official local sources (municipality, county, FEMA flood map) under
+  the write-up as a short list of plain https links when the control plane sends them — the same
+  citations the town page carries.
 
 = 0.9.57 =
 * A redirect push purges the full-page caches (shared CachePurge with the style push, plus Nginx

@@ -2,7 +2,10 @@
 
 namespace App\JobCapture\Publishing;
 
+use App\Locations\Sources\TownSourceResolver;
+use App\Models\CoverageArea;
 use App\Models\Job;
+use App\Models\Scopes\SiteScope;
 use App\Publishing\TenantStorage;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
@@ -45,7 +48,30 @@ final class JobMetaBlobAssembler
             ],
             'job_types' => $job->jobTypes->map(fn ($t): array => ['label' => $t->label, 'slug' => $t->slug])->all(),
             'images' => $this->images($job),
+            // The town's official local sources (municipality, county, FEMA flood map) — the same citations the
+            // town page carries, resolved once per town; the plugin renders them under the write-up.
+            'sources' => $this->sources($job),
         ];
+    }
+
+    /** @return list<array{label: string, url: string}> */
+    private function sources(Job $job): array
+    {
+        if ($job->job_city_id === null) {
+            return [];
+        }
+        $city = $job->city;
+        $q = CoverageArea::withoutGlobalScope(SiteScope::class)->where('site_id', $job->site_id);
+        $geo = trim((string) $city->place_geoid);
+        $area = $geo !== '' ? (clone $q)->where('geo_id', $geo)->first() : null;
+        if ($area === null) {
+            $key = mb_strtolower(trim((string) $city->name));
+            $state = strtoupper(trim((string) $city->state));
+            $area = (clone $q)->when($state !== '', fn ($w) => $w->where('state', $state))->get()
+                ->first(fn (CoverageArea $a): bool => mb_strtolower(trim((string) $a->name)) === $key);
+        }
+
+        return TownSourceResolver::forPage($area);
     }
 
     /** @return list<array{key: string, url: string, alt: string, primary: bool}> */

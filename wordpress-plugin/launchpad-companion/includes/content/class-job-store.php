@@ -153,7 +153,11 @@ final class JobStore
         }
     }
 
-    /** The Gutenberg body — the enhanced description as core paragraph blocks (block-theme native). */
+    /**
+     * The Gutenberg body — the enhanced description as core paragraph blocks (block-theme native), then the
+     * town's official local sources (municipality, county, flood map) as a short list of plain links when
+     * the control plane sent any. https links only; never a header over nothing.
+     */
     private function body(array $payload): string
     {
         $description = trim((string) ($payload['description'] ?? ''));
@@ -163,10 +167,51 @@ final class JobStore
 
         $paragraphs = preg_split('/\n\s*\n/', $description) ?: [$description];
 
-        return implode("\n\n", array_map(
+        $body = implode("\n\n", array_map(
             static fn (string $p): string => "<!-- wp:paragraph -->\n<p>" . esc_html(trim($p)) . "</p>\n<!-- /wp:paragraph -->",
             array_filter(array_map('trim', $paragraphs), static fn (string $p): bool => $p !== '')
         ));
+
+        $sources = $this->sources($payload);
+        if ($sources === []) {
+            return $body;
+        }
+        $items = array_map(
+            static fn (array $s): string => "<!-- wp:list-item -->\n<li><a href=\"" . esc_url($s['url']) . "\">" . esc_html($s['label']) . "</a></li>\n<!-- /wp:list-item -->",
+            $sources
+        );
+        $city = trim((string) (($payload['location'] ?? [])['city'] ?? ''));
+
+        return $body
+            . "\n\n<!-- wp:heading {\"level\":3,\"className\":\"lp-sources-head\"} -->\n<h3 class=\"wp-block-heading lp-sources-head\">"
+            . esc_html($city !== '' ? 'Local resources for ' . $city : 'Local resources') . "</h3>\n<!-- /wp:heading -->"
+            . "\n\n<!-- wp:list {\"className\":\"lp-sources\"} -->\n<ul class=\"wp-block-list lp-sources\">\n" . implode("\n", $items) . "\n</ul>\n<!-- /wp:list -->";
+    }
+
+    /**
+     * The sources the control plane sent, kept only when well-formed and https.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return list<array{label: string, url: string}>
+     */
+    private function sources(array $payload): array
+    {
+        $out = [];
+        foreach (is_array($payload['sources'] ?? null) ? $payload['sources'] : [] as $s) {
+            if (! is_array($s)) {
+                continue;
+            }
+            $label = sanitize_text_field((string) ($s['label'] ?? ''));
+            $url = esc_url_raw((string) ($s['url'] ?? ''));
+            if ($label !== '' && $url !== '' && str_starts_with($url, 'https://')) {
+                $out[] = ['label' => $label, 'url' => $url];
+            }
+            if (count($out) >= 3) {
+                break;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -183,6 +228,7 @@ final class JobStore
             'location' => is_array($payload['location'] ?? null) ? $payload['location'] : [],
             'job_types' => is_array($payload['job_types'] ?? null) ? $payload['job_types'] : [],
             'images' => is_array($payload['images'] ?? null) ? $payload['images'] : [],
+            'sources' => $this->sources($payload),
         ];
     }
 

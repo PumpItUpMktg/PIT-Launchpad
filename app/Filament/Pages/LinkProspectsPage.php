@@ -10,6 +10,7 @@ use App\Jobs\FindLocalOpportunities;
 use App\Jobs\FindProspectContact;
 use App\Jobs\ReadProspectProfile;
 use App\Jobs\ReadProspectProfiles;
+use App\Links\CommunityLinks;
 use App\Links\OfficeAttribution;
 use App\Links\Outreach\FollowUpComposer;
 use App\Links\Outreach\GuardResult;
@@ -272,7 +273,16 @@ class LinkProspectsPage extends Page
         if ($prospect === null) {
             return;
         }
+        $was = $prospect->status;
         $prospect->forceFill(['status' => $value])->save();
+        // A relationship won (or no longer won) changes what the office hub names in its community section.
+        if ($was !== $value && ($value === LinkProspectStatus::Acquired || $was === LinkProspectStatus::Acquired)) {
+            $n = app(CommunityLinks::class)->repushFor($prospect);
+            if ($n > 0) {
+                Notification::make()->success()->title($value === LinkProspectStatus::Acquired ? 'Won — the office hub will name them' : 'The office hub will drop them')
+                    ->body($n.' hub page(s) queued for a re-push.')->send();
+            }
+        }
     }
 
     public function setNotes(string $prospectId, string $notes): void
