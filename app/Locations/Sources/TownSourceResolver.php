@@ -55,7 +55,7 @@ final class TownSourceResolver
         }
         $out = [];
 
-        $muni = $this->find("{$town} {$state} official website", $town, [$town]);
+        $muni = $this->find("{$town} {$state} official website", fn (string $host, int $position): bool => self::isMunicipalHost($host, [$town]));
         if ($muni !== null) {
             $out[] = ['key' => self::MUNICIPALITY, 'label' => "{$town}, {$state} — official municipal website", 'url' => $muni, 'verified_at' => now()->toIso8601String()];
         }
@@ -97,7 +97,7 @@ final class TownSourceResolver
         if ($name === null) {
             return $this->counties[$countyGeo] = null;
         }
-        $url = $this->find("{$name} County {$state} official website", $name, [$name.' county', $name]);
+        $url = $this->find("{$name} County {$state} official website", fn (string $host, int $position): bool => self::isCountyHost($host, $name, $position));
 
         return $this->counties[$countyGeo] = $url !== null ? ['label' => "{$name} County, {$state} — official website", 'url' => $url] : null;
     }
@@ -117,8 +117,8 @@ final class TownSourceResolver
         return null;
     }
 
-    /** One search; the first result that passes the government rule AND answers is the source. @param list<string> $names */
-    private function find(string $query, string $name, array $names): ?string
+    /** One search; the first result whose host passes the slot's rule AND whose https front door answers is the source. @param callable(string, int): bool $rule */
+    private function find(string $query, callable $rule): ?string
     {
         try {
             $results = $this->serp->results($query)->results;
@@ -127,7 +127,7 @@ final class TownSourceResolver
         }
         foreach (array_slice($results, 0, 10) as $r) {
             $host = strtolower((string) parse_url($r->url, PHP_URL_HOST));
-            if ($host === '' || ! self::isGovernment($host, $names)) {
+            if ($host === '' || ! $rule($host, (int) $r->position)) {
                 continue;
             }
             $url = self::homepage($r->url);
@@ -139,39 +139,136 @@ final class TownSourceResolver
         return null;
     }
 
-    /** @param list<string> $names the town's or county's names, any of which a non-.gov host must carry */
-    public static function isGovernment(string $host, array $names): bool
+    /**
+     * The MUNICIPALITY slot: the host must carry the town's name — on a .gov too, because a county portal or
+     * the state's own site is a .gov as well and is not the town. Never a county portal, a state portal, or
+     * any of the known non-government sites.
+     *
+     * @param  list<string>  $townNames
+     */
+    public static function isMunicipalHost(string $host, array $townNames): bool
     {
-        $host = strtolower(preg_replace('/^www\./', '', $host) ?? $host);
-        foreach (self::NEVER as $bad) {
-            if (str_contains($host, $bad)) {
-                return false;
+        $host = self::bareHost($host);
+        if ($host === null || self::isStatePortal($host)) {
+            return false;
+        }
+        if (preg_match('/\.(gov|us|org|com|net)$/', $host) !== 1) {
+            return false;
+        }
+        $compact = preg_replace('/[^a-z0-9]/', '', $host) ?? $host;
+        $carriesTown = false;
+        foreach ($townNames as $n) {
+            $slug = preg_replace('/[^a-z0-9]/', '', strtolower($n)) ?? '';
+            if (strlen($slug) >= 4 && str_contains($compact, $slug)) {
+                $carriesTown = true;
+                break;
             }
         }
+        if (! $carriesTown) {
+            return false;
+        }
+        // A county portal that happens to carry the town's name ("Harford County" for a town called Harford) is still the county.
+        $townIsCounty = array_filter($townNames, fn (string $n): bool => str_contains(strtolower($n), 'county')) !== [];
+
+        return $townIsCounty || ! str_contains($compact, 'county');
+    }
+
+    /**
+     * The COUNTY slot: a .gov / .us host that carries the county's name or the word "county" (or "co."), or —
+     * because county portals often abbreviate ("norcopa.gov") — the TOP result of the county search when it
+     * is a .gov / .us that is not a municipality's; or a .org / .com / .net host that carries BOTH the county's
+     * name and the word "county" ("lehighcounty.org", never "lehightownship.com").
+     */
+    public static function isCountyHost(string $host, string $countyName, int $position = 99): bool
+    {
+        $host = self::bareHost($host);
+        if ($host === null || self::isStatePortal($host)) {
+            return false;
+        }
+        $compact = preg_replace('/[^a-z0-9]/', '', $host) ?? $host;
+        if (preg_match('/(township|borough|village|twp|cityof|townof)/', $compact) === 1) {
+            return false;
+        }
+        $slug = preg_replace('/[^a-z0-9]/', '', strtolower($countyName)) ?? '';
+        $carriesName = strlen($slug) >= 4 && str_contains($compact, $slug);
+        $saysCounty = str_contains($compact, 'county') || str_contains($compact, 'cnty') || str_starts_with($host, 'co.') || str_contains($host, '.co.');
         if (str_ends_with($host, '.gov') || str_ends_with($host, '.us')) {
-            return true;
+            return $carriesName || $saysCounty || $position === 1;
         }
         if (preg_match('/\.(org|com|net)$/', $host) !== 1) {
             return false;
         }
-        $bare = preg_replace('/[^a-z0-9]/', '', $host) ?? $host;
-        foreach ($names as $n) {
-            $slug = preg_replace('/[^a-z0-9]/', '', strtolower($n)) ?? '';
-            if (strlen($slug) >= 4 && str_contains($bare, $slug)) {
-                return true;
+
+        return $carriesName && $saysCounty;
+    }
+
+    /** The host without www., or null when it is one of the known non-government sites. */
+    private static function bareHost(string $host): ?string
+    {
+        $host = strtolower(preg_replace('/^www\./', '', trim($host)) ?? $host);
+        if ($host === '') {
+            return null;
+        }
+        foreach (self::NEVER as $bad) {
+            if (str_contains($host, $bad)) {
+                return null;
             }
         }
 
-        return false;
+        return $host;
     }
 
-    /** The site's root — a search result deep in the site still cites the municipality's home page. */
+    /** A state's own portal ("pa.gov", "nj.gov", "state.nj.us", "state.pa.us") — never a town's or county's source. */
+    public static function isStatePortal(string $host): bool
+    {
+        $host = strtolower(preg_replace('/^www\./', '', trim($host)) ?? $host);
+
+        return preg_match('/^[a-z]{2}\.gov$/', $host) === 1 || preg_match('/^state\.[a-z]{2}\.us$/', $host) === 1;
+    }
+
+    /** The site's https front door — a search result deep in the site (or served over http) still cites the home page over https. */
     private static function homepage(string $url): string
     {
-        $scheme = (string) (parse_url($url, PHP_URL_SCHEME) ?: 'https');
-        $host = (string) parse_url($url, PHP_URL_HOST);
+        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
 
-        return "{$scheme}://{$host}/";
+        return "https://{$host}/";
+    }
+
+    /**
+     * Re-check a resolved town's stored picks against the current rules without searching: a pick that no
+     * longer passes is dropped. Returns true when a slot was dropped (the caller re-resolves the town).
+     */
+    public function revalidate(CoverageArea $area): bool
+    {
+        if (! is_array($area->local_sources)) {
+            return false;
+        }
+        $town = trim((string) $area->name);
+        $countyName = null;
+        $geo = trim((string) $area->geo_id);
+        if (strlen($geo) >= 5) {
+            $countyName = $this->countyName(substr($geo, 0, 5));
+        }
+        $kept = [];
+        $dropped = false;
+        foreach ($area->local_sources as $src) {
+            $host = (string) parse_url($src['url'], PHP_URL_HOST);
+            $ok = match ($src['key']) {
+                self::MUNICIPALITY => Str::startsWith($src['url'], 'https://') && self::isMunicipalHost($host, [$town]),
+                self::COUNTY => Str::startsWith($src['url'], 'https://') && $countyName !== null && self::isCountyHost($host, $countyName, 1),
+                default => true,
+            };
+            if ($ok) {
+                $kept[] = $src;
+            } else {
+                $dropped = true;
+            }
+        }
+        if ($dropped) {
+            $area->forceFill(['local_sources' => $kept])->save();
+        }
+
+        return $dropped;
     }
 
     private function alive(string $url): bool
