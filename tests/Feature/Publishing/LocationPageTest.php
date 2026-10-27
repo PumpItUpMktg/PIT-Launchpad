@@ -5,6 +5,8 @@ use App\ContentEngine\Drafting\PageDrafter;
 use App\ContentEngine\Drafting\PageGroundingAssembler;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\LinkProspectKind;
+use App\Enums\LinkProspectStatus;
 use App\Enums\MunicipalityType;
 use App\Enums\PageType;
 use App\Integrations\Census\County;
@@ -18,6 +20,7 @@ use App\Models\ContentTown;
 use App\Models\CoverageArea;
 use App\Models\GbpProfile;
 use App\Models\GbpReview;
+use App\Models\LinkProspect;
 use App\Models\Location;
 use App\Models\PageConfig;
 use App\Models\Scopes\SiteScope;
@@ -282,6 +285,24 @@ it('a TOWN page cites its resolved official local sources as plain links before 
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Oaks', 'state' => 'PA', 'type' => MunicipalityType::CountySubdivision, 'geo_id' => '4209155000', 'lat' => 40.13, 'lng' => -75.45, 'source_location_ids' => [$parent->id]]);
     $oaks = locRelayPage($site, $parent, ['location_id' => null, 'parent_location_id' => $parent->id, 'geo_id' => '4209155000', 'title' => 'Oaks, PA', 'slug' => 'oaks-pa']);
     expect(app(BlockContentAssembler::class)->compose($oaks->fresh(), $oaks->slot_payload, []))->not->toContain('lp-local-sources');
+});
+
+it('an office hub renders its won community relationships as plain links; a town page never carries the section', function () {
+    $site = locRelaySite();
+    $office = locRelayLocation($site);
+    LinkProspect::withoutGlobalScope(SiteScope::class)->create([
+        'site_id' => $site->id, 'domain' => 'trooperlittleleague.org', 'kind' => LinkProspectKind::Sponsorship->value, 'status' => LinkProspectStatus::Acquired->value,
+        'location_id' => $office->id, 'url' => 'https://trooperlittleleague.org/sponsors', 'offices' => ['Trooper, PA'], 'locality' => 2, 'competitors' => [], 'competitor_count' => 0,
+        'first_seen' => '2026-10-01', 'found_at' => now(), 'profile' => ['name' => 'Trooper Little League'],
+    ]);
+    $hub = locRelayPage($site, $office);
+    $markup = app(BlockContentAssembler::class)->compose($hub->fresh(), $hub->slot_payload, []);
+    expect($markup)->toContain('lp-community-links')
+        ->toContain('In the community')
+        ->toContain('Proud sponsor of <a href="https://trooperlittleleague.org/">Trooper Little League</a>');
+
+    $town = locRelayPage($site, $office, ['location_id' => null, 'parent_location_id' => $office->id, 'title' => 'Oaks, PA', 'slug' => 'trooper-pa/oaks-pa']);
+    expect(app(BlockContentAssembler::class)->compose($town->fresh(), $town->slot_payload, []))->not->toContain('lp-community-links');
 });
 
 it('builds the LocalBusiness node — areaServed from served towns, storefront-gated address/geo/hasMap, no review props', function () {

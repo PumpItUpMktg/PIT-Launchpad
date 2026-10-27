@@ -11,6 +11,7 @@ use App\Enums\ProofType;
 use App\Enums\RenderStatus;
 use App\Enums\StandardPageType;
 use App\Enums\VoiceStatus;
+use App\Links\CommunityLinks;
 use App\Local\Grounding\LocationGrounding;
 use App\Local\Proof\LocalJobProvider;
 use App\Local\Proof\LocalReviewProvider;
@@ -62,6 +63,7 @@ final class BlockContentAssembler
         private readonly SiteContact $contact,
         private readonly LocalReviewProvider $localReviews,
         private readonly LocalJobProvider $localJobs,
+        private readonly CommunityLinks $community,
         private readonly ServiceReviewProvider $serviceReviews,
         private readonly ServiceJobProvider $serviceJobs,
         private readonly LocationSubject $locationSubject,
@@ -927,6 +929,7 @@ final class BlockContentAssembler
             jobs: $this->locationJobs($content, $location, $isTown),
             localPosts: $this->localPosts($content, $city),
             sources: $isTown ? $this->localSources($content, $city) : [],
+            community: $isTown ? [] : $this->community->forLocation($content->site, $location),
             faqs: $this->faqItems($slots, $this->offersEmergency($content)),
             trustStats: $this->trustStats($content),
             address: $address,

@@ -421,6 +421,30 @@ final class BlockSections
     }
 
     /**
+     * An office hub's community relationships (§ Links): the organisations the business sponsors, belongs
+     * to or is listed with, each a plain followed link — the honest half of a won relationship. Empty → ''.
+     *
+     * @param  list<array{role: string, label: string, url: string}>  $items
+     */
+    public function community(string $eyebrow, string $heading, string $lead, array $items): string
+    {
+        $items = array_values(array_filter($items, fn (array $i): bool => trim($i['label']) !== '' && trim($i['url']) !== ''));
+        if ($items === []) {
+            return '';
+        }
+        $rows = array_map(
+            fn (array $i): string => $this->text($i['role']).' <a href="'.$this->attr($i['url']).'">'.$this->text($i['label']).'</a>',
+            $items,
+        );
+
+        return $this->b->group([
+            $this->sectionHead($eyebrow, $heading),
+            $lead !== '' ? $this->b->paragraph($this->text($lead), ['className' => 'lp-community-lead']) : '',
+            $this->b->list($rows, ['className' => 'lp-community']),
+        ], ['align' => 'full', 'className' => 'lp-community-links']);
+    }
+
+    /**
      * The official local sources a TOWN page cites (§ Locations): the municipality's own site, the county's,
      * the FEMA flood-map search — two or three real, government sources, resolved upstream, as plain followed
      * links (editorial citations, never paid). Empty → '' (the section drops; no header over nothing).
