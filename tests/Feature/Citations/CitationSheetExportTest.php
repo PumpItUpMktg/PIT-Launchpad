@@ -17,7 +17,7 @@ beforeEach(function (): void {
     LocationNapProfile::factory()->for($this->site)->create([
         'location_id' => $this->location->id, 'business_name' => 'Sump Pump Gurus', 'address_1' => '50 South Park Street', 'address_2' => 'Suite 2',
         'city' => 'Montclair', 'state' => 'NJ', 'postal' => '07042', 'phone_primary' => '(862) 292-0566', 'website_url' => 'https://sumppumpgurus.com/montclair-nj/',
-        'categories' => ['Plumbing', 'Waterproofing company'], 'hours' => [['day' => 'Mon–Fri', 'open' => '8:00', 'close' => '18:00'], ['day' => 'Sat', 'open' => '9:00', 'close' => '13:30']],
+        'categories' => ['Plumbing', 'Waterproofing company'], 'hours' => ['mon' => ['open' => '08:00', 'close' => '18:00'], 'tue' => ['open' => '08:00', 'close' => '18:00'], 'wed' => ['open' => '08:00', 'close' => '18:00'], 'thu' => ['open' => '08:00', 'close' => '18:00'], 'fri' => ['open' => '08:00', 'close' => '18:00'], 'sat' => ['open' => '09:00', 'close' => '13:30'], 'sun' => 'closed'],
         'description_short' => 'Sump pump repair, installation and basement waterproofing in Montclair.',
     ]);
 });
@@ -42,7 +42,7 @@ test('the tracker export carries the canonical NAP block and every directory wit
     $loc = $data['locations'][0];
     expect($loc['name'])->toBe('Montclair office')->and($loc['has_profile'])->toBeTrue()
         ->and($loc['nap'])->toMatchArray(['business_name' => 'Sump Pump Gurus', 'street' => '50 South Park Street', 'suite' => 'Suite 2', 'city' => 'Montclair', 'state' => 'NJ', 'zip' => '07042',
-            'phone' => '(862) 292-0566', 'website' => 'https://sumppumpgurus.com/montclair-nj/', 'categories' => 'Plumbing; Waterproofing company', 'hours' => 'Mon–Fri 8:00–18:00; Sat 9:00–13:30']);
+            'phone' => '(862) 292-0566', 'website' => 'https://sumppumpgurus.com/montclair-nj/', 'categories' => 'Plumbing; Waterproofing company', 'hours' => 'Monday – Friday, 8am – 6pm; Saturday, 9am – 1:30pm']);
 
     $rows = collect($loc['directories'])->keyBy('directory');
     expect($rows['Yelp']['status'])->toBe('Live')->and($rows['Yelp']['live_url'])->toBe('https://yelp.example/biz/sump-pump-gurus-montclair')->and($rows['Yelp']['notes'])->toContain('checked 2026-10-20')
@@ -62,6 +62,12 @@ test('the tracker export carries the canonical NAP block and every directory wit
     Location::factory()->for($this->site)->create(['name' => 'Hoboken office']);
     $this->artisan('launchpad:citation-sheet --site='.$this->site->id.' --format=csv')->expectsOutputToContain('one office at a time')->assertFailed();
     $this->artisan('launchpad:citation-sheet --site='.$this->site->id.' --format=csv --location='.$this->location->id)->expectsOutputToContain('Hotfrog,Missing')->assertSuccessful();
+});
+
+test('an always-open office reads as one line, not seven', function (): void {
+    expect(CitationSheetExport::hoursLine(array_fill_keys(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], '24h')))->toBe('Monday – Sunday, Open 24 hours')
+        ->and(CitationSheetExport::hoursLine(['Mon–Fri 8–6']))->toBe('Mon–Fri 8–6')
+        ->and(CitationSheetExport::hoursLine([]))->toBe('');
 });
 
 test('an office without a NAP profile still exports, falling back to the location and the site', function (): void {

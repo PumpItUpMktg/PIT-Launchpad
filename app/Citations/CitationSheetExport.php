@@ -8,6 +8,7 @@ use App\Models\Location;
 use App\Models\LocationNapProfile;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Support\BusinessHours;
 use App\Support\CurrentSite;
 
 /**
@@ -131,19 +132,14 @@ final class CitationSheetExport
     /** "Mon–Fri 8:00–18:00; Sat 9:00–13:30" from whatever shape the profile holds; the raw text when it is not structured. @param list<mixed> $hours */
     public static function hoursLine(array $hours): string
     {
-        $parts = [];
-        foreach ($hours as $h) {
-            if (is_string($h)) {
-                $parts[] = trim($h);
-            } elseif (is_array($h)) {
-                $day = (string) ($h['day'] ?? $h['dayOfWeek'] ?? $h['days'] ?? '');
-                $open = (string) ($h['open'] ?? $h['opens'] ?? '');
-                $close = (string) ($h['close'] ?? $h['closes'] ?? '');
-                $parts[] = trim($day.' '.($open !== '' || $close !== '' ? $open.'–'.$close : (string) ($h['text'] ?? '')));
-            }
+        // A plain list of strings is shown as written. Anything else is the stored per-day map (or one of the
+        // legacy shapes BusinessHours::normalize repairs), collapsed the way the site shows it to customers:
+        // "Monday – Friday, 8am – 6pm; Saturday, 9am – 1:30pm" / "Monday – Sunday, Open 24 hours".
+        if ($hours !== [] && array_is_list($hours) && array_filter($hours, 'is_string') === $hours) {
+            return implode('; ', array_values(array_filter(array_map('trim', $hours), fn (string $p): bool => $p !== '')));
         }
 
-        return implode('; ', array_values(array_filter($parts, fn (string $p): bool => $p !== '')));
+        return implode('; ', array_map(fn (array $row): string => $row['label'].', '.$row['value'], BusinessHours::displayRows($hours)));
     }
 
     /** The tracker tab as CSV: the NAP block in the tab's own two-column layout, a blank line, then the directory table. @param array<string, mixed> $location */
