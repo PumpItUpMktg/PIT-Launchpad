@@ -98,6 +98,10 @@ final class CitationSheetExport
             'not_relevant' => 'Not relevant',
             default => 'Not scanned',
         };
+        // "Live URL" is a promise the freelancer acts on: only a listing the scan still finds live goes there.
+        // A URL on a missing row is where the listing was last seen (the page stopped answering) and a URL
+        // on a needs-review row could not be confirmed as this office's — both are notes, never "live".
+        $liveUrl = in_array($r->chip['key'], ['live', 'mismatch', 'submitted'], true) ? $r->listingUrl : null;
         $notes = [];
         $notes[] = ucfirst($r->tierLabel).' value'.($r->isLocal ? ', local' : ', national');
         if ($r->listedFor !== null) {
@@ -106,7 +110,12 @@ final class CitationSheetExport
         if ($r->chip['key'] === 'mismatch' && $r->napMatchSummary !== '') {
             $notes[] = $r->napMatchSummary;
         }
-        if ($r->createUrl !== null && $r->listingUrl === null) {
+        if ($liveUrl === null && $r->listingUrl !== null) {
+            $notes[] = $r->chip['key'] === 'needs_review'
+                ? 'scan found '.$r->listingUrl.' but could not confirm it is this office\'s — check before creating another'
+                : 'last seen at '.$r->listingUrl.' (the page no longer answers) — confirm before re-creating';
+        }
+        if ($r->createUrl !== null && $liveUrl === null) {
             $notes[] = ($r->createLabel ?? 'Create').': '.$r->createUrl;
         }
         if ($r->lastCheckedAt !== null) {
@@ -118,7 +127,7 @@ final class CitationSheetExport
             'homepage' => $r->homepageUrl,
             'status' => $status,
             'status_key' => $r->chip['key'],
-            'live_url' => $r->listingUrl,
+            'live_url' => $liveUrl,
             'create_url' => $r->createUrl,
             'submittable' => $r->submittable,
             'tier' => $r->tierLabel,

@@ -79,6 +79,28 @@ test('a listing the brand queries never surface is found by the per-directory si
         ->and(collect($queries)->contains('site:bbb.org "ACME Plumbing" Clifton'))->toBeTrue();
 });
 
+test('a brand query that ranks a directory\'s search page, a directions page or a category page never writes a Live row — the listing behind them does', function (): void {
+    $yelp = Directory::factory()->create(['domain' => 'yelp.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
+    $mapquest = Directory::factory()->create(['domain' => 'mapquest.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
+    $yp = Directory::factory()->create(['domain' => 'yellowpages.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
+
+    // Exactly what the first production export showed as "Live": brand queries ranking non-listing pages.
+    $scanner = new CitationScanner(dfsAnswering(fn (string $q): array => str_starts_with($q, 'site:') ? [] : [
+        ['position' => 1, 'url' => 'https://www.yelp.com/search?cflt=waterproofing&find_loc=Clifton%2C+NJ', 'domain' => 'www.yelp.com', 'title' => 'Top 10 Best Waterproofing in Clifton, NJ'],
+        ['position' => 2, 'url' => 'https://www.mapquest.com/directions/to/us/new-jersey/acme-plumbing--clifton-424342731', 'domain' => 'www.mapquest.com', 'title' => 'Directions to ACME Plumbing'],
+        ['position' => 3, 'url' => 'https://www.yellowpages.com/caldwell-nj-07006/plumbers', 'domain' => 'www.yellowpages.com', 'title' => 'Best 30 Plumbers in Caldwell, NJ'],
+        // Further down the same SERP: the real Yelp listing. It — not the search page — is the citation.
+        ['position' => 7, 'url' => 'https://www.yelp.com/biz/acme-plumbing-clifton', 'domain' => 'www.yelp.com', 'title' => 'ACME Plumbing - Clifton, NJ'],
+    ]));
+    $scanner->scanLocation($this->location);
+
+    $rows = CitationStatus::query()->where('location_id', $this->location->id)->get()->keyBy('directory_id');
+    expect($rows->has($mapquest->id))->toBeFalse()
+        ->and($rows->has($yp->id))->toBeFalse()
+        ->and($rows->get($yelp->id)?->found_url)->toBe('https://www.yelp.com/biz/acme-plumbing-clifton')
+        ->and($rows->get($yelp->id)?->presence)->toBe(CitationPresence::PresentMatch);
+});
+
 test('a site: result that does not name the brand, or is off-domain, is not a listing', function (): void {
     $yp = Directory::factory()->create(['domain' => 'yellowpages.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
 
