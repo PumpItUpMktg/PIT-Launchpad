@@ -191,6 +191,7 @@
   }
   function logout(reason) {
     localStorage.removeItem(K.token); localStorage.removeItem(K.tech);
+    forgetTypes();   // the pick list belongs to the device that was signed in — never shown to the next one
     $('#device').value = localStorage.getItem(K.device) || '';
     $('#login-msg').textContent = reason || '';   // never bounce to login silently — say why
     show('login');
@@ -216,14 +217,26 @@
   const b64 = (dataUrl) => (dataUrl || '').split(',')[1] || '';
 
   // ---- services (the site's pickable list, fetched when online and remembered for offline captures) ----
-  const TYPES_KEY = 'capture.job_types';
-  function knownTypes() { try { return JSON.parse(localStorage.getItem(TYPES_KEY) || '[]') || []; } catch (e) { return []; } }
+  // Cached PER DEVICE: a phone (or an operator's browser) that has signed in as another client's device
+  // must never offer that client's services. One browser-wide key did exactly that — the last list fetched
+  // stayed until the next successful fetch replaced it, across sign-outs and device switches.
+  const TYPES_PREFIX = 'capture.job_types:';
+  const typesKey = () => TYPES_PREFIX + (localStorage.getItem(K.device) || '');
+  function forgetTypes() {
+    const stale = [];
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && (k === 'capture.job_types' || k.startsWith(TYPES_PREFIX))) stale.push(k); }
+    stale.forEach((k) => localStorage.removeItem(k));
+  }
+  function knownTypes() { try { return JSON.parse(localStorage.getItem(typesKey()) || '[]') || []; } catch (e) { return []; } }
   async function loadOptions() {
     if (!token()) return;
     try {
-      const r = await api('/options'); if (!r.ok) return;
+      const r = await api('/options');
+      if (r.status === 401) { logout('Signed out — sign in again.'); return; }
+      if (!r.ok) return;
       const data = await r.json();
-      if (data && Array.isArray(data.job_types)) localStorage.setItem(TYPES_KEY, JSON.stringify(data.job_types));
+      if (data && Array.isArray(data.job_types)) localStorage.setItem(typesKey(), JSON.stringify(data.job_types));
+      else localStorage.removeItem(typesKey());
     } catch (e) {}
   }
   function renderPicks() {
@@ -420,6 +433,7 @@
       const r = await api('/auth/redeem', { method: 'POST', json: { device, code } });
       if (!r.ok) { $('#login-msg').textContent = 'That code didn’t work. Try again.'; return; }
       const { token: t, tech } = await r.json();
+      forgetTypes();   // a fresh sign-in starts from the server's list, never a previous device's
       localStorage.setItem(K.token, t); if (tech) localStorage.setItem(K.tech, tech);
       show('list'); loadJobs(); loadOptions(); drainQueue();
     });
