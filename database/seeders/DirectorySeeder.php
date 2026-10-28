@@ -50,6 +50,8 @@ class DirectorySeeder extends Seeder
         'angi.com' => 'https://www.angi.com/companyaccount/',
         'yellowpages.com' => 'https://accounts.yellowpages.com/',
         'brownbook.net' => 'https://www.brownbook.net/business/add',
+        'dnb.com' => 'https://www.dnb.com/en-us/smb/duns/get-a-duns.html',
+        'data-axle.com' => 'https://www.data-axle.com/marketing-solutions/local-listings-management/',
     ];
 
     /**
@@ -67,7 +69,7 @@ class DirectorySeeder extends Seeder
         $rows = [
             ['google.com', 'Google Business Profile', 5, 100, 100, $acct, $perAddress, true, 'Confirmed via the platform GBP integration, not the organic scan.'],
             ['yelp.com', 'Yelp', 5, 93, 95, $f, $perAddress, false, null],
-            ['facebook.com', 'Facebook', 5, 96, 85, $acct, $perBusiness, true, 'Confirmed via the platform integration; one page per business.'],
+            ['facebook.com', 'Facebook', 5, 96, 85, $acct, $perAddress, true, 'Confirmed via the platform integration. A multi-location brand runs one page per office (location pages), so each office is checked against its own page — never credited with a sibling\'s.'],
             ['bbb.org', 'Better Business Bureau', 4, 92, 88, $f, $perAddress, false, null],
             ['angi.com', 'Angi', 4, 90, 88, $f, $perAddress, false, 'Home-services heavy.'],
             ['maps.apple.com', 'Apple Maps', 4, 91, 80, $acct, $perAddress, true, 'Confirmed via Apple Business Connect.'],
@@ -85,6 +87,13 @@ class DirectorySeeder extends Seeder
             ['citysearch.com', 'Citysearch', 2, 80, 40, $f, $perAddress, false, null],
             ['hotfrog.com', 'Hotfrog', 2, 78, 35, $f, $perAddress, false, null],
             ['brownbook.net', 'Brownbook', 1, 70, 25, $f, $perAddress, false, null],
+            // Data aggregators: no public listing page of their own to scan, but they feed the long tail of
+            // smaller directories, so a correct record there is the cheapest way to fix dozens of citations.
+            ['data-axle.com', 'Data Axle', 4, 80, 70, $f, $perAddress, false, 'Aggregator (formerly Infogroup / Express Update) — feeds many smaller directories; the scan cannot see it directly.'],
+            ['dnb.com', 'Dun & Bradstreet', 4, 92, 65, $acct, $perAddress, false, 'Aggregator — a D-U-N-S number per location; feeds business-data consumers; the scan cannot see it directly.'],
+            ['ezlocal.com', 'EZlocal', 2, 75, 35, $f, $perAddress, false, null],
+            ['local.com', 'Local.com', 2, 78, 30, $f, $perAddress, false, null],
+            ['spoke.com', 'Spoke', 1, 70, 20, $f, $perAddress, false, null],
         ];
 
         return array_map(fn (array $r): array => [

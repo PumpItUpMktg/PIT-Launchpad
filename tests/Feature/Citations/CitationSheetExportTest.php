@@ -64,6 +64,24 @@ test('the tracker export carries the canonical NAP block and every directory wit
     $this->artisan('launchpad:citation-sheet --site='.$this->site->id.' --format=csv --location='.$this->location->id)->expectsOutputToContain('Hotfrog,Missing')->assertSuccessful();
 });
 
+test('a stale or unconfirmed URL never fills Live URL — it goes to the notes with what it means', function (): void {
+    $aged = sheetDir('Superpages', ['submission_url' => 'https://superpages.example/add']);
+    $unsure = sheetDir('Citysearch');
+    // Aged out: the page stopped answering, the last-seen URL is kept on the row.
+    CitationStatus::factory()->for($this->site)->create(['location_id' => $this->location->id, 'directory_id' => $aged->id, 'presence' => CitationPresence::Absent, 'found_url' => 'https://superpages.example/clifton-nj/bpp/sump-pump-gurus-1', 'last_scanned_at' => '2026-10-20 10:00:00']);
+    // Found but attribution could not say whose it is.
+    CitationStatus::factory()->for($this->site)->create(['location_id' => $this->location->id, 'directory_id' => $unsure->id, 'presence' => CitationPresence::Unknown, 'needs_review' => true, 'found_url' => 'https://citysearch.example/p/9', 'last_scanned_at' => '2026-10-20 10:00:00']);
+
+    $rows = collect(app(CitationSheetExport::class)->forSite($this->site)['locations'][0]['directories'])->keyBy('directory');
+    expect($rows['Superpages']['status'])->toBe('Missing')
+        ->and($rows['Superpages']['live_url'])->toBeNull()
+        ->and($rows['Superpages']['notes'])->toContain('last seen at https://superpages.example/clifton-nj/bpp/sump-pump-gurus-1')
+        ->and($rows['Superpages']['notes'])->toContain('Create listing: https://superpages.example/add')
+        ->and($rows['Citysearch']['status'])->toBe('Needs review')
+        ->and($rows['Citysearch']['live_url'])->toBeNull()
+        ->and($rows['Citysearch']['notes'])->toContain('could not confirm it is this office\'s');
+});
+
 test('an always-open office reads as one line, not seven', function (): void {
     expect(CitationSheetExport::hoursLine(array_fill_keys(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], '24h')))->toBe('Monday – Sunday, Open 24 hours')
         ->and(CitationSheetExport::hoursLine(['Mon–Fri 8–6']))->toBe('Mon–Fri 8–6')

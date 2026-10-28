@@ -34,7 +34,7 @@ test('the scan job records a run with a coverage snapshot and score', function (
     ]);
     Directory::factory()->create(['domain' => 'yelp.com', 'scope' => DirectoryScope::National, 'seo_value' => 60]);
 
-    bindFakeDfs([['position' => 1, 'url' => 'https://yelp.com/biz/acme', 'domain' => 'yelp.com']]);
+    bindFakeDfs([['position' => 1, 'url' => 'https://yelp.com/biz/acme-plumbing', 'domain' => 'yelp.com']]);
 
     $job = new RunCitationScan($location->id, sweepSharedNumbers: false, trigger: 'manual');
     app()->call([$job, 'handle']);

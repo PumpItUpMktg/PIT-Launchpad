@@ -51,7 +51,7 @@ final class CitationScanner
     private const MAX_CANDIDATES = 3;
 
     /** URL path fragments that mark a directory's own search / browse page rather than one listing. */
-    private const NON_LISTING_PATHS = ['/search', '/find', '/results', '/s?', 'find_desc=', '?q=', '/browse', '/category/', '/categories/', '/directory/', 'companylist', '/near-me', '/best-'];
+    private const NON_LISTING_PATHS = ['/search', '/find', '/results', '/s?', 'find_desc=', 'find_loc=', '?q=', '/browse', '/category/', '/categories/', '/directory/', 'companylist', '/near-me', '/best-', '/directions', '/maps/dir'];
 
     /** Directory ids whose presence check could not be made this scan (a failed call) — never aged out. @var list<string> */
     private array $unchecked = [];
@@ -86,7 +86,7 @@ final class CitationScanner
 
         // Discovery: collapse the brand-query result set to one entry per domain (a listing that ranks for
         // several queries is one listing).
-        $found = $this->runQueries($this->buildQueries($profile));
+        $found = $this->runQueries($this->buildQueries($profile), trim((string) $profile->business_name));
 
         // Presence: a targeted check per applicable directory the discovery pass missed.
         $applicable = $this->applicability->forLocation($location);
@@ -367,7 +367,10 @@ final class CitationScanner
                 continue;
             }
 
-            $found = $this->runQueries(['"'.$line->phone.'"']);
+            // The phone query carries no brand of its own; the listing test uses the anchor office's name (an
+            // empty name keeps only the search-/directions-page rule).
+            $brand = trim((string) LocationNapProfile::query()->where('location_id', $anchor->id)->value('business_name'));
+            $found = $this->runQueries(['"'.$line->phone.'"'], $brand);
             foreach ($found as $domain => $result) {
                 $directory = $this->matchDirectory($domain, $directories);
                 $this->persistFoundDomain($anchor, $domain, $directory?->id, $result['url']);
@@ -413,15 +416,19 @@ final class CitationScanner
     }
 
     /**
-     * Run each query through DataForSEO organic search and collapse to one result per domain (first seen wins
-     * the URL). Presence is what matters; the query anchoring is the signal.
+     * Run each query through DataForSEO organic search and collapse to one result per domain (first LISTING
+     * seen wins the URL). Presence is what matters; the query anchoring is the signal. Every result goes
+     * through the same listing test as the per-directory check: a brand query ranks the directory's own
+     * search page, a directions page or a trade category page just as readily as the listing, and the first
+     * production export showed exactly those as "Live" — a page that is not one listing naming the brand is
+     * not a citation, whichever query found it.
      *
      * @param  list<string>  $queries
      * @return array<string, array{url: string, name: ?string, address: ?string, phone: ?string}>
      *
      * @phpstan-impure writes the call ledger
      */
-    private function runQueries(array $queries): array
+    private function runQueries(array $queries, string $brand): array
     {
         $depth = (int) config('services.dataforseo.serp_depth', 20);
 
@@ -434,6 +441,9 @@ final class CitationScanner
             foreach ($rows as $row) {
                 $domain = $this->normalizeDomain((string) $row['domain']);
                 if ($domain === '' || isset($out[$domain])) {
+                    continue;
+                }
+                if (! $this->looksLikeListing((string) $row['url'], (string) ($row['title'] ?? ''), $brand)) {
                     continue;
                 }
                 $out[$domain] = [
