@@ -16,4 +16,6 @@ enum AuditAction: string
     case RoleChanged = 'role_changed';
     case SiteWentLive = 'site_went_live';
     case DeadLinkOverride = 'dead_link_override';
+    case TechMoved = 'tech_moved';
+    case TechRemoved = 'tech_removed';
 }

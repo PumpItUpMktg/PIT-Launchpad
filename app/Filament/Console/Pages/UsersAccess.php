@@ -4,8 +4,11 @@ namespace App\Filament\Console\Pages;
 
 use App\Enums\UserRole;
 use App\JobCapture\Auth\TechProvisioner;
+use App\JobCapture\Auth\TechRoster;
 use App\Models\Membership;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Models\TechDevice;
 use App\Models\User;
 use App\OpsConsole\ConsoleContext;
 use App\Security\Capability;
@@ -49,7 +52,7 @@ class UsersAccess extends ConsolePage
      * The just-issued capture credential to show once after provisioning a tech (the code is never stored
      * in plaintext, so it can only be displayed at the moment it is minted).
      *
-     * @var array{name: string, link: string, code: string}|null
+     * @var array{name: string, site: string, link: string, code: string}|null
      */
     public ?array $lastIssued = null;
 
@@ -68,7 +71,8 @@ class UsersAccess extends ConsolePage
     /** @return list<array{id: string, name: string, email: string, role: string, tier: string, sites: list<string>}> */
     public function getUsersProperty(): array
     {
-        return User::query()->with('memberships.site')->orderBy('name')->get()
+        // Techs are managed as devices in the roster below — one row per device, grouped by client.
+        return User::query()->where('role', '!=', UserRole::Tech->value)->with('memberships.site')->orderBy('name')->get()
             ->map(fn (User $u): array => [
                 'id' => (string) $u->id,
                 'name' => (string) $u->name,
@@ -82,6 +86,12 @@ class UsersAccess extends ConsolePage
                     ->unique()->values()->all(),
             ])
             ->all();
+    }
+
+    /** @return list<array{site_id: string, site: string, techs: list<array{id: string, name: string, phone: string, email: string, status: string, status_label: string, last_active: ?string, site_id: string}>}> */
+    public function getTechsProperty(): array
+    {
+        return app(TechRoster::class)->forUser($this->user());
     }
 
     /** @return array<string, string> assignable roles (label => value not needed; value => label). */
@@ -166,6 +176,7 @@ class UsersAccess extends ConsolePage
 
         $this->lastIssued = [
             'name' => $name,
+            'site' => $this->siteOptions[$this->newSiteId] ?? 'this site',
             'link' => $result['link'],
             'code' => $result['code'],
         ];
@@ -229,5 +240,101 @@ class UsersAccess extends ConsolePage
         Membership::query()->where('user_id', $userId)->where('site_id', $siteId)->delete();
 
         Notification::make()->title('Site access revoked.')->send();
+    }
+
+    // ---- Technicians: the whole device lifecycle from this one page ----
+
+    /** A fresh code for a live device (invite re-sent when an email is on file). */
+    public function refreshTech(string $id): void
+    {
+        $device = $this->ownedDevice($id);
+        if ($device === null) {
+            return;
+        }
+        $result = app(TechRoster::class)->refresh($device);
+        if ($result === null) {
+            Notification::make()->title("{$device->name} is inactive — reactivate instead.")->warning()->send();
+
+            return;
+        }
+        $this->showIssued($device, $result);
+    }
+
+    public function revokeTech(string $id): void
+    {
+        $device = $this->ownedDevice($id);
+        if ($device === null) {
+            return;
+        }
+        app(TechRoster::class)->revoke($device);
+        Notification::make()->title("Revoked {$device->name} — their phone stops working now.")->success()->send();
+    }
+
+    public function reactivateTech(string $id): void
+    {
+        $device = $this->ownedDevice($id);
+        if ($device === null) {
+            return;
+        }
+        $this->showIssued($device, app(TechRoster::class)->reactivate($device));
+    }
+
+    /** Delete an inactive tech (device + account). Refused for a live one. */
+    public function removeTech(string $id): void
+    {
+        $device = $this->ownedDevice($id);
+        if ($device === null) {
+            return;
+        }
+        if (! app(TechRoster::class)->remove($device, $this->user())) {
+            Notification::make()->title("{$device->name} is still active — revoke first, then remove.")->danger()->send();
+
+            return;
+        }
+        Notification::make()->title("Removed {$device->name}.")->success()->send();
+    }
+
+    /** Rebind a tech's device to another client. */
+    public function moveTech(string $id, string $siteId): void
+    {
+        $device = $this->ownedDevice($id);
+        $to = Site::query()->find($siteId);
+        if ($device === null || $to === null) {
+            return;
+        }
+        if (! app(TechRoster::class)->move($device, $to, $this->user())) {
+            Notification::make()->title('That move is not allowed.')->danger()->send();
+
+            return;
+        }
+        Notification::make()->title("Moved {$device->name} to {$to->brand_name} — their phone picks it up on the next sync.")->success()->send();
+    }
+
+    /** @param  array{code: string, link: string, delivered: bool}  $result */
+    private function showIssued(TechDevice $device, array $result): void
+    {
+        $siteName = Site::query()->find((string) $device->site_id)?->brand_name;
+        $this->lastIssued = [
+            'name' => (string) $device->name,
+            'site' => trim((string) $siteName) !== '' ? (string) $siteName : 'this site',
+            'link' => $result['link'],
+            'code' => $result['code'],
+        ];
+        if ($result['delivered'] && filled($device->email)) {
+            Notification::make()->title("Emailed {$device->name}'s capture link + code to {$device->email}.")->success()->send();
+        } else {
+            Notification::make()->title("Send {$device->name} the link + code below — no email on file.")->warning()->send();
+        }
+    }
+
+    /** A device on a client the signed-in user may see; null otherwise (or without the capability). */
+    private function ownedDevice(string $id): ?TechDevice
+    {
+        if (! $this->can(Capability::ManageUsers)) {
+            return null;
+        }
+        $device = TechDevice::withoutGlobalScope(SiteScope::class)->whereKey($id)->first();
+
+        return $device !== null && $this->user()->canSeeSite((string) $device->site_id) ? $device : null;
     }
 }

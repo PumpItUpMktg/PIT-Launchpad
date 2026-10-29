@@ -7,6 +7,7 @@ use App\Models\Membership;
 use App\Models\Site;
 use App\Models\TechDevice;
 use App\Models\User;
+use Livewire\Livewire;
 
 it('is reachable only by a Super Admin', function () {
     $this->actingAs(User::factory()->create());
@@ -99,4 +100,61 @@ it('does nothing when a Site Admin tries to manage users', function () {
     (new UsersAccess)->setRole($target->id, UserRole::Operator->value);
 
     expect($target->fresh()->role)->toBe(UserRole::Client);
+});
+
+it('manages the whole tech lifecycle from the one page: resend, revoke, reactivate, move, remove', function () {
+    $this->actingAs(User::factory()->create());
+    $gurus = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    $other = Site::factory()->create(['brand_name' => 'Acme Roofing']);
+    $device = TechDevice::factory()->create(['site_id' => $other->id, 'name' => 'Mike R.', 'email' => '']);
+    $page = new UsersAccess;
+
+    $page->refreshTech($device->id);
+    expect($page->lastIssued['code'])->toMatch('/^\d{6}$/')
+        ->and($page->lastIssued['site'])->toBe('Acme Roofing')   // the panel says which client the device is on
+        ->and($device->refresh()->login_code_hash)->not->toBeNull();
+
+    $page->moveTech($device->id, $gurus->id);
+    expect($device->refresh()->site_id)->toBe($gurus->id);
+
+    $page->removeTech($device->id);   // refused: still live
+    expect(TechDevice::withoutGlobalScopes()->whereKey($device->id)->exists())->toBeTrue();
+
+    $page->revokeTech($device->id);
+    expect($device->refresh()->revoked_at)->not->toBeNull();
+
+    $page->reactivateTech($device->id);
+    expect($device->refresh()->revoked_at)->toBeNull()->and($page->lastIssued['site'])->toBe('Sump Pump Gurus');
+
+    $page->revokeTech($device->id);
+    $page->removeTech($device->id);
+    expect(TechDevice::withoutGlobalScopes()->whereKey($device->id)->exists())->toBeFalse();
+});
+
+it('does nothing to a tech when a Site Admin cannot see that client', function () {
+    $this->actingAs(User::factory()->siteAdmin()->create()); // no memberships → sees nothing
+    $device = TechDevice::factory()->create(['site_id' => Site::factory()->create()->id]);
+
+    (new UsersAccess)->revokeTech($device->id);
+
+    expect($device->refresh()->revoked_at)->toBeNull();
+});
+
+it('renders the roster grouped by client with the status badge, and the old Capture Devices URL lands here', function () {
+    $this->actingAs(User::factory()->create());
+    $gurus = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
+    TechDevice::factory()->create(['site_id' => $gurus->id, 'name' => 'Mike R.']);
+    TechDevice::factory()->revoked()->create(['site_id' => $gurus->id, 'name' => 'Old Mike']);
+
+    Livewire::test(UsersAccess::class)
+        ->assertOk()
+        ->assertSee('Technicians (2)')
+        ->assertSee('Sump Pump Gurus')
+        ->assertSee('Mike R.')
+        ->assertSee('Invited')
+        ->assertSee('Inactive')
+        ->assertSee('Remove')
+        ->assertSee('Team (');
+
+    $this->get('/console/capture-devices')->assertRedirect('/console/users');
 });
