@@ -57,6 +57,9 @@ Route::get('capture/sw.js', [CapturePageController::class, 'serviceWorker'])->na
 // §5 Job Capture PWA API. Auth endpoints are open (a magic-link device id + one-time
 // code); the job endpoints run behind the device-token middleware, which binds the
 // tenant from the token. Photos post base64-encoded from the PWA's offline queue.
+// Capture Devices folded into Users & access (one place manages people) — old bookmarks land there.
+Route::redirect('/console/capture-devices', '/console/users', 301);
+
 Route::prefix('capture/api')->group(function (): void {
     Route::post('auth/request-code', [CaptureController::class, 'requestCode']);
     Route::post('auth/redeem', [CaptureController::class, 'redeem']);
