@@ -10,11 +10,14 @@ use App\Integrations\Census\MunicipalityGazetteer;
 use App\Integrations\Claude\ClaudeClient;
 use App\Integrations\Claude\CompletionResult;
 use App\Models\Content;
+use App\Models\ConversionConfig;
 use App\Models\CoverageArea;
 use App\Models\Keyword;
+use App\Models\LeadForm;
 use App\Models\Location;
 use App\Models\PageConfig;
 use App\Models\ProofItem;
+use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\Site;
 use App\Models\SiteNarrative;
@@ -1719,4 +1722,24 @@ it('Contact: shows the CORPORATE address whenever one is captured (every tenant)
     $page = blockContactPage($mobile);
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
     expect($markup)->not->toContain('1 Garage Ln, Nutley, NJ 07110');
+});
+
+it('the home page carries its lead form in the HERO as the #contact card; the closing band keeps a button that scrolls to it', function () {
+    $site = Site::factory()->create();
+    $general = LeadForm::factory()->create(['site_id' => $site->id, 'name' => 'General booking', 'embed' => '<iframe src="https://gurus.joby.io/book?embed=1"></iframe>']);
+    ConversionConfig::withoutGlobalScope(SiteScope::class)->create(['site_id' => $site->id, 'default_lead_form_id' => $general->id]);
+    $home = blockHomePage($site);
+
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)->toContain('lp-hero-form-card')->toContain('[lp_form]')->toContain('id="contact"')
+        ->and(substr_count($markup, 'id="contact"'))->toBe(1)
+        ->and(substr_count($markup, '[lp_form]'))->toBe(1)
+        ->and(strpos($markup, 'lp-hero-form-card'))->toBeLessThan(strpos($markup, 'lp-cta'))
+        // The iframe never rides post_content; the blob carries the resolved embed for the plugin's [lp_form].
+        ->and($markup)->not->toContain('joby.io');
+    expect(app(MetaBlobAssembler::class)->assemble($home->fresh(), collect())['form_embed'])->toContain('joby.io/book');
+
+    // The hero card replaces the hero image — the right column is the form, not a picture.
+    expect(substr_count($markup, 'lp-hero'))->toBeGreaterThan(0);
 });

@@ -34,6 +34,7 @@ use App\Models\SiloBlueprint;
 use App\Models\Site;
 use App\Models\SiteNarrative;
 use App\Models\VoiceProfile;
+use App\Publishing\Forms\LeadFormResolver;
 use App\Publishing\Legal\LegalContext;
 use App\Publishing\Legal\LegalTemplates;
 use App\Publishing\MetaBlobAssembler;
@@ -70,6 +71,7 @@ final class BlockContentAssembler
         private readonly BlogFeeds $feeds,
         private readonly PrioritySections $prioritySections,
         private readonly PriorityKeywords $priorityKeywords,
+        private readonly LeadFormResolver $forms = new LeadFormResolver,
     ) {}
 
     /**
@@ -91,9 +93,16 @@ final class BlockContentAssembler
         // carry the form in their 60/40 description row (which owns #contact); location pages resolve
         // their own per-location context in composeLocation; the Contact page has its own form section
         // — all three are excluded here so no page ever renders two forms.
+        // The home page carries its form IN THE HERO (the most prominent spot); a silo hub keeps it in
+        // the closing band; a service page composes its own 60/40 row (hasForm passed to the spoke);
+        // office hubs / town pages build their own context below (hero as well).
         $leadForm = in_array($content->page_type, [PageType::Home, PageType::Hub], true)
             && $this->hasLeadForm($content);
-        $ctx = $this->context($this->site($content), $leadForm);
+        $ctx = $this->context(
+            $this->site($content),
+            $leadForm,
+            $content->page_type === PageType::Home ? PageContext::PLACEMENT_HERO : PageContext::PLACEMENT_CLOSING,
+        );
 
         // Dispatch by the page's identity: Home by page_type, standard pages (Utility page_type) by
         // their finer standard_type. A type whose block composer hasn't shipped returns null — the blob
@@ -188,7 +197,7 @@ final class BlockContentAssembler
         // A configured lead-form embed (any provider's iframe on PageConfig) makes the form section REAL — the
         // markup carries the [lp_form] shortcode and the plugin renders the embed server-side (the
         // iframe itself rides the blob's form_embed, never kses'd post_content).
-        $hasForm = trim((string) (PageConfig::query()->where('content_id', $content->id)->value('form_embed') ?? '')) !== '';
+        $hasForm = $this->hasLeadForm($content);
 
         return $this->composer->composeContact(
             slots: $slots,
@@ -461,23 +470,13 @@ final class BlockContentAssembler
     }
 
     /**
-     * A configured lead-capture form makes the service-description row a 60/40 two-column (copy +
-     * [lp_form]). The embed is resolved per-page (PageConfig.form_embed) OR site-wide
-     * (ConversionConfig.form_embed) — the same fallback the meta-blob's form_embed uses, so the
-     * two-column and the rendered embed always agree.
+     * Whether this page renders a lead form at all — resolved by {@see LeadFormResolver} (page override →
+     * the owning service / office's library form → site default → the legacy paste), the SAME chain the
+     * meta-blob's form_embed uses, so the form section and the rendered embed always agree.
      */
     private function hasLeadForm(Content $content): bool
     {
-        $page = trim((string) (PageConfig::query()->where('content_id', $content->id)->value('form_embed') ?? ''));
-        if ($page !== '') {
-            return true;
-        }
-
-        $site = ConversionConfig::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $content->site_id)
-            ->value('form_embed');
-
-        return is_string($site) && trim($site) !== '';
+        return $this->forms->embedFor($content) !== null;
     }
 
     /**
@@ -1010,7 +1009,7 @@ final class BlockContentAssembler
         $hasForm = $this->hasLeadForm($content);
         $phone = trim((string) $location->phone);
         if ($phone === '') {
-            return $this->context($site, $hasForm);
+            return $this->context($site, $hasForm, PageContext::PLACEMENT_HERO);
         }
 
         $emergencyPhone = $site !== null ? $this->contact->emergencyPhone($site) : null;
@@ -1022,6 +1021,7 @@ final class BlockContentAssembler
             emergencyDisplay: PhoneNumber::display($emergencyPhone),
             emergencyTel: $this->contact->tel($emergencyPhone),
             hasForm: $hasForm,
+            formPlacement: PageContext::PLACEMENT_HERO, // office hub + town pages: the form rides the hero
         );
     }
 
@@ -1929,7 +1929,7 @@ final class BlockContentAssembler
      * site business phone), so a guided-onboarded tenant that set only the wizard phone still shows a
      * number. Emergency uses the dedicated after-hours line when set, else the main number.
      */
-    private function context(?Site $site, bool $hasForm = false): PageContext
+    private function context(?Site $site, bool $hasForm = false, string $formPlacement = PageContext::PLACEMENT_CLOSING): PageContext
     {
         $phone = $site !== null ? $this->contact->phone($site) : null;
         $emergencyPhone = $site !== null ? $this->contact->emergencyPhone($site) : null;
@@ -1941,6 +1941,7 @@ final class BlockContentAssembler
             emergencyDisplay: PhoneNumber::display($emergencyPhone),
             emergencyTel: $this->contact->tel($emergencyPhone),
             hasForm: $hasForm,
+            formPlacement: $formPlacement,
         );
     }
 

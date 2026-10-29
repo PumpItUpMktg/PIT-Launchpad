@@ -34,10 +34,22 @@
                 <span class="g-seed {{ $this->leadFormSet() ? 'confirmed' : '' }}">{{ $this->leadFormSet() ? 'on file' : 'not set' }}</span>
             </div>
             <p class="g-muted" style="margin:8px 0 10px">
-                Paste your form's embed code — the <code>&lt;iframe&gt;</code> (plus any loader <code>&lt;script&gt;</code>) from
-                any provider (GoHighLevel, Jotform, a plain HTML form, …). It's stored once for the whole site and drops into
-                the conversion block on every service page — beside the service description as a 60/40 column when set. Leave
-                blank and pages show the “Call Now” button alone.
+                Forms live in <strong>Settings → Lead forms</strong> (one per office, one per service — the form itself tells the
+                CRM where the lead came from). Each Office and Service picks its own form; this is the <strong>site default</strong>
+                the home page and any page without an office / service form render — in the hero on home, office and town pages,
+                beside the description on service pages.
+            </p>
+            @php $leadFormOptions = $this->leadFormOptions; @endphp
+            <label class="g-muted" style="display:block;margin:0 0 4px;font-weight:600">Site default form</label>
+            <select wire:model="defaultLeadFormId" class="g-input" style="width:100%;max-width:420px;margin-bottom:12px">
+                <option value="">— none (use the pasted embed below, else call-button only) —</option>
+                @foreach ($leadFormOptions as $id => $name)
+                    <option value="{{ $id }}">{{ $name }}</option>
+                @endforeach
+            </select>
+            <p class="g-muted" style="margin:0 0 6px">
+                Legacy single paste — the last fallback when no library form applies. The <code>&lt;iframe&gt;</code> (plus any
+                loader <code>&lt;script&gt;</code>) from any provider. Leave blank and pages with no form show the “Call Now” button alone.
             </p>
             <textarea
                 wire:model="formEmbed"

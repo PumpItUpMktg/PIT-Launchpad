@@ -3,6 +3,7 @@
 use App\Enums\UserRole;
 use App\Filament\Pages\Gathering\ConnectionsStep;
 use App\Models\ConversionConfig;
+use App\Models\LeadForm;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\User;
@@ -80,4 +81,22 @@ it('persists the embed when advancing with Save & continue', function () {
         ->call('continueToNext');
 
     expect(siteEmbed($this->site))->toBe($embed);
+});
+
+it('picks the site default lead form from the library and never a form from another site', function () {
+    $site = $this->site;
+    $own = LeadForm::factory()->create(['site_id' => $site->id, 'name' => 'General booking']);
+    $foreign = LeadForm::factory()->create(['name' => 'Foreign']);
+
+    Livewire::test(ConnectionsStep::class)
+        ->set('defaultLeadFormId', $own->id)
+        ->call('saveLeadForm')
+        ->assertSet('defaultLeadFormId', $own->id);
+    expect(ConversionConfig::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->value('default_lead_form_id'))->toBe($own->id);
+
+    Livewire::test(ConnectionsStep::class)
+        ->set('defaultLeadFormId', $foreign->id)
+        ->call('saveLeadForm')
+        ->assertSet('defaultLeadFormId', null);
+    expect(ConversionConfig::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->value('default_lead_form_id'))->toBeNull();
 });

@@ -1,7 +1,7 @@
 === Launchpad Companion ===
 Requires at least: 6.6
 Requires PHP: 8.0
-Stable tag: 0.9.58
+Stable tag: 0.9.59
 License: GPLv2 or later
 
 The receiver on each client site for the Launchpad control plane. It implements
@@ -12,6 +12,11 @@ and 301 redirects. No page builder, no SEO plugin, no ACF, no media-library
 import — images are served from R2/CDN URLs in the payload.
 
 == Changelog ==
+
+= 0.9.59 =
+* Lead-form cards: a page may carry its lead form in the hero (home, office hub, town pages) as a light
+  card on the primary band (`.lp-hero-form-card`); the embedded iframe fills the hero and prose form
+  cards. Which form a page shows is still the control plane's `form_embed` — no contract change.
 
 = 0.9.58 =
 * A job post renders the town's official local sources (municipality, county, FEMA flood map) under
