@@ -45,7 +45,7 @@ class CaptureDevices extends ConsolePage
      * The just-issued credential to show once (the code is never stored in plaintext, so it can only be
      * displayed at the moment it is minted).
      *
-     * @var array{name: string, link: string, code: string}|null
+     * @var array{name: string, site: string, link: string, code: string}|null
      */
     public ?array $lastIssued = null;
 
@@ -55,6 +55,14 @@ class CaptureDevices extends ConsolePage
         $user = Auth::user();
 
         return $user instanceof User && $user->hasCapability(Capability::ManageUsers);
+    }
+
+    /** The selected site's name — every control on this page says which client the tech is bound to. */
+    public function siteLabel(): string
+    {
+        $name = trim((string) $this->currentSite()?->brand_name);
+
+        return $name !== '' ? $name : 'this site';
     }
 
     /** @return list<array{id: string, name: string, phone: string, email: string, active: bool, last_active: ?string}> */
@@ -101,6 +109,7 @@ class CaptureDevices extends ConsolePage
 
         $this->lastIssued = [
             'name' => $name,
+            'site' => $this->siteLabel(),
             'link' => $result['link'],
             'code' => $result['code'],
         ];
@@ -153,6 +162,7 @@ class CaptureDevices extends ConsolePage
 
         $this->lastIssued = [
             'name' => (string) $device->name,
+            'site' => $this->siteLabel(),
             'link' => $link,
             'code' => $code,
         ];

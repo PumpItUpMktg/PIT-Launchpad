@@ -19,7 +19,7 @@ it('is reachable only by the Super Admin tier', function () {
 });
 
 it('adds a tech device and surfaces a capture link + one-time code', function () {
-    $site = Site::factory()->create();
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus']);
 
     $page = new CaptureDevices;
     $page->siteId = $site->id;
@@ -31,6 +31,8 @@ it('adds a tech device and surfaces a capture link + one-time code', function ()
 
     expect($device)->not->toBeNull()
         ->and($device->name)->toBe('Mike R.')
+        ->and($page->siteLabel())->toBe('Sump Pump Gurus')
+        ->and($page->lastIssued['site'])->toBe('Sump Pump Gurus')   // the credential panel says which client the device is on
         ->and($page->lastIssued['code'])->toMatch('/^\d{6}$/')
         ->and($page->lastIssued['link'])->toContain('/capture?device='.$device->id)
         ->and($page->newName)->toBe('')   // form cleared
