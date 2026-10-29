@@ -34,8 +34,8 @@
                 <span class="g-seed {{ $this->leadFormSet() ? 'confirmed' : '' }}">{{ $this->leadFormSet() ? 'on file' : 'not set' }}</span>
             </div>
             <p class="g-muted" style="margin:8px 0 10px">
-                Forms live in <strong>Settings → Lead forms</strong> (one per office, one per service — the form itself tells the
-                CRM where the lead came from). Each Office and Service picks its own form; this is the <strong>site default</strong>
+                Forms live in <a href="{{ \App\Filament\Resources\LeadFormResource::getUrl() }}"><strong>System → Lead forms</strong></a>
+                (one per office, one per service — the form itself tells the CRM where the lead came from). Each Office and Service picks its own form; this is the <strong>site default</strong>
                 the home page and any page without an office / service form render — in the hero on home, office and town pages,
                 beside the description on service pages.
             </p>

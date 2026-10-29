@@ -12,6 +12,7 @@ use App\Models\Scopes\SiteScope;
 use App\Operator\ActiveTenant;
 use App\Publishing\Forms\LeadFormResolver;
 use App\Publishing\RepushPublished;
+use App\Security\Capability;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -24,6 +25,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * The site's lead-form library: one named iframe embed per form (a Joby / GHL / Jotform form the tenant
@@ -43,6 +45,12 @@ class LeadFormResource extends Resource
     protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
     protected static ?int $navigationSort = 3;
+
+    /** A System-column control (engine configuration) — operator tier only, like Connections and Feeds. */
+    public static function canAccess(): bool
+    {
+        return Auth::user()?->hasCapability(Capability::ManageEngineControls) ?? false;
+    }
 
     public static function form(Schema $schema): Schema
     {

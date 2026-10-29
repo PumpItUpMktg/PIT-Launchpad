@@ -104,7 +104,7 @@ class ServiceResource extends Resource
             Select::make('lead_form_id')->label('Lead form')
                 ->options(fn (): array => LeadForm::query()->orderBy('name')->pluck('name', 'id')->map('strval')->all())
                 ->nullable()->searchable()->placeholder('Site default')
-                ->helperText('The form this service\'s page renders (Settings → Lead forms). Blank = the site default. Re-push the page after changing it.'),
+                ->helperText('The form this service\'s page renders (System → Lead forms). Blank = the site default. Re-push the page after changing it.'),
 
             TextInput::make('short_description')->label('Card line')->maxLength(160)
                 ->helperText('One line for the hub services grid card.'),

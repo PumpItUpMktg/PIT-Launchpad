@@ -19,8 +19,8 @@ it('is a four-column header of exactly 28 items in the settled group order', fun
     expect(collect($structure)->pluck('group')->all())->toBe(['Build', 'Territory', 'Results', 'System']);
 
     $counts = collect($structure)->mapWithKeys(fn (array $c): array => [$c['group'] => count($c['items'])]);
-    expect($counts->all())->toBe(['Build' => 7, 'Territory' => 7, 'Results' => 7, 'System' => 8])
-        ->and($counts->sum())->toBe(29);
+    expect($counts->all())->toBe(['Build' => 7, 'Territory' => 7, 'Results' => 7, 'System' => 9])
+        ->and($counts->sum())->toBe(30);
 });
 
 it('places every item in its settled group and vocabulary', function () {
@@ -30,7 +30,7 @@ it('places every item in its settled group and vocabulary', function () {
     expect($byGroup['Build'])->toBe(['Dashboard', 'Setup', 'Posts', 'Pages', 'Jobs', 'Reviews', 'Live'])
         ->and($byGroup['Territory'])->toBe(['Markets', 'Towns', 'Citations', 'Links', 'Silos', 'Keywords', 'Internal links'])
         ->and($byGroup['Results'])->toBe(['Rankings', 'Town rank', 'Service areas', 'Indexing', 'Geo grid', 'Coverage', 'AI visibility'])
-        ->and($byGroup['System'])->toBe(['Connections', 'Feeds', 'Brand', 'Voice', 'Users', 'Queue', 'Recover', 'Corrections']);
+        ->and($byGroup['System'])->toBe(['Connections', 'Lead forms', 'Feeds', 'Brand', 'Voice', 'Users', 'Queue', 'Recover', 'Corrections']);
 });
 
 it('Territory vocabulary: "Markets" opens the market-card wall, "Towns" opens the served-town board', function () {
@@ -57,7 +57,7 @@ it('has no remaining gap items — all 27 surfaces are live', function () {
     // Every one of the 27 items resolves to a real /admin URL (Dashboard lands at '/admin' with no
     // trailing path, so match '/admin', not '/admin/').
     $items = collect(app(ConsoleNav::class)->columns())->flatMap(fn (array $c) => $c['items']);
-    expect($items)->toHaveCount(29);
+    expect($items)->toHaveCount(30);
     foreach ($items as $item) {
         expect($item['soon'])->toBeFalse()
             ->and($item['url'])->toBeString()
@@ -78,10 +78,10 @@ it('renders the four-column header — group titles and 28 live links, no greyed
         ->toContain('>Brand<')  // now a live link
         ->toContain('>Users<'); // now a live link
 
-    // All 29 items render as links; no "soon" spans remain. Corrections is the one cross-panel link, so
+    // All 30 items render as links; no "soon" spans remain. Corrections is the one cross-panel link, so
     // it goes without wire:navigate — a SPA swap would pull another panel's document into this one.
     expect($html)->toContain('>Corrections<')->toContain('/console/corrections');
     expect(substr_count($html, 'class="lp-cn-soon"'))->toBe(0)
-        ->and(substr_count($html, 'wire:navigate'))->toBe(28)      // 28 in-panel links
-        ->and(substr_count($html, '<a href='))->toBe(29);          // plus the cross-panel one
+        ->and(substr_count($html, 'wire:navigate'))->toBe(29)      // 29 in-panel links
+        ->and(substr_count($html, '<a href='))->toBe(30);          // plus the cross-panel one
 });
