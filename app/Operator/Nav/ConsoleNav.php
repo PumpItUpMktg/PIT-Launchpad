@@ -27,6 +27,7 @@ use App\Filament\Pages\TownRankPage;
 use App\Filament\Pages\UsersBoard;
 use App\Filament\Resources\ConnectionsResource;
 use App\Filament\Resources\KeywordResource;
+use App\Filament\Resources\LeadFormResource;
 use App\Filament\Resources\ReviewCaptureResource;
 use App\Filament\Resources\SiloManagementResource;
 use App\Filament\Resources\SourceResource;
@@ -35,7 +36,7 @@ use App\Filament\Resources\VoiceProfileResource;
 /**
  * The operator console navigation — the single source of the header IA (Relay 3 · PR 5). A
  * **four-column header**: four groups (Build · Territory · Results · System), no dropdowns, exactly
- * 29 items. Every item is either a live link to its surface or a "soon" placeholder for a surface
+ * 30 items. Every item is either a live link to its surface or a "soon" placeholder for a surface
  * that has not shipped yet — the IA is complete and legible from day one; each placeholder goes live
  * as its own PR lands (see `docs/specs/5-nav-cutover.md`, the authoritative mapping).
  *
@@ -92,6 +93,9 @@ class ConsoleNav
             ]],
             ['group' => 'System', 'items' => [
                 ['label' => 'Connections', 'surface' => ConnectionsResource::class, 'soon' => false],
+                // The lead-form library: one named iframe per office / service, picked on each Office and
+                // Service; the site default is picked on the Connections setup step.
+                ['label' => 'Lead forms', 'surface' => LeadFormResource::class, 'soon' => false],
                 ['label' => 'Feeds', 'surface' => SourceResource::class, 'soon' => false],
                 ['label' => 'Brand', 'surface' => BrandBoard::class, 'soon' => false],
                 ['label' => 'Voice', 'surface' => VoiceProfileResource::class, 'soon' => false],

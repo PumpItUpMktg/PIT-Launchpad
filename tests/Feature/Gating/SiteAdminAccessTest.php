@@ -128,5 +128,5 @@ it('the header hides the system surfaces a Site Admin cannot open, and keeps the
         ->and(array_keys($forSiteAdmin))->toBe(['Build', 'Territory', 'Results', 'System']);
 
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
-    expect($labels()['System'])->toBe(['Connections', 'Feeds', 'Brand', 'Voice', 'Users', 'Queue', 'Recover', 'Corrections']);
+    expect($labels()['System'])->toBe(['Connections', 'Lead forms', 'Feeds', 'Brand', 'Voice', 'Users', 'Queue', 'Recover', 'Corrections']);
 });

@@ -138,7 +138,7 @@ class LocationResource extends Resource
             Select::make('lead_form_id')->label('Lead form')
                 ->options(fn (): array => LeadForm::query()->orderBy('name')->pluck('name', 'id')->map('strval')->all())
                 ->nullable()->searchable()->placeholder('Site default')
-                ->helperText('The form this office\'s hub AND every town page it serves render (Settings → Lead forms). Blank = the site default. Re-push after changing it.'),
+                ->helperText('The form this office\'s hub AND every town page it serves render (System → Lead forms). Blank = the site default. Re-push after changing it.'),
             TextInput::make('address')->label('Address')->maxLength(255)
                 ->helperText('The formatted display address (Google import fills this).'),
             TextInput::make('phone')->tel()
