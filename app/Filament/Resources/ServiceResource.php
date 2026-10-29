@@ -6,6 +6,7 @@ use App\Filament\Resources\ServiceResource\Pages\CreateService;
 use App\Filament\Resources\ServiceResource\Pages\EditService;
 use App\Filament\Resources\ServiceResource\Pages\ListServices;
 use App\Models\ConversionConfig;
+use App\Models\LeadForm;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Support\CurrentSite;
@@ -100,6 +101,11 @@ class ServiceResource extends Resource
     {
         return [
             TextInput::make('name')->required()->maxLength(255),
+            Select::make('lead_form_id')->label('Lead form')
+                ->options(fn (): array => LeadForm::query()->orderBy('name')->pluck('name', 'id')->map('strval')->all())
+                ->nullable()->searchable()->placeholder('Site default')
+                ->helperText('The form this service\'s page renders (Settings → Lead forms). Blank = the site default. Re-push the page after changing it.'),
+
             TextInput::make('short_description')->label('Card line')->maxLength(160)
                 ->helperText('One line for the hub services grid card.'),
 

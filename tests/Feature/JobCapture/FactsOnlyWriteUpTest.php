@@ -62,8 +62,10 @@ it('imports the CRM export as it comes: name in two columns, address in four wit
         ->and($terry->performed_at->toDateString())->toBe('2020-11-02')
         ->and($terry->raw_description)->toBeNull()
         ->and($terry->jobTypes()->pluck('label')->all())->toBe(['Yard Drainage']);
-    // Phones and emails never land anywhere.
-    expect(json_encode($terry->getAttributes()))->not->toContain('646')->not->toContain('gmail');
+    // Phones and emails never land anywhere — checked on the data columns (a random ULID in an id column can
+    // legitimately contain any digit run, which once matched the area code and failed this for no reason).
+    $data = json_encode(array_filter($terry->getAttributes(), fn (string $k): bool => $k !== 'id' && ! str_ends_with($k, '_id'), ARRAY_FILTER_USE_KEY));
+    expect($data)->not->toContain('533-1212')->not->toContain('6465331212')->not->toContain('(646)')->not->toContain('gmail');
     // No notes + a service → geography first, then the facts-only write-up, in order.
     Bus::assertChained([ResolveJobGeography::class, EnhanceJob::class]);
 

@@ -739,11 +739,16 @@ it('renders the configured lead form at the #contact band on a location page (no
     $markup = app(BlockContentAssembler::class)->compose($page->fresh(), $page->slot_payload, []);
 
     expect($markup)->toBeString()
-        // The #contact band exists (anchor) AND carries the real form embed shortcode.
-        ->toContain('id="contact"')
+        // The form rides the HERO as a card that owns the #contact target (the most prominent spot) …
+        ->toContain('lp-hero-form-card')
         ->toContain('[lp_form]')
-        // The self-linking "Get in touch" button is replaced by the form.
-        ->not->toContain('>Get in touch</a>');
+        ->toContain('id="contact"')
+        // … exactly once: the closing band keeps its button, which scrolls up to the hero card.
+        ->toContain('>Get in touch</a>');
+    expect(substr_count($markup, 'id="contact"'))->toBe(1)
+        ->and(substr_count($markup, '[lp_form]'))->toBe(1);
+    // The hero card sits in the hero, before the closing band.
+    expect(strpos($markup, 'lp-hero-form-card'))->toBeLessThan(strpos($markup, 'lp-cta'));
 });
 
 it('keeps the CTA button when no lead form is configured', function () {

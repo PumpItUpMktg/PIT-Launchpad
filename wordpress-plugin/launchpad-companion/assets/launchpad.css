@@ -300,3 +300,24 @@
     border: 0;
     border-radius: var(--lp-radius);
 }
+
+/* Lead-form cards (0.9.59). The hero form card: the lead form in the hero's right column (home,
+   office hub, town pages) — a light card on the primary band so the embedded iframe reads as a form,
+   not a hole. The prose form card sits beside the service description. Both: the iframe fills the card. */
+.lp-hero-form-card {
+    background: #fff;
+    color: #1f2937;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .18);
+}
+.lp-hero-form-card iframe,
+.lp-prose-form-card iframe {
+    display: block;
+    width: 100% !important;
+    max-width: 100%;
+    border: 0;
+}
+@media (max-width: 782px) {
+    .lp-hero-form-card { padding: 12px; }
+}

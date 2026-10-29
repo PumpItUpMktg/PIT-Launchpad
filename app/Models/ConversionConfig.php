@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $referral_cta_label button text for referral-mode services (e.g. "Find a provider")
  * @property string|null $referral_cta_url destination for referral-mode CTAs (the tenant's directory / partner)
  * @property bool $referral_default new services default to referral_mode (seed only; never retroactive)
+ * @property string|null $form_embed the legacy single lead-form paste — the last fallback once library forms exist
+ * @property string|null $default_lead_form_id the library form the home page (and any page with no owner form) renders
  */
 class ConversionConfig extends Model
 {

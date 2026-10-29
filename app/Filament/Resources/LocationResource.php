@@ -10,6 +10,7 @@ use App\Integrations\Places\PlaceDetails;
 use App\Integrations\Places\PlacesProvider;
 use App\Locations\LocationPublishHold;
 use App\Locations\ServedTowns;
+use App\Models\LeadForm;
 use App\Models\Location;
 use App\Support\BusinessHours;
 use App\Support\Phone;
@@ -134,6 +135,10 @@ class LocationResource extends Resource
     {
         return $schema->components([
             TextInput::make('name')->required()->maxLength(255),
+            Select::make('lead_form_id')->label('Lead form')
+                ->options(fn (): array => LeadForm::query()->orderBy('name')->pluck('name', 'id')->map('strval')->all())
+                ->nullable()->searchable()->placeholder('Site default')
+                ->helperText('The form this office\'s hub AND every town page it serves render (Settings → Lead forms). Blank = the site default. Re-push after changing it.'),
             TextInput::make('address')->label('Address')->maxLength(255)
                 ->helperText('The formatted display address (Google import fills this).'),
             TextInput::make('phone')->tel()

@@ -51,7 +51,15 @@ final class BlockSections
         ];
 
         $right = [];
-        if ($imageUrl !== null && trim($imageUrl) !== '') {
+        if ($ctx->formInHero()) {
+            // The most prominent spot on the page: the lead form rides the hero's right column as a card
+            // (the plugin's server-side [lp_form] embed), in place of the hero image. This card owns the
+            // #contact target — every "Get a free assessment" button on the page scrolls here, and the
+            // closing band drops its own anchor so exactly one #contact exists.
+            $right[] = $this->b->group([
+                "<!-- wp:shortcode -->\n[lp_form]\n<!-- /wp:shortcode -->",
+            ], ['anchor' => 'contact', 'className' => 'lp-hero-form-card']);
+        } elseif ($imageUrl !== null && trim($imageUrl) !== '') {
             // The hero image is the LCP element — load it eager + high priority, never lazy. It sits in
             // the 40% column, so on desktop it renders ~half-width; a phone drops to full-width. The
             // srcset/width/height ride in via $imageAttrs when the render produced variants.
@@ -610,10 +618,11 @@ final class BlockSections
             );
         }
 
-        if ($ctx->hasForm && ! $bold) {
-            // This IS the #contact target — with a form configured, render the real lead form here
+        if ($ctx->formInClosing() && ! $bold) {
+            // This IS the #contact target — with a form configured HERE, render the real lead form
             // (the plugin's server-side [lp_form] embed) so the page's CTAs capture a lead in place
-            // rather than pointing a button at itself. The pushy ($bold) band keeps its button.
+            // rather than pointing a button at itself. The pushy ($bold) band keeps its button; a page
+            // whose form sits in the hero keeps the button too — it scrolls up to the hero card.
             $children[] = "<!-- wp:shortcode -->\n[lp_form]\n<!-- /wp:shortcode -->";
         } else {
             // On the accent (bold) band the accent-filled button would vanish — use a base/contrast button instead.
@@ -635,7 +644,7 @@ final class BlockSections
         // have no form — where the hero/bold buttons land. The pushy ($bold) band never carries the id, and
         // a page whose form owns #contact elsewhere (service's 60/40 row) passes $anchorContact = false —
         // so exactly one #contact exists and the anchor never resolves to the wrong band.
-        if (! $bold && $anchorContact) {
+        if (! $bold && $anchorContact && ! $ctx->formInHero()) {
             $attrs['anchor'] = 'contact';
         }
 

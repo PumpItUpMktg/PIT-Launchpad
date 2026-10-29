@@ -7,6 +7,7 @@ use App\Filament\Resources\ConnectionsResource;
 use App\Filament\Resources\SourceResource;
 use App\Models\Connection;
 use App\Models\ConversionConfig;
+use App\Models\LeadForm;
 use App\Models\Scopes\SiteScope;
 use App\Models\Source;
 use Filament\Notifications\Notification;
@@ -36,6 +37,9 @@ class ConnectionsStep extends GatheringPage
      */
     public ?string $formEmbed = null;
 
+    /** The library form (Settings → Lead forms) the home page and every page without an office / service form render. */
+    public ?string $defaultLeadFormId = null;
+
     /** Tenant default: new services are created in referral mode (the tenant refers rather than performs). */
     public bool $referralDefault = false;
 
@@ -46,6 +50,7 @@ class ConnectionsStep extends GatheringPage
             : ConversionConfig::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->first();
 
         $this->formEmbed = $config?->form_embed;
+        $this->defaultLeadFormId = $config?->default_lead_form_id;
         $this->referralDefault = (bool) $config?->referral_default;
     }
 
@@ -60,10 +65,22 @@ class ConnectionsStep extends GatheringPage
             ->send();
     }
 
-    /** True once a non-empty embed is on file — drives the status chip and the 60/40 service layout. */
+    /** True once a default form or a non-empty paste is on file — drives the status chip and the form layouts. */
     public function leadFormSet(): bool
     {
-        return is_string($this->formEmbed) && trim($this->formEmbed) !== '';
+        return (is_string($this->defaultLeadFormId) && $this->defaultLeadFormId !== '')
+            || (is_string($this->formEmbed) && trim($this->formEmbed) !== '');
+    }
+
+    /** @return array<string, string> id => name of the working site's library forms (for the default picker). */
+    public function getLeadFormOptionsProperty(): array
+    {
+        if ($this->siteId === null) {
+            return [];
+        }
+
+        return LeadForm::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)
+            ->orderBy('name')->pluck('name', 'id')->map('strval')->all();
     }
 
     public function savesOnContinue(): bool
@@ -85,9 +102,15 @@ class ConnectionsStep extends GatheringPage
         $embed = is_string($this->formEmbed) ? trim($this->formEmbed) : '';
         $this->formEmbed = $embed === '' ? null : $embed;
 
+        $defaultId = is_string($this->defaultLeadFormId) && $this->defaultLeadFormId !== '' ? $this->defaultLeadFormId : null;
+        if ($defaultId !== null && ! array_key_exists($defaultId, $this->getLeadFormOptionsProperty())) {
+            $defaultId = null; // never a form from another site
+        }
+        $this->defaultLeadFormId = $defaultId;
+
         ConversionConfig::withoutGlobalScope(SiteScope::class)->updateOrCreate(
             ['site_id' => $this->siteId],
-            ['form_embed' => $this->formEmbed, 'referral_default' => $this->referralDefault],
+            ['form_embed' => $this->formEmbed, 'default_lead_form_id' => $defaultId, 'referral_default' => $this->referralDefault],
         );
     }
 

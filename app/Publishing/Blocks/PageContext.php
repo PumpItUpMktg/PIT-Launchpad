@@ -21,7 +21,29 @@ final class PageContext
         // real form (the plugin's [lp_form] embed) instead of a button, so the page captures a lead
         // in place rather than bouncing a CTA to a dead anchor.
         public readonly bool $hasForm = false,
+        // Where the form section sits when one is configured: 'hero' (a form card in the hero's right
+        // column — home, office hubs, town pages), 'intro' (the service page's 60/40 description row,
+        // composed by the spoke itself), or 'closing' (the soft-close CTA band — silo hubs, legacy).
+        public readonly string $formPlacement = self::PLACEMENT_CLOSING,
     ) {}
+
+    public const PLACEMENT_HERO = 'hero';
+
+    public const PLACEMENT_INTRO = 'intro';
+
+    public const PLACEMENT_CLOSING = 'closing';
+
+    /** The hero renders the form card (and owns the #contact anchor). */
+    public function formInHero(): bool
+    {
+        return $this->hasForm && $this->formPlacement === self::PLACEMENT_HERO;
+    }
+
+    /** The closing CTA band renders the form (and owns the #contact anchor). */
+    public function formInClosing(): bool
+    {
+        return $this->hasForm && $this->formPlacement === self::PLACEMENT_CLOSING;
+    }
 
     public function hasPhone(): bool
     {

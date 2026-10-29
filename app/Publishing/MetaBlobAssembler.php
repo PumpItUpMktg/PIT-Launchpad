@@ -32,6 +32,7 @@ use App\Publishing\Blocks\LocationSubject;
 use App\Publishing\Blocks\NapPin;
 use App\Publishing\Blocks\ServiceAreaMap;
 use App\Publishing\Breadcrumbs\SiloIndexResolver;
+use App\Publishing\Forms\LeadFormResolver;
 use App\Publishing\Schema\LocationSchemaBuilder;
 use App\Publishing\Schema\ServiceSchemaBuilder;
 use App\Publishing\Seo\LocationTitle;
@@ -80,6 +81,7 @@ class MetaBlobAssembler
         private readonly BlogFeeds $feeds,
         private readonly PrioritySections $prioritySections,
         private readonly LocationSubject $locationSubject,
+        private readonly LeadFormResolver $forms = new LeadFormResolver,
     ) {}
 
     /** The two-letter state a location page belongs to, or null for any other page / an unresolvable one. */
@@ -122,22 +124,13 @@ class MetaBlobAssembler
     }
 
     /**
-     * The page's embedded lead-capture form the plugin's [lp_form] renders — the per-page
-     * PageConfig.form_embed, else the site-wide ConversionConfig.form_embed (one paste covers every
-     * service page), else null. Any provider's embed snippet; verbatim operator input.
+     * The page's embedded lead-capture form the plugin's [lp_form] renders — resolved by
+     * {@see LeadFormResolver}: the page override, else the owning service / office's library form, else
+     * the site default, else the legacy paste, else null. Any provider's embed snippet; verbatim.
      */
     private function formEmbed(Content $content): ?string
     {
-        $embed = trim((string) ($this->pageConfig($content)->form_embed ?? ''));
-        if ($embed !== '') {
-            return $embed;
-        }
-
-        $site = ConversionConfig::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $content->site_id)
-            ->value('form_embed');
-
-        return is_string($site) && trim($site) !== '' ? trim($site) : null;
+        return $this->forms->embedFor($content);
     }
 
     /**
