@@ -28,7 +28,7 @@
     <div class="cd-wrap">
         @if ($lastIssued)
             <div class="cd-issued" wire:key="issued">
-                <h3 style="margin:0 0 8px;">Send this to {{ $lastIssued['name'] }}</h3>
+                <h3 style="margin:0 0 8px;">Send this to {{ $lastIssued['name'] }} — their device is on {{ $lastIssued['site'] }}</h3>
                 <div class="cd-empty" style="color:#15803d;margin-bottom:6px;">They open the link on their phone → “Add to Home Screen” → enter the code. The code is one-time and expires soon.</div>
                 <div class="link" style="margin-bottom:10px;"><input type="text" readonly value="{{ $lastIssued['link'] }}" onclick="this.select()"></div>
                 <div class="code">{{ $lastIssued['code'] }}</div>
@@ -37,12 +37,13 @@
         @endif
 
         <div class="cd-card">
-            <h3>Add a tech</h3>
+            <h3>Add a tech to {{ $this->siteLabel() }}</h3>
+            <div class="cd-empty" style="margin:-4px 0 10px;">The tech's device is bound to the client in the Site bar above — their phone only ever offers that client's services. Switch the bar first to add a tech for another client.</div>
             <div class="cd-row">
                 <div class="cd-field"><label>Name</label><input type="text" wire:model="newName" placeholder="Mike R."></div>
                 <div class="cd-field"><label>Email (to send the invite)</label><input type="email" wire:model="newEmail" placeholder="mike@example.com"></div>
                 <div class="cd-field"><label>Phone (optional)</label><input type="tel" wire:model="newPhone" placeholder="+1 555 123 4567"></div>
-                <button class="cd-btn go" wire:click="addDevice" @disabled($this->siteId === null)>Add &amp; send invite</button>
+                <button class="cd-btn go" wire:click="addDevice" @disabled($this->siteId === null)>Add to {{ $this->siteLabel() }} &amp; send invite</button>
             </div>
             @if ($this->siteId === null)
                 <div class="cd-empty">Pick a site above first.</div>

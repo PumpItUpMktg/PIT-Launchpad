@@ -40,9 +40,14 @@ class ConsoleContext
     }
 
     /**
-     * The console's active Site for this user: the session selection when it is still valid + visible,
-     * otherwise the first site the user may see. `$selected` (a just-picked id) takes precedence and is
-     * persisted when valid. Returns null only when the user can see no site at all.
+     * The console's active Site for this user: the session selection when it is still valid + visible;
+     * otherwise the tenant the operator is working on in the cockpit ({@see ActiveTenant}) when they may
+     * see it; otherwise the first site the user may see. `$selected` (a just-picked id) takes precedence
+     * and is persisted when valid. Returns null only when the user can see no site at all.
+     *
+     * The cockpit fallback is the wrong-tenant guard: an operator "logged into" a tenant in /admin who
+     * opens a console page for the first time used to land on the alphabetically-first site — and a tech
+     * added there was bound to that site, offered its services, and never the tenant they meant.
      */
     public function current(User $user, ?string $selected = null): ?Site
     {
@@ -55,6 +60,11 @@ class ConsoleContext
         $sessionId = session(self::SESSION_KEY);
         if (is_string($sessionId) && $sessionId !== '' && $user->canSeeSite($sessionId)) {
             return Site::query()->find($sessionId);
+        }
+
+        $cockpit = app(ActiveTenant::class)->id();
+        if ($cockpit !== null && $user->canSeeSite($cockpit)) {
+            return Site::query()->find($cockpit);
         }
 
         return $this->sites($user)->first();
