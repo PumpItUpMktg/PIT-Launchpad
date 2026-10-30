@@ -28,6 +28,7 @@ class TownRankCommand extends Command
         {--keyword= : One keyword (id or query substring); default: the site\'s grid keywords}
         {--mode=both : local | town | both — the query mode(s) to scan/report}
         {--town= : Filter the report to towns matching this text}
+        {--since= : Compare against the newest finished scan at least this many days before the latest (e.g. 14 = two weeks ago) instead of the one just before it, and list the biggest movers}
         {--scan : Post a NEW scan (spends DataForSEO credits after confirmation)}
         {--collect : Collect results for scans still pending}
         {--dry-run : With --scan: print the plan (towns × modes → requests + cost) and spend nothing}
@@ -66,8 +67,13 @@ class TownRankCommand extends Command
             $this->collect($site, $keywords, $modes, $scanner);
         }
 
+        $since = $this->option('since') !== null && (int) $this->option('since') > 0 ? (int) $this->option('since') : null;
         foreach ($keywords as $keyword) {
-            $this->printReport($report->forKeyword($site, $keyword), $modes);
+            $data = $report->forKeyword($site, $keyword, $since);
+            $this->printReport($data, $modes);
+            if ($since !== null) {
+                $this->printMovers($data, $modes, $since);
+            }
         }
 
         return self::SUCCESS;
@@ -278,6 +284,82 @@ class TownRankCommand extends Command
 
             return $line;
         }, $rows));
+    }
+
+    /**
+     * The comparison digest for --since: per mode, where the towns sat THEN vs NOW by bucket, the movement
+     * counts, and the biggest movers each way (new / up first, lost / down first) — the pasteable answer to
+     * "how did we move in the last N days".
+     *
+     * @param  array{keyword: string, scans: array<string, array{scanned_at: string|null, previous_scanned_at: string|null}|null>, rows: list<array<string, mixed>>, summary: array<string, array<string, int>>}  $data
+     * @param  list<string>  $modes
+     */
+    private function printMovers(array $data, array $modes, int $since): void
+    {
+        foreach ($modes as $mode) {
+            $scan = $data['scans'][$mode];
+            if ($scan === null) {
+                continue;
+            }
+            $prefix = $mode === TownRankScan::MODE_LOCAL ? 'local' : 'town';
+            $label = $mode === TownRankScan::MODE_LOCAL ? 'local' : 'town query';
+            $this->newLine();
+            if ($scan['previous_scanned_at'] === null) {
+                $this->comment("  {$label}: no finished scan at least {$since} days before {$scan['scanned_at']} — nothing to compare against yet.");
+
+                continue;
+            }
+            $this->info("  {$label}: {$scan['previous_scanned_at']} → {$scan['scanned_at']}");
+
+            $then = ['top3' => 0, 'page1' => 0, 'page2' => 0, 'beyond' => 0, 'not_found' => 0];
+            $now = $then;
+            $movers = [];
+            foreach ($data['rows'] as $r) {
+                $change = $r["{$prefix}_change"];
+                if ($change === null) {
+                    continue; // pending / unscanned this time — not comparable
+                }
+                $rank = $r["{$prefix}_rank"];
+                $prev = $r["{$prefix}_prev_rank"];
+                $then[self::bucket(is_int($prev) ? $prev : null)]++;
+                $now[self::bucket(is_int($rank) ? $rank : null)]++;
+                if ($change !== 'same') {
+                    $movers[] = ['town' => $r['label'].($r['state'] !== null ? ", {$r['state']}" : ''), 'then' => $prev, 'now' => $rank, 'change' => $change];
+                }
+            }
+            $this->table(['', 'Top 3', 'Page 1', 'Page 2', 'Beyond', 'Not found'], [
+                ['Then', $then['top3'], $then['page1'], $then['page2'], $then['beyond'], $then['not_found']],
+                ['Now', $now['top3'], $now['page1'], $now['page2'], $now['beyond'], $now['not_found']],
+            ]);
+            $s = $data['summary'][$mode];
+            $this->line(sprintf('  ▲ up %d · ▼ down %d · new %d · lost %d · unchanged %d', $s['up'], $s['down'], $s['new'], $s['lost'], $s['same']));
+
+            // Biggest gains: new rankings first (from nothing), then the largest rank improvements.
+            $gains = array_values(array_filter($movers, fn (array $m): bool => in_array($m['change'], ['new', 'up'], true)));
+            usort($gains, fn (array $a, array $b): int => [$a['change'] === 'new' ? 0 : 1, ($a['now'] ?? 999) - ($a['then'] ?? 999)] <=> [$b['change'] === 'new' ? 0 : 1, ($b['now'] ?? 999) - ($b['then'] ?? 999)]);
+            $losses = array_values(array_filter($movers, fn (array $m): bool => in_array($m['change'], ['lost', 'down'], true)));
+            usort($losses, fn (array $a, array $b): int => [$a['change'] === 'lost' ? 0 : 1, ($b['now'] ?? 999) - ($b['then'] ?? 999)] <=> [$b['change'] === 'lost' ? 0 : 1, ($a['now'] ?? 999) - ($a['then'] ?? 999)]);
+            foreach ([['Biggest gains', $gains], ['Biggest losses', $losses]] as [$heading, $list]) {
+                if ($list === []) {
+                    continue;
+                }
+                $this->line("  {$heading}:");
+                foreach (array_slice($list, 0, 10) as $m) {
+                    $this->line(sprintf('    %-34s %s → %s', Str::limit($m['town'], 32), $m['then'] === null ? 'not found' : '#'.$m['then'], $m['now'] === null ? 'not found' : '#'.$m['now']));
+                }
+            }
+        }
+    }
+
+    private static function bucket(?int $rank): string
+    {
+        return match (true) {
+            $rank === null => 'not_found',
+            $rank <= 3 => 'top3',
+            $rank <= 10 => 'page1',
+            $rank <= 20 => 'page2',
+            default => 'beyond',
+        };
     }
 
     private static function cell(mixed $rank, string $state): string
