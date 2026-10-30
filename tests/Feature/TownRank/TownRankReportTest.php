@@ -129,3 +129,31 @@ it('sets aside a town whose page went live after the baseline, and never counts 
         ->doesntExpectOutputToContain('Biggest losses:')
         ->assertExitCode(0);
 });
+
+it('a "not found" with no results stored is a phantom read — no data, never a loss — while a real not-found keeps the results that ranked', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://spg.com']);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'lat' => 40.0, 'lng' => -74.0]);
+    $phantom = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Phantom', 'state' => 'NJ', 'population' => 900, 'lat' => 40.0, 'lng' => -74.0, 'source_location_ids' => [$loc->id]])->id;
+    $real = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Really Gone', 'state' => 'NJ', 'population' => 800, 'lat' => 40.01, 'lng' => -74.0, 'source_location_ids' => [$loc->id]])->id;
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump repair', 'is_grid_keyword' => true]);
+
+    reportScan($site, $kw, 'town_query', 'complete', '2026-10-15 10:00:00', [$phantom => 1, $real => 1]);
+    $latest = reportScan($site, $kw, 'town_query', 'complete', '2026-10-29 10:00:00', [$phantom => null, $real => null]);
+    TownRankPoint::where('scan_id', $latest->id)->where('coverage_area_id', $phantom)->update(['provider_task_id' => 't-1', 'top_results' => []]);
+    TownRankPoint::where('scan_id', $latest->id)->where('coverage_area_id', $real)->update(['provider_task_id' => 't-2', 'top_results' => [['position' => 1, 'url' => 'https://rival.com/x', 'domain' => 'rival.com']]]);
+
+    $data = app(TownRankReport::class)->forKeyword($site, $kw, 14);
+    $rows = collect($data['rows'])->keyBy('coverage_area_id');
+    expect($rows[$phantom]['town_state'])->toBe('unreadable')
+        ->and($rows[$phantom]['town_change'])->toBeNull()
+        ->and($rows[$real]['town_state'])->toBe('not_found')
+        ->and($rows[$real]['town_change'])->toBe('lost')
+        ->and($data['summary']['town_query'])->toMatchArray(['unreadable' => 1, 'not_found' => 1, 'lost' => 1]);
+
+    $this->artisan('launchpad:town-rank', ['site' => $site->id, '--mode' => 'town', '--since' => 14])
+        ->expectsOutputToContain('unreadable 1')
+        ->expectsOutputToContain('▲ up 0 · ▼ down 0 · new 0 · lost 1 · unchanged 0')
+        ->expectsOutputToContain('Really Gone, NJ                    #1 → not found')
+        ->doesntExpectOutputToContain('Phantom, NJ                        #1')   // never in the losses list
+        ->assertExitCode(0);
+});

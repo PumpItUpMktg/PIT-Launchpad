@@ -155,7 +155,10 @@ final class TownRankReport
         }
         $rank = $point->rank;
         if ($rank === null) {
-            return 'not_found';
+            // A genuine not-found carries the results that DID rank. "Not found" with NOTHING stored is a
+            // phantom — a read that came back empty (rate limit, transport, an empty page) — and is no data,
+            // never evidence that the site dropped out. `launchpad:town-rank-recollect` re-reads them free.
+            return $point->provider_task_id !== null && ($point->top_results ?? []) === [] ? 'unreadable' : 'not_found';
         }
 
         return match (true) {
