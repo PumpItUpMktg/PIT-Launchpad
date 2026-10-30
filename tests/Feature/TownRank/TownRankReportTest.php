@@ -58,3 +58,40 @@ it('measures movement against the previous finalized scan — up, down, new, los
     expect(TownRankReport::changeOf(null, null))->toBe('same')
         ->and(TownRankReport::changeOf(3, 3))->toBe('same');
 });
+
+it('--since picks the newest finished scan at least that many days before the latest as the baseline, and the command prints the movers digest', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://spg.com']);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'lat' => 40.0, 'lng' => -74.0]);
+    $areas = [];
+    foreach (['Hackettstown', 'Mansfield', 'Budd Lake'] as $i => $name) {
+        $areas[$name] = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => $name, 'state' => 'NJ', 'population' => 1000 - $i, 'lat' => 40.0 + $i / 100, 'lng' => -74.0, 'source_location_ids' => [$loc->id]])->id;
+    }
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump repair', 'is_grid_keyword' => true]);
+
+    // Two weeks ago, one week ago, today.
+    reportScan($site, $kw, 'town_query', 'complete', '2026-10-15 10:00:00', [$areas['Hackettstown'] => 14, $areas['Mansfield'] => null, $areas['Budd Lake'] => 2]);
+    reportScan($site, $kw, 'town_query', 'complete', '2026-10-22 10:00:00', [$areas['Hackettstown'] => 9, $areas['Mansfield'] => 30, $areas['Budd Lake'] => 2]);
+    reportScan($site, $kw, 'town_query', 'complete', '2026-10-29 10:00:00', [$areas['Hackettstown'] => 3, $areas['Mansfield'] => 18, $areas['Budd Lake'] => null]);
+
+    $report = app(TownRankReport::class);
+    // Default: against the scan just before the latest.
+    expect($report->forKeyword($site, $kw)['scans']['town_query']['previous_scanned_at'])->toBe('2026-10-22 10:00:00');
+    // --since=14: against the newest finished scan at least 14 days older.
+    $data = $report->forKeyword($site, $kw, 14);
+    $rows = collect($data['rows'])->keyBy('coverage_area_id');
+    expect($data['scans']['town_query']['previous_scanned_at'])->toBe('2026-10-15 10:00:00')
+        ->and($rows[$areas['Hackettstown']]['town_prev_rank'])->toBe(14)->and($rows[$areas['Hackettstown']]['town_change'])->toBe('up')
+        ->and($rows[$areas['Mansfield']]['town_change'])->toBe('new')
+        ->and($rows[$areas['Budd Lake']]['town_change'])->toBe('lost');
+    // Further back than any scan: no baseline.
+    expect($report->forKeyword($site, $kw, 60)['scans']['town_query']['previous_scanned_at'])->toBeNull();
+
+    $this->artisan('launchpad:town-rank', ['site' => $site->id, '--mode' => 'town', '--since' => 14])
+        ->expectsOutputToContain('2026-10-15 10:00:00 → 2026-10-29 10:00:00')
+        ->expectsOutputToContain('▲ up 1 · ▼ down 0 · new 1 · lost 1 · unchanged 0')
+        ->expectsOutputToContain('Biggest gains:')
+        ->expectsOutputToContain('Mansfield, NJ')
+        ->expectsOutputToContain('Biggest losses:')
+        ->expectsOutputToContain('Budd Lake, NJ')
+        ->assertExitCode(0);
+});

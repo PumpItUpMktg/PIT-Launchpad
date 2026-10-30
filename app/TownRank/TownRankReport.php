@@ -31,7 +31,7 @@ final class TownRankReport
      *     summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, unreadable: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>
      * }
      */
-    public function forKeyword(Site $site, Keyword $keyword): array
+    public function forKeyword(Site $site, Keyword $keyword, ?int $sinceDays = null): array
     {
         // The town list first: a scan's points are linked to the towns that exist NOW (a coverage rebuild
         // gives every town a new row id, which would otherwise orphan every point — see TownPointLinks).
@@ -44,12 +44,14 @@ final class TownRankReport
                 ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->where('mode', $mode)
                 ->orderByDesc('scanned_at')->first();
             // The scan to compare against: the newest FINALIZED one older than the latest (a pending latest
-            // compares against the last finalized, so movement is never measured against half a sweep).
+            // compares against the last finalized, so movement is never measured against half a sweep). With
+            // $sinceDays the baseline is the newest finalized scan at least that many days before the latest —
+            // "how have we moved in the last two weeks" rather than "since the last sweep".
             $previous = $scan === null ? null : TownRankScan::withoutGlobalScope(SiteScope::class)
                 ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->where('mode', $mode)
                 ->whereIn('status', ['complete', 'partial'])
                 ->whereKeyNot($scan->id)
-                ->where('scanned_at', '<=', $scan->scanned_at)
+                ->where('scanned_at', '<=', $sinceDays !== null && $scan->scanned_at !== null ? $scan->scanned_at->copy()->subDays($sinceDays) : $scan->scanned_at)
                 ->orderByDesc('scanned_at')->first();
             $rawPoints = $scan === null ? collect() : $scan->points()->get();
             $points = TownPointLinks::byTown($towns, $rawPoints);
