@@ -32,7 +32,7 @@ final class TownRankPoints
      * site's coverage areas, which is what pushed the page past the gateway timeout. The service is bound
      * `scoped`, so every caller in one request shares this.
      *
-     * @var array<string, list<array{coverage_area_id: string, geo_id: string|null, name: string, label: string, state: string|null, lat: float, lng: float, population: int, page_slug: string|null, page_url: string|null, page_match: string|null}>>
+     * @var array<string, list<array{coverage_area_id: string, geo_id: string|null, name: string, label: string, state: string|null, lat: float, lng: float, population: int, page_slug: string|null, page_url: string|null, page_match: string|null, page_published_at: string|null}>>
      */
     private array $memo = [];
 
@@ -46,7 +46,7 @@ final class TownRankPoints
      * whose slug is this town's — the page exists but its GEOID is a different Census form than the coverage
      * row's, or it is un-anchored), else null.
      *
-     * @return list<array{coverage_area_id: string, geo_id: string|null, name: string, label: string, state: string|null, lat: float, lng: float, population: int, page_slug: string|null, page_url: string|null, page_match: string|null}>
+     * @return list<array{coverage_area_id: string, geo_id: string|null, name: string, label: string, state: string|null, lat: float, lng: float, population: int, page_slug: string|null, page_url: string|null, page_match: string|null, page_published_at: string|null}>
      */
     public function forSite(Site $site): array
     {
@@ -64,7 +64,7 @@ final class TownRankPoints
         $this->memo = [];
     }
 
-    /** @return list<array{coverage_area_id: string, geo_id: string|null, name: string, label: string, state: string|null, lat: float, lng: float, population: int, page_slug: string|null, page_url: string|null, page_match: string|null}> */
+    /** @return list<array{coverage_area_id: string, geo_id: string|null, name: string, label: string, state: string|null, lat: float, lng: float, population: int, page_slug: string|null, page_url: string|null, page_match: string|null, page_published_at: string|null}> */
     private function build(Site $site): array
     {
         $locations = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
@@ -99,9 +99,12 @@ final class TownRankPoints
             ->where('kind', ContentKind::Page->value)
             ->where('page_type', PageType::Location->value)
             ->where('status', ContentStatus::Published->value)
-            ->get(['slug', 'geo_id']);
+            ->get(['slug', 'geo_id', 'published_at']);
         $pages = $published->whereNotNull('geo_id')->pluck('slug', 'geo_id');
         $slugs = $published->pluck('slug')->map(fn ($s): string => (string) $s)->flip();
+        // When each page went live — the comparison digest sets aside a town whose page is newer than the
+        // baseline scan (a page that did not exist then cannot have "lost" or "gained" anything).
+        $publishedAt = $published->mapWithKeys(fn (Content $c): array => [(string) $c->slug => $c->published_at?->toDateTimeString()]);
 
         $domain = is_string($site->domain_url) ? rtrim($site->domain_url, '/') : '';
 
@@ -134,6 +137,7 @@ final class TownRankPoints
                 'page_slug' => $slug,
                 'page_url' => $slug !== null && $domain !== '' ? $domain.'/'.ltrim($slug, '/') : null,
                 'page_match' => $match,
+                'page_published_at' => $slug !== null ? ($publishedAt->get($slug) ?? null) : null,
             ];
         }
 

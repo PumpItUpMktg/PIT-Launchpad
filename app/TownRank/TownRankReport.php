@@ -27,7 +27,7 @@ final class TownRankReport
      * @return array{
      *     keyword: string,
      *     scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null>,
-     *     rows: list<array{coverage_area_id: string, label: string, state: string|null, population: int, page_url: string|null, page_match: string|null, local_rank: int|null, local_url: string|null, local_state: string, local_prev_rank: int|null, local_change: string|null, town_rank: int|null, town_url: string|null, town_state: string, town_prev_rank: int|null, town_change: string|null, map_rank: int|null, map_measured_at: Carbon|null}>,
+     *     rows: list<array{coverage_area_id: string, label: string, state: string|null, population: int, page_url: string|null, page_match: string|null, page_published_at: string|null, local_rank: int|null, local_url: string|null, local_state: string, local_prev_rank: int|null, local_change: string|null, town_rank: int|null, town_url: string|null, town_state: string, town_prev_rank: int|null, town_change: string|null, map_rank: int|null, map_measured_at: Carbon|null}>,
      *     summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, unreadable: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>
      * }
      */
@@ -84,6 +84,7 @@ final class TownRankReport
                 'population' => $town['population'],
                 'page_url' => $town['page_url'],
                 'page_match' => $town['page_match'],
+                'page_published_at' => $town['page_published_at'] ?? null,
                 'map_rank' => $mapRanks[$town['coverage_area_id']]['rank'] ?? null,
                 'map_measured_at' => $mapRanks[$town['coverage_area_id']]['measured_at'] ?? null,
             ];
@@ -97,7 +98,11 @@ final class TownRankReport
                 $prevPoint = $prevByMode[$mode]?->get($town['coverage_area_id']);
                 $hasPrevious = $prevByMode[$mode] !== null;
                 $prevRank = $hasPrevious ? $prevPoint?->rank : null;
-                $change = $hasPrevious && ! in_array($state, ['pending', 'unscanned'], true) ? self::changeOf($rank, $prevRank) : null;
+                // No data is not "not found": a point that could not be read on EITHER side carries no
+                // movement — otherwise a failed read on a #1 town prints as a lost #1.
+                $prevUnreadable = $prevPoint !== null && $prevPoint->read_error !== null;
+                $comparable = $hasPrevious && ! in_array($state, ['pending', 'unscanned', 'unreadable'], true) && ! $prevUnreadable;
+                $change = $comparable ? self::changeOf($rank, $prevRank) : null;
 
                 $row["{$prefix}_rank"] = $rank;
                 $row["{$prefix}_url"] = $point?->ranking_url;

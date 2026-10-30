@@ -1,5 +1,8 @@
 <?php
 
+use App\Enums\ContentStatus;
+use App\Enums\PageType;
+use App\Models\Content;
 use App\Models\CoverageArea;
 use App\Models\Keyword;
 use App\Models\Location;
@@ -93,5 +96,36 @@ it('--since picks the newest finished scan at least that many days before the la
         ->expectsOutputToContain('Mansfield, NJ')
         ->expectsOutputToContain('Biggest losses:')
         ->expectsOutputToContain('Budd Lake, NJ')
+        ->assertExitCode(0);
+});
+
+it('sets aside a town whose page went live after the baseline, and never counts an unreadable point as lost', function () {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://spg.com']);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'lat' => 40.0, 'lng' => -74.0]);
+    $areas = [];
+    foreach ([['Hackettstown', '3404128590'], ['Newpage', '3404199999'], ['Unread', '3404188888']] as $i => [$name, $geo]) {
+        $areas[$name] = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => $name, 'state' => 'NJ', 'population' => 1000 - $i, 'lat' => 40.0 + $i / 100, 'lng' => -74.0, 'source_location_ids' => [$loc->id], 'geo_id' => $geo])->id;
+    }
+    // Newpage's town page went live between the baseline and the latest scan.
+    Content::factory()->page()->published()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'status' => ContentStatus::Published, 'geo_id' => '3404199999', 'slug' => 'newpage-nj', 'published_at' => '2026-10-20 09:00:00']);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump repair', 'is_grid_keyword' => true]);
+
+    reportScan($site, $kw, 'town_query', 'complete', '2026-10-15 10:00:00', [$areas['Hackettstown'] => 4, $areas['Newpage'] => null, $areas['Unread'] => 1]);
+    $latest = reportScan($site, $kw, 'town_query', 'complete', '2026-10-29 10:00:00', [$areas['Hackettstown'] => 4, $areas['Newpage'] => 2, $areas['Unread'] => null]);
+    TownRankPoint::where('scan_id', $latest->id)->where('coverage_area_id', $areas['Unread'])->update(['read_error' => 'no answer after 3 reads']);
+
+    $data = app(TownRankReport::class)->forKeyword($site, $kw, 14);
+    $rows = collect($data['rows'])->keyBy('coverage_area_id');
+    expect($rows[$areas['Unread']]['town_state'])->toBe('unreadable')
+        ->and($rows[$areas['Unread']]['town_change'])->toBeNull()     // no data ≠ lost #1
+        ->and($rows[$areas['Newpage']]['page_published_at'])->toBe('2026-10-20 09:00:00')
+        ->and($data['summary']['town_query']['lost'])->toBe(0);
+
+    $this->artisan('launchpad:town-rank', ['site' => $site->id, '--mode' => 'town', '--since' => 14])
+        ->expectsOutputToContain('unreadable 1')
+        ->expectsOutputToContain('▲ up 0 · ▼ down 0 · new 0 · lost 0 · unchanged 1')
+        ->expectsOutputToContain('1 town(s) could not be read this scan')
+        ->expectsOutputToContain('1 town page(s) published after the baseline — set aside, not compared: Newpage, NJ #2')
+        ->doesntExpectOutputToContain('Biggest losses:')
         ->assertExitCode(0);
 });
