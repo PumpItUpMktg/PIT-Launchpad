@@ -523,7 +523,7 @@ class DataForSeoClient
 
     /**
      * @param  array<int, mixed>  $result
-     * @return list<array{position: int, url: string, domain: string, title: string}>
+     * @return list<array{position: int, url: string, domain: string, title: string, website_name: string, masked: bool}>
      */
     public static function parseOrganic(array $result): array
     {
@@ -533,15 +533,52 @@ class DataForSeoClient
             if (! is_array($item) || ($item['type'] ?? '') !== 'organic') {
                 continue;
             }
+            $url = (string) ($item['url'] ?? '');
+            $domain = (string) ($item['domain'] ?? '');
+            // Google now wraps many organic results in an encrypted redirect (https://google.com/goto?url=CAES…)
+            // whose destination cannot be decoded, so the item's url/domain read "google.com" for everyone.
+            // The visible breadcrumb ("https://sumppumpgurus.com › montclair-nj") still names the real site —
+            // take the host from it, so a scan keeps telling our result from the rest. `masked` marks the row.
+            $masked = self::isMaskedUrl($url, $domain);
+            if ($masked) {
+                $domain = self::breadcrumbHost($item['breadcrumb'] ?? null) ?? $domain;
+            }
             $out[] = [
                 'position' => (int) ($item['rank_absolute'] ?? $item['rank_group'] ?? 0),
-                'url' => (string) ($item['url'] ?? ''),
-                'domain' => (string) ($item['domain'] ?? ''),
+                'url' => $url,
+                'domain' => $domain,
                 'title' => (string) ($item['title'] ?? ''),
+                'website_name' => (string) ($item['website_name'] ?? ''),
+                'masked' => $masked,
             ];
         }
 
         return $out;
+    }
+
+    /** A Google click-through wrapper in place of the result's own URL (the destination is encrypted). */
+    public static function isMaskedUrl(string $url, string $domain): bool
+    {
+        return str_contains($url, 'google.com/goto') || str_contains($url, 'google.com/url?')
+            || (preg_replace('/^www\./', '', strtolower($domain)) === 'google.com' && str_contains($url, '/goto'));
+    }
+
+    /** The host named by a result's visible breadcrumb ("https://www.example.com › a › b" → "example.com"). */
+    public static function breadcrumbHost(mixed $breadcrumb): ?string
+    {
+        if (! is_string($breadcrumb) || trim($breadcrumb) === '') {
+            return null;
+        }
+        $first = trim((string) preg_split('/\s*[›>]\s*/u', trim($breadcrumb))[0]);
+        if ($first === '') {
+            return null;
+        }
+        $host = parse_url(str_contains($first, '://') ? $first : 'https://'.$first, PHP_URL_HOST);
+        if (! is_string($host) || $host === '' || ! str_contains($host, '.')) {
+            return null;
+        }
+
+        return strtolower((string) preg_replace('/^www\./i', '', $host));
     }
 
     /**

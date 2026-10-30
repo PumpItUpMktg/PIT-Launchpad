@@ -25,6 +25,7 @@ class TownRankRecollectCommand extends Command
     protected $signature = 'launchpad:town-rank-recollect {site : Site id, brand name, or domain (partial ok)}
         {--keyword= : One keyword (id or exact query, else substring); default: every keyword with a scan}
         {--execute : Re-read the phantom towns now (free reads) and write the real ranks}
+        {--masked : Also re-read towns whose stored page holds Google\'s encrypted redirect wrappers (google.com/goto) — reads made before the parser saw through them}
         {--minutes=25 : With --execute: stop after this many minutes and report; re-run for the rest}';
 
     protected $description = 'Re-read Town Rank towns recorded as "not found" by a failed read (no results stored) from their existing DataForSEO tasks — report by default, --execute to repair. Free.';
@@ -46,8 +47,11 @@ class TownRankRecollectCommand extends Command
         $rows = [];
         $totalPhantoms = 0;
         $work = [];
+        $withMasked = (bool) $this->option('masked');
+        $totalMasked = 0;
         foreach ($scans as $scan) {
             $phantoms = TownRankScanner::phantoms($scan);
+            $masked = TownRankScanner::masked($scan);
             $towns = $scan->points()->count();
             $notFound = $scan->points()->whereNotNull('collected_at')->whereNull('rank')->count();
             $rows[] = [
@@ -59,17 +63,21 @@ class TownRankRecollectCommand extends Command
                 (int) $scan->found_count,
                 $notFound,
                 $phantoms->count(),
+                $masked->count(),
             ];
             $totalPhantoms += $phantoms->count();
-            if ($phantoms->isNotEmpty()) {
-                $work[] = [$scan, $phantoms];
+            $totalMasked += $masked->count();
+            $toRead = $withMasked ? $phantoms->concat($masked)->unique('id')->values() : $phantoms;
+            if ($toRead->isNotEmpty()) {
+                $work[] = [$scan, $toRead];
             }
         }
 
-        $this->table(['Keyword', 'Mode', 'Status', 'Scanned', 'Towns', 'Ranked', 'Not found', 'Phantom (no results stored)'], $rows);
+        $this->table(['Keyword', 'Mode', 'Status', 'Scanned', 'Towns', 'Ranked', 'Not found', 'Phantom (no results stored)', 'Masked (google.com/goto)'], $rows);
         $this->line("<info>Phantom towns</info>: {$totalPhantoms} across {$scans->count()} scan(s) — \"not found\" recorded with no results at all: a failed read, not Google's answer.");
+        $this->line("<info>Masked towns</info>: {$totalMasked} — \"not found\" while the stored page holds Google's encrypted redirect wrappers in place of real URLs; the breadcrumb names the real site and a free re-read recovers the rank.".($withMasked ? '' : ' Add --masked to include them.'));
 
-        if ($totalPhantoms === 0) {
+        if ($totalPhantoms === 0 && ($totalMasked === 0 || ! $withMasked)) {
             return self::SUCCESS;
         }
         if (! (bool) $this->option('execute')) {
@@ -98,7 +106,7 @@ class TownRankRecollectCommand extends Command
             foreach ($r as $k => $v) {
                 $totals[$k] += $v;
             }
-            $left = $phantoms->count() - $r['read'];
+            $left = $phantoms->count() - $r['read'];   // $phantoms here is the work list for the scan
             $this->line(sprintf('  read %d · ranked %d · not found %d · unreadable %d%s', $r['read'], $r['ranked'], $r['not_found'], $r['skipped'], $left > 0 ? " · {$left} not reached (time)" : ''));
         }
 

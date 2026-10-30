@@ -176,7 +176,7 @@ final class TownRankScanner
 
                     continue;
                 }
-                $point->forceFill([...$this->extract($items, $host), 'collected_at' => Carbon::now(), 'read_error' => null])->save();
+                $point->forceFill([...$this->extract($items, $host, $site?->brand_name), 'collected_at' => Carbon::now(), 'read_error' => null])->save();
             }
         }
         if ($skipped > 0) {
@@ -234,7 +234,7 @@ final class TownRankScanner
 
                 continue;
             }
-            $point->forceFill([...$this->extract($read['items'], $host), 'collected_at' => Carbon::now(), 'read_error' => null])->save();
+            $point->forceFill([...$this->extract($read['items'], $host, $site?->brand_name), 'collected_at' => Carbon::now(), 'read_error' => null])->save();
         }
 
         if ($notReady > 0 || $failed > 0) {
@@ -300,7 +300,7 @@ final class TownRankScanner
 
                 continue;
             }
-            $fields = $this->extract($items, $host);
+            $fields = $this->extract($items, $host, $site?->brand_name);
             $point->forceFill([...$fields, 'collected_at' => Carbon::now(), 'read_error' => null])->save();
             $out[$fields['rank'] !== null ? 'ranked' : 'not_found']++;
         }
@@ -469,10 +469,10 @@ final class TownRankScanner
     /**
      * The site's rank + ranking URL at a town (first result on the site's own host) and the top results.
      *
-     * @param  list<array{position: int, url: string, domain: string}>  $items
+     * @param  list<array{position: int, url: string, domain: string, title?: string, website_name?: string, masked?: bool}>  $items
      * @return array{rank: int|null, ranking_url: string|null, top_results: list<array{position: int, url: string, domain: string}>}
      */
-    private function extract(array $items, ?string $host): array
+    private function extract(array $items, ?string $host, ?string $brand = null): array
     {
         usort($items, fn (array $a, array $b): int => $a['position'] <=> $b['position']);
 
@@ -483,6 +483,17 @@ final class TownRankScanner
                 if (self::sameHost($item['domain'], $host)) {
                     $rank = $item['position'] > 0 ? $item['position'] : null;
                     $url = $item['url'] !== '' ? $item['url'] : null;
+                    break;
+                }
+            }
+        }
+        // A masked result (Google's encrypted redirect) with no breadcrumb to name its host: the visible site
+        // name is the last signal left — accept it only when it equals the tenant's brand exactly.
+        if ($rank === null && $brand !== null && self::nameKey($brand) !== '') {
+            foreach ($items as $item) {
+                if (($item['masked'] ?? false) === true && self::nameKey((string) ($item['website_name'] ?? '')) === self::nameKey($brand)) {
+                    $rank = $item['position'] > 0 ? $item['position'] : null;
+                    $url = null; // the destination is encrypted — the rank is known, the URL is not
                     break;
                 }
             }
@@ -507,6 +518,39 @@ final class TownRankScanner
         }
 
         return strtolower(preg_replace('/^www\./i', '', $host) ?? $host);
+    }
+
+    /** A brand / site name reduced to letters and digits for an exact-equality compare. */
+    private static function nameKey(string $name): string
+    {
+        return (string) preg_replace('/[^a-z0-9]+/', '', mb_strtolower($name));
+    }
+
+    /**
+     * The MASKED towns of a scan: collected as "not found" while the page the scan stored holds Google's
+     * encrypted click-through wrappers (google.com/goto) in place of real URLs — a read made before the
+     * parser learned to see through them via the breadcrumb. Re-reading the same task (free) with the
+     * current parser recovers the real rank.
+     *
+     * @return Collection<int, TownRankPoint>
+     */
+    public static function masked(TownRankScan $scan): Collection
+    {
+        return $scan->points()
+            ->whereNotNull('provider_task_id')
+            ->whereNotNull('collected_at')
+            ->whereNull('rank')
+            ->get()
+            ->filter(function (TownRankPoint $p): bool {
+                foreach ($p->top_results ?? [] as $r) {
+                    if (DataForSeoClient::isMaskedUrl($r['url'], $r['domain'])) {
+                        return true;
+                    }
+                }
+
+                return false;
+            })
+            ->values();
     }
 
     private static function sameHost(string $domain, string $host): bool
