@@ -265,8 +265,14 @@ class TownRankCommand extends Command
         }
         $headers[] = 'Map pack';
         $headers[] = 'Ranking URL';
+        // A sliced table (--town) is a diagnosis: show what the scan saw at the top of the page, so a
+        // "not found" can be read — local competitors (a real miss) or generic national sites (a search
+        // that was not placed at the town).
+        if ($filter !== '') {
+            $headers[] = 'Top of page (scan)';
+        }
 
-        $this->table($headers, array_map(function (array $r) use ($showLocal, $showTown): array {
+        $this->table($headers, array_map(function (array $r) use ($showLocal, $showTown, $filter): array {
             $line = [
                 $r['label'].($r['state'] !== null ? ", {$r['state']}" : ''),
                 $r['population'] > 0 ? number_format((int) $r['population']) : '—',
@@ -281,6 +287,10 @@ class TownRankCommand extends Command
             $line[] = $r['map_rank'] !== null ? '#'.$r['map_rank'] : '—';
             $url = $r['local_url'] ?? $r['town_url'];
             $line[] = is_string($url) ? Str::limit(preg_replace('#^https?://#', '', $url) ?? $url, 48) : '';
+            if ($filter !== '') {
+                $top = $showTown && $r['town_top'] !== [] ? $r['town_top'] : $r['local_top'];
+                $line[] = $top === [] ? '—' : implode(' · ', $top);
+            }
 
             return $line;
         }, $rows));

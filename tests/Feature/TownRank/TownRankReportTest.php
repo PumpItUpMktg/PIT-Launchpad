@@ -156,4 +156,11 @@ it('a "not found" with no results stored is a phantom read — no data, never a 
         ->expectsOutputToContain('Really Gone, NJ                    #1 → not found')
         ->doesntExpectOutputToContain('Phantom, NJ                        #1')   // never in the losses list
         ->assertExitCode(0);
+
+    // A sliced table shows what the scan saw at the top of the page — the evidence behind the "not found".
+    expect($rows[$real]['town_top'])->toBe(['1 rival.com'])->and($rows[$phantom]['town_top'])->toBe([]);
+    $this->artisan('launchpad:town-rank', ['site' => $site->id, '--mode' => 'town', '--town' => 'Really'])
+        ->expectsOutputToContain('Top of page (scan)')
+        ->expectsOutputToContain('1 rival.com')
+        ->assertExitCode(0);
 });

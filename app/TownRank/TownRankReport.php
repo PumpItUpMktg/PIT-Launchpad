@@ -27,7 +27,7 @@ final class TownRankReport
      * @return array{
      *     keyword: string,
      *     scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null>,
-     *     rows: list<array{coverage_area_id: string, label: string, state: string|null, population: int, page_url: string|null, page_match: string|null, page_published_at: string|null, local_rank: int|null, local_url: string|null, local_state: string, local_prev_rank: int|null, local_change: string|null, town_rank: int|null, town_url: string|null, town_state: string, town_prev_rank: int|null, town_change: string|null, map_rank: int|null, map_measured_at: Carbon|null}>,
+     *     rows: list<array{coverage_area_id: string, label: string, state: string|null, population: int, page_url: string|null, page_match: string|null, page_published_at: string|null, local_rank: int|null, local_url: string|null, local_state: string, local_prev_rank: int|null, local_change: string|null, town_rank: int|null, town_url: string|null, town_state: string, town_prev_rank: int|null, town_change: string|null, local_top: list<string>, town_top: list<string>, map_rank: int|null, map_measured_at: Carbon|null}>,
      *     summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, unreadable: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>
      * }
      */
@@ -109,6 +109,13 @@ final class TownRankReport
                 $row["{$prefix}_state"] = $state;
                 $row["{$prefix}_prev_rank"] = $prevRank;
                 $row["{$prefix}_change"] = $change;
+                // What the scan SAW at this town (the top of the page, position + domain) — the evidence
+                // behind a "not found": local plumbers means a real miss, generic national sites means the
+                // search was not placed at the town.
+                $row["{$prefix}_top"] = array_map(
+                    fn (array $r): string => $r['position'].' '.$r['domain'],
+                    array_slice(is_array($point?->top_results) ? $point->top_results : [], 0, 5),
+                );
                 if ($scans[$mode] !== null && $state !== 'unscanned') {
                     $summary[$mode][$state]++;
                 }
