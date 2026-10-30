@@ -65,3 +65,54 @@ it('says so when a site has no phantom towns', function () {
 
     expect(Artisan::output())->toContain('Phantom towns: 0 across 1 scan(s)');
 });
+
+it('sees through Google\'s encrypted redirect wrapper: the breadcrumb names the real site, --masked re-reads such towns, and the brand name is the last resort', function () {
+    [$site, $scan] = recollectFixture();
+    // A town read before the parser saw through the wrapper: "not found", page full of google.com/goto rows.
+    TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'label' => 'masked-town', 'lat' => 40.0, 'lng' => -74.0, 'query' => 'q', 'provider_task_id' => 'task-x', 'collected_at' => now()->subDays(2), 'rank' => null, 'top_results' => [
+        ['position' => 5, 'url' => 'https://google.com/goto?url=CAESkgEB', 'domain' => 'google.com'],
+        ['position' => 6, 'url' => 'https://google.com/goto?url=CAESaAHr', 'domain' => 'google.com'],
+    ]]);
+    TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'label' => 'brand-town', 'lat' => 40.0, 'lng' => -74.0, 'query' => 'q', 'provider_task_id' => 'task-y', 'collected_at' => now()->subDays(2), 'rank' => null, 'top_results' => [
+        ['position' => 5, 'url' => 'https://google.com/goto?url=CAESkgEB', 'domain' => 'google.com'],
+    ]]);
+    $scan->forceFill(['points_count' => 5])->save();
+
+    $task = fn (array $items): array => ['status_code' => 20000, 'tasks' => [['id' => 'g', 'status_code' => 20000, 'result' => [['items' => $items]]]]];
+    Http::fake([
+        '*/task_get/advanced/task-a' => Http::response($task([['type' => 'organic', 'rank_absolute' => 4, 'url' => 'https://spg.com/a', 'domain' => 'spg.com']])),
+        '*/task_get/advanced/task-b' => Http::response($task([['type' => 'organic', 'rank_absolute' => 1, 'url' => 'https://rival.com/b', 'domain' => 'rival.com']])),
+        // The wrapper everywhere; the breadcrumb still names each site — ours sits at absolute position 6.
+        '*/task_get/advanced/task-x' => Http::response($task([
+            ['type' => 'ai_overview', 'rank_absolute' => 1],
+            ['type' => 'local_pack', 'rank_absolute' => 2, 'url' => 'https://google.com/goto?url=CAESYg', 'domain' => 'google.com'],
+            ['type' => 'organic', 'rank_absolute' => 5, 'url' => 'https://google.com/goto?url=CAESkgEB', 'domain' => 'google.com', 'title' => 'TOP 10 BEST Sump Pump Repair', 'breadcrumb' => 'https://www.yelp.com › search', 'website_name' => 'Yelp'],
+            ['type' => 'organic', 'rank_absolute' => 6, 'url' => 'https://google.com/goto?url=CAESaAHr', 'domain' => 'google.com', 'title' => 'Sump Pump Service in Mansfield, NJ | Sump Pump Gurus', 'breadcrumb' => 'https://spg.com › hackettstown-nj › mansfield-nj', 'website_name' => 'Sump Pump Gurus'],
+            ['type' => 'organic', 'rank_absolute' => 7, 'url' => 'https://townplumbing.com/x', 'domain' => 'townplumbing.com'],
+        ])),
+        // No breadcrumb at all: only the visible site name is left — it equals the brand, so the rank is taken, the URL is not.
+        '*/task_get/advanced/task-y' => Http::response($task([
+            ['type' => 'organic', 'rank_absolute' => 3, 'url' => 'https://google.com/goto?url=CAESzz', 'domain' => 'google.com', 'title' => 'Sump Pump Gurus | Hoboken', 'website_name' => 'Sump Pump Gurus'],
+            ['type' => 'organic', 'rank_absolute' => 4, 'url' => 'https://google.com/goto?url=CAESqq', 'domain' => 'google.com', 'title' => 'Sump Pump Gurus of Texas', 'website_name' => 'Sump Pump Gurus of Texas'],
+        ])),
+    ]);
+
+    // Report: masked towns are counted separately and NOT re-read without the flag.
+    expect(Artisan::call('launchpad:town-rank-recollect', ['site' => 'Sump Pump Gurus', '--keyword' => 'sump pump service']))->toBe(0);
+    expect(Artisan::output())->toContain('Masked towns: 2')->toContain('Add --masked to include them');
+
+    expect(Artisan::call('launchpad:town-rank-recollect', ['site' => 'Sump Pump Gurus', '--keyword' => 'sump pump service', '--execute' => true, '--masked' => true]))->toBe(0);
+    $out = Artisan::output();
+    expect($out)->toContain('Re-reading 4 town(s)')->toContain('read 4 · ranked 3 · not found 1 · unreadable 0');
+
+    $byLabel = $scan->points()->get()->keyBy('label');
+    expect($byLabel['masked-town']->rank)->toBe(6)
+        ->and($byLabel['masked-town']->ranking_url)->toBe('https://google.com/goto?url=CAESaAHr')
+        ->and($byLabel['masked-town']->top_results[0]['domain'])->toBe('yelp.com')   // the breadcrumb host replaces google.com
+        ->and($byLabel['masked-town']->top_results[0]['masked'])->toBeTrue()
+        ->and($byLabel['masked-town']->top_results[1]['domain'])->toBe('spg.com')
+        ->and($byLabel['brand-town']->rank)->toBe(3)
+        ->and($byLabel['brand-town']->ranking_url)->toBeNull()
+        ->and($byLabel['phantom-a']->rank)->toBe(4)
+        ->and($scan->fresh()->found_count)->toBe(3);
+});
