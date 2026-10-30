@@ -213,7 +213,7 @@ class TownRankCommand extends Command
     }
 
     /**
-     * @param  array{keyword: string, scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null>, rows: list<array<string, mixed>>, summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>}  $data
+     * @param  array{keyword: string, scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null>, rows: list<array<string, mixed>>, summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, unreadable: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>}  $data
      * @param  list<string>  $modes
      */
     private function printReport(array $data, array $modes): void
@@ -234,7 +234,7 @@ class TownRankCommand extends Command
                 '  %s: %s %s · %d towns · top-3 %d · page-1 %d · page-2 %d · beyond %d · not found %d%s%s',
                 $label, $scan['status'], (string) $scan['scanned_at'], $scan['points'],
                 $s['top3'], $s['page1'], $s['page2'], $s['beyond'], $s['not_found'],
-                $s['pending'] > 0 ? " · pending {$s['pending']}" : '',
+                ($s['unreadable'] > 0 ? " · unreadable {$s['unreadable']}" : '').($s['pending'] > 0 ? " · pending {$s['pending']}" : ''),
                 $scan['previous_scanned_at'] !== null ? sprintf(' · vs %s: ▲%d ▼%d new %d lost %d', $scan['previous_scanned_at'], $s['up'], $s['down'], $s['new'], $s['lost']) : '',
             ));
         }
@@ -314,10 +314,24 @@ class TownRankCommand extends Command
             $then = ['top3' => 0, 'page1' => 0, 'page2' => 0, 'beyond' => 0, 'not_found' => 0];
             $now = $then;
             $movers = [];
+            $newPages = [];
+            $unreadable = 0;
             foreach ($data['rows'] as $r) {
                 $change = $r["{$prefix}_change"];
                 if ($change === null) {
-                    continue; // pending / unscanned this time — not comparable
+                    if ($r["{$prefix}_state"] === 'unreadable') {
+                        $unreadable++;
+                    }
+
+                    continue; // pending / unscanned / unreadable — no data is not a movement
+                }
+                // A page that went live AFTER the baseline scan had nothing to lose or gain then — it is
+                // set aside as a new page, never counted as a mover or in the then/now buckets.
+                $publishedAt = $r['page_published_at'] ?? null;
+                if (is_string($publishedAt) && $publishedAt > (string) $scan['previous_scanned_at']) {
+                    $newPages[] = $r['label'].($r['state'] !== null ? ", {$r['state']}" : '').(is_int($r["{$prefix}_rank"]) ? ' #'.$r["{$prefix}_rank"] : '');
+
+                    continue;
                 }
                 $rank = $r["{$prefix}_rank"];
                 $prev = $r["{$prefix}_prev_rank"];
@@ -331,8 +345,21 @@ class TownRankCommand extends Command
                 ['Then', $then['top3'], $then['page1'], $then['page2'], $then['beyond'], $then['not_found']],
                 ['Now', $now['top3'], $now['page1'], $now['page2'], $now['beyond'], $now['not_found']],
             ]);
-            $s = $data['summary'][$mode];
-            $this->line(sprintf('  ▲ up %d · ▼ down %d · new %d · lost %d · unchanged %d', $s['up'], $s['down'], $s['new'], $s['lost'], $s['same']));
+            $counts = ['up' => 0, 'down' => 0, 'new' => 0, 'lost' => 0, 'same' => 0];
+            foreach ($data['rows'] as $r) {
+                $c = $r["{$prefix}_change"];
+                $publishedAt = $r['page_published_at'] ?? null;
+                if ($c !== null && ! (is_string($publishedAt) && $publishedAt > (string) $scan['previous_scanned_at'])) {
+                    $counts[$c]++;
+                }
+            }
+            $this->line(sprintf('  ▲ up %d · ▼ down %d · new %d · lost %d · unchanged %d', $counts['up'], $counts['down'], $counts['new'], $counts['lost'], $counts['same']));
+            if ($unreadable > 0) {
+                $this->comment("  {$unreadable} town(s) could not be read this scan — no data, not counted either way.");
+            }
+            if ($newPages !== []) {
+                $this->comment('  '.count($newPages).' town page(s) published after the baseline — set aside, not compared: '.Str::limit(implode(', ', $newPages), 220));
+            }
 
             // Biggest gains: new rankings first (from nothing), then the largest rank improvements.
             $gains = array_values(array_filter($movers, fn (array $m): bool => in_array($m['change'], ['new', 'up'], true)));
