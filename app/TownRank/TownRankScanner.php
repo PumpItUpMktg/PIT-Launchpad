@@ -5,6 +5,7 @@ namespace App\TownRank;
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Integrations\DataForSeo\DataForSeoException;
 use App\Jobs\CollectTownRankScan;
+use App\Models\Directory;
 use App\Models\Keyword;
 use App\Models\Site;
 use App\Models\TownRankPoint;
@@ -58,6 +59,9 @@ final class TownRankScanner
     {
         return (float) config('launchpad.town_rank.cost_per_request', 0.0012) * (self::highPriority() ? 2 : 1);
     }
+
+    /** @var list<string>|null */
+    private ?array $platformNames = null;
 
     public function __construct(
         private readonly DataForSeoClient $client,
@@ -497,7 +501,7 @@ final class TownRankScanner
                     continue;
                 }
                 $byName = self::nameKey((string) ($item['website_name'] ?? '')) === self::nameKey($brand);
-                $byTitle = self::titleCarriesBrand((string) ($item['title'] ?? ''), $brand);
+                $byTitle = self::titleCarriesBrand((string) ($item['title'] ?? ''), $brand, $this->platformNames());
                 if ($byName || $byTitle) {
                     $rank = $item['position'] > 0 ? $item['position'] : null;
                     $url = null; // the destination is encrypted — the rank is known, the URL is not
@@ -527,8 +531,31 @@ final class TownRankScanner
         return strtolower(preg_replace('/^www\./i', '', $host) ?? $host);
     }
 
-    /** The page title is the brand, or ends with the brand after a separator ("Sump Pump Service in X | Brand"). */
-    public static function titleCarriesBrand(string $title, string $brand): bool
+    /**
+     * Platforms whose listing titles START with the business name ("Sump Pump Gurus - Updated October 2026 -
+     * 12 Photos - Yelp", "Sump Pump Gurus | Better Business Bureau® Profile"): a brand-first title that ends
+     * with one of these is a directory's page about the business, never the business's own page. The
+     * citation catalog's directory names join this list at run time.
+     *
+     * @var list<string>
+     */
+    public const PLATFORM_TITLE_SUFFIXES = [
+        'Yelp', 'Facebook', 'Instagram', 'LinkedIn', 'YouTube', 'Google Maps', 'Google', 'Better Business Bureau', 'BBB',
+        'Better Business Bureau® Profile', 'Angi', 'HomeAdvisor', 'Houzz', 'Nextdoor', 'Thumbtack', 'Yellow Pages', 'YellowPages',
+        'Superpages', 'MapQuest', 'Manta', 'Hotfrog', 'Brownbook', 'Foursquare', 'Porch', 'Bark', 'Alignable', 'Chamber of Commerce',
+        'ChamberofCommerce.com', 'Citysearch', 'EZlocal', 'Local.com', 'Spoke', 'Dun & Bradstreet', 'Data Axle', 'Apple Maps', 'Bing Places',
+        'Trustpilot', 'Glassdoor', 'Indeed', 'ZoomInfo', 'Crunchbase', 'Buzzfile', 'Cylex', 'Merchant Circle', 'MerchantCircle',
+    ];
+
+    /**
+     * The page title is the brand, ends with the brand after a separator ("Sump Pump Service in X | Brand" —
+     * every page the platform publishes), or STARTS with the brand and a separator (the home page: "Brand |
+     * Sump Pump & Basement Water Specialists") — unless that brand-first title is a directory's listing
+     * (ends with a platform name, or carries Yelp's "Updated <Month> <Year>" stamp).
+     *
+     * @param  list<string>  $platforms  extra platform names (the citation catalog) treated like the built-in list
+     */
+    public static function titleCarriesBrand(string $title, string $brand, array $platforms = []): bool
     {
         $t = trim($title);
         $b = trim($brand);
@@ -538,8 +565,30 @@ final class TownRankScanner
         if (self::nameKey($t) === self::nameKey($b)) {
             return true;
         }
+        $sep = '[|\\-–—:·]';
+        if (preg_match('/'.$sep.'\\s*'.preg_quote($b, '/').'\\s*$/iu', $t) === 1) {
+            return true;
+        }
+        if (preg_match('/^'.preg_quote($b, '/').'\\s*'.$sep.'/iu', $t) !== 1) {
+            return false;
+        }
+        if (preg_match('/updated\\s+[a-z]+\\s+\\d{4}/i', $t) === 1) {
+            return false; // Yelp's listing stamp
+        }
+        foreach (array_merge(self::PLATFORM_TITLE_SUFFIXES, $platforms) as $platform) {
+            $platform = trim($platform);
+            if ($platform !== '' && preg_match('/'.$sep.'\\s*'.preg_quote($platform, '/').'(\\s*®)?\\s*(profile)?\\s*$/iu', $t) === 1) {
+                return false;
+            }
+        }
 
-        return preg_match('/[|\-–—:]\s*'.preg_quote($b, '/').'\s*$/iu', $t) === 1;
+        return true;
+    }
+
+    /** The citation catalog's directory names, once per scanner instance — the platforms a brand-first title may belong to. @return list<string> */
+    private function platformNames(): array
+    {
+        return $this->platformNames ??= Directory::query()->pluck('name')->map('strval')->values()->all();
     }
 
     /** A brand / site name reduced to letters and digits for an exact-equality compare. */
