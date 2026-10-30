@@ -1,6 +1,7 @@
 <?php
 
 use App\Integrations\DataForSeo\DataForSeoClient;
+use App\TownRank\TownRankScanner;
 
 test('the organic parser sees through Google\'s encrypted redirect wrapper via the breadcrumb and marks the row masked', function (): void {
     $rows = DataForSeoClient::parseOrganic([['items' => [
@@ -18,6 +19,11 @@ test('the organic parser sees through Google\'s encrypted redirect wrapper via t
         [9, 'google.com', true],
     ]);
     expect($rows[1]['website_name'])->toBe('A-General')
+        ->and($rows[1]['breadcrumb'])->toBe('https://www.a-general.com › sump-pump › nj')
+        ->and(TownRankScanner::titleCarriesBrand('Sump Pump Service in Hoboken, NJ | Sump Pump Gurus', 'Sump Pump Gurus'))->toBeTrue()
+        ->and(TownRankScanner::titleCarriesBrand('Sump Pump Gurus', 'Sump Pump Gurus'))->toBeTrue()
+        ->and(TownRankScanner::titleCarriesBrand('SUMP PUMP GURUS - 12 Photos - Yelp', 'Sump Pump Gurus'))->toBeFalse()
+        ->and(TownRankScanner::titleCarriesBrand('Basement help | Sump Pump Gurus of Texas', 'Sump Pump Gurus'))->toBeFalse()
         ->and(DataForSeoClient::breadcrumbHost('https://www.example.com › a › b'))->toBe('example.com')
         ->and(DataForSeoClient::breadcrumbHost('example.com > a'))->toBe('example.com')
         ->and(DataForSeoClient::breadcrumbHost('Sump Pump Gurus'))->toBeNull()

@@ -29,6 +29,7 @@ class TownRankCommand extends Command
         {--mode=both : local | town | both — the query mode(s) to scan/report}
         {--town= : Filter the report to towns matching this text}
         {--since= : Compare against the newest finished scan at least this many days before the latest (e.g. 14 = two weeks ago) instead of the one just before it, and list the biggest movers}
+        {--page-age=30 : Set aside towns whose page is younger than this many days at the latest scan (0 = compare every page)}
         {--scan : Post a NEW scan (spends DataForSEO credits after confirmation)}
         {--collect : Collect results for scans still pending}
         {--dry-run : With --scan: print the plan (towns × modes → requests + cost) and spend nothing}
@@ -68,11 +69,12 @@ class TownRankCommand extends Command
         }
 
         $since = $this->option('since') !== null && (int) $this->option('since') > 0 ? (int) $this->option('since') : null;
+        $pageAge = max(0, (int) $this->option('page-age'));
         foreach ($keywords as $keyword) {
-            $data = $report->forKeyword($site, $keyword, $since);
+            $data = $report->forKeyword($site, $keyword, $since, $pageAge);
             $this->printReport($data, $modes);
             if ($since !== null) {
-                $this->printMovers($data, $modes, $since);
+                $this->printMovers($data, $modes, $since, $pageAge);
             }
         }
 
@@ -304,7 +306,7 @@ class TownRankCommand extends Command
      * @param  array{keyword: string, scans: array<string, array{scanned_at: string|null, previous_scanned_at: string|null}|null>, rows: list<array<string, mixed>>, summary: array<string, array<string, int>>}  $data
      * @param  list<string>  $modes
      */
-    private function printMovers(array $data, array $modes, int $since): void
+    private function printMovers(array $data, array $modes, int $since, int $pageAge): void
     {
         foreach ($modes as $mode) {
             $scan = $data['scans'][$mode];
@@ -329,20 +331,17 @@ class TownRankCommand extends Command
             foreach ($data['rows'] as $r) {
                 $change = $r["{$prefix}_change"];
                 if ($change === null) {
-                    if ($r["{$prefix}_state"] === 'unreadable') {
+                    if (($r["{$prefix}_page_too_new"] ?? false) === true) {
+                        // Too new to judge (younger than --page-age at the latest scan, or published after
+                        // the baseline): set aside, never a mover, never in the then/now buckets.
+                        $newPages[] = $r['label'].($r['state'] !== null ? ", {$r['state']}" : '').(is_int($r["{$prefix}_rank"]) ? ' #'.$r["{$prefix}_rank"] : '');
+                    } elseif ($r["{$prefix}_state"] === 'unreadable') {
                         $unreadable++;
                     }
 
-                    continue; // pending / unscanned / unreadable — no data is not a movement
+                    continue; // too new / pending / unscanned / unreadable — no data is not a movement
                 }
-                // A page that went live AFTER the baseline scan had nothing to lose or gain then — it is
-                // set aside as a new page, never counted as a mover or in the then/now buckets.
-                $publishedAt = $r['page_published_at'] ?? null;
-                if (is_string($publishedAt) && $publishedAt > (string) $scan['previous_scanned_at']) {
-                    $newPages[] = $r['label'].($r['state'] !== null ? ", {$r['state']}" : '').(is_int($r["{$prefix}_rank"]) ? ' #'.$r["{$prefix}_rank"] : '');
-
-                    continue;
-                }
+                // Never reached for a too-new page (its change is null); listed below from the flag instead.
                 $rank = $r["{$prefix}_rank"];
                 $prev = $r["{$prefix}_prev_rank"];
                 $then[self::bucket(is_int($prev) ? $prev : null)]++;
@@ -355,20 +354,13 @@ class TownRankCommand extends Command
                 ['Then', $then['top3'], $then['page1'], $then['page2'], $then['beyond'], $then['not_found']],
                 ['Now', $now['top3'], $now['page1'], $now['page2'], $now['beyond'], $now['not_found']],
             ]);
-            $counts = ['up' => 0, 'down' => 0, 'new' => 0, 'lost' => 0, 'same' => 0];
-            foreach ($data['rows'] as $r) {
-                $c = $r["{$prefix}_change"];
-                $publishedAt = $r['page_published_at'] ?? null;
-                if ($c !== null && ! (is_string($publishedAt) && $publishedAt > (string) $scan['previous_scanned_at'])) {
-                    $counts[$c]++;
-                }
-            }
-            $this->line(sprintf('  ▲ up %d · ▼ down %d · new %d · lost %d · unchanged %d', $counts['up'], $counts['down'], $counts['new'], $counts['lost'], $counts['same']));
+            $s = $data['summary'][$mode];
+            $this->line(sprintf('  ▲ up %d · ▼ down %d · new %d · lost %d · unchanged %d', $s['up'], $s['down'], $s['new'], $s['lost'], $s['same']));
             if ($unreadable > 0) {
                 $this->comment("  {$unreadable} town(s) could not be read this scan — no data, not counted either way.");
             }
             if ($newPages !== []) {
-                $this->comment('  '.count($newPages).' town page(s) published after the baseline — set aside, not compared: '.Str::limit(implode(', ', $newPages), 220));
+                $this->comment('  '.count($newPages).' town page(s) too new to judge (younger than '.$pageAge.' days at the latest scan, or published after the baseline) — set aside, not compared: '.Str::limit(implode(', ', $newPages), 220));
             }
 
             // Biggest gains: new rankings first (from nothing), then the largest rank improvements.

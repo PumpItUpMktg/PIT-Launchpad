@@ -90,10 +90,13 @@ it('sees through Google\'s encrypted redirect wrapper: the breadcrumb names the 
             ['type' => 'organic', 'rank_absolute' => 6, 'url' => 'https://google.com/goto?url=CAESaAHr', 'domain' => 'google.com', 'title' => 'Sump Pump Service in Mansfield, NJ | Sump Pump Gurus', 'breadcrumb' => 'https://spg.com › hackettstown-nj › mansfield-nj', 'website_name' => 'Sump Pump Gurus'],
             ['type' => 'organic', 'rank_absolute' => 7, 'url' => 'https://townplumbing.com/x', 'domain' => 'townplumbing.com'],
         ])),
-        // No breadcrumb at all: only the visible site name is left — it equals the brand, so the rank is taken, the URL is not.
+        // No usable breadcrumb or site name (the provider echoes the wrapper there too): the page title's brand
+        // suffix is what is left — it equals the brand, so the rank is taken, the URL is not. A listing that
+        // merely mentions the brand, or a near-miss brand, is never taken.
         '*/task_get/advanced/task-y' => Http::response($task([
-            ['type' => 'organic', 'rank_absolute' => 3, 'url' => 'https://google.com/goto?url=CAESzz', 'domain' => 'google.com', 'title' => 'Sump Pump Gurus | Hoboken', 'website_name' => 'Sump Pump Gurus'],
-            ['type' => 'organic', 'rank_absolute' => 4, 'url' => 'https://google.com/goto?url=CAESqq', 'domain' => 'google.com', 'title' => 'Sump Pump Gurus of Texas', 'website_name' => 'Sump Pump Gurus of Texas'],
+            ['type' => 'organic', 'rank_absolute' => 2, 'url' => 'https://google.com/goto?url=CAESyy', 'domain' => 'google.com', 'title' => 'SUMP PUMP GURUS - Updated October 2026 - 12 Photos - Yelp', 'website_name' => 'Yelp', 'breadcrumb' => 'https://google.com › goto'],
+            ['type' => 'organic', 'rank_absolute' => 3, 'url' => 'https://google.com/goto?url=CAESzz', 'domain' => 'google.com', 'title' => 'Sump Pump Service in Hoboken, NJ | Sump Pump Gurus', 'website_name' => 'google.com', 'breadcrumb' => 'https://google.com › goto'],
+            ['type' => 'organic', 'rank_absolute' => 4, 'url' => 'https://google.com/goto?url=CAESqq', 'domain' => 'google.com', 'title' => 'Basement help | Sump Pump Gurus of Texas', 'website_name' => 'Sump Pump Gurus of Texas'],
         ])),
     ]);
 
