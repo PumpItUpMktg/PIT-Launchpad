@@ -109,6 +109,39 @@
         </div>
         {{-- Sitewide run: every keyword DUE for a re-scan, priced before it spends. The count and cost come
              from the same plan the run itself uses, so what is agreed to is what is posted. --}}
+        {{-- The queued re-read of phantom / masked towns (free): a button while there is a backlog, a live
+             progress line while a chain runs, a one-line result after. --}}
+        @php $rc = $this->recollect; @endphp
+        @if ($rc['running'] || $rc['backlog'] > 0 || $rc['status'] === 'done' || $rc['status'] === 'failed')
+            <div class="t-runall" @if ($rc['running']) wire:poll.10s @endif>
+                @if ($rc['running'])
+                    <span class="t-note" style="margin:0">
+                        <strong>Re-reading masked towns:</strong> {{ number_format($rc['remaining']) }} of {{ number_format($rc['total']) }} left
+                        · {{ number_format($rc['ranked']) }} ranks recovered · {{ number_format($rc['not_found']) }} confirmed not found
+                        @if ($rc['skipped'] > 0) · {{ number_format($rc['skipped']) }} unreadable @endif
+                        · started {{ $rc['started_at'] }} · last update {{ $rc['updated_at'] }}
+                    </span>
+                @else
+                    @if ($rc['backlog'] > 0)
+                        <button type="button" wire:click="recollectMasked" wire:loading.attr="disabled" wire:target="recollectMasked"
+                                wire:confirm="Re-read {{ number_format($rc['backlog']) }} town(s) recorded as not found by a failed or masked read? Free — the provider's stored results are read again; nothing is posted.">
+                            <span wire:loading.remove wire:target="recollectMasked">Re-read masked towns ({{ number_format($rc['backlog']) }})</span>
+                            <span wire:loading wire:target="recollectMasked">Queueing…</span>
+                        </button>
+                    @endif
+                    @if ($rc['status'] === 'done')
+                        @php
+                            // One sentence with an optional clause — built here, never an @if spliced mid-word.
+                            $doneLine = number_format($rc['read']).' read · '.number_format($rc['ranked']).' ranks recovered · '.number_format($rc['not_found']).' confirmed not found'
+                                .($rc['skipped'] > 0 ? ' · '.number_format($rc['skipped']).' unreadable (left as they were)' : '').'.';
+                        @endphp
+                        <span class="t-note" style="margin:0"><strong>Re-read finished</strong> {{ $rc['finished_at'] }}: {{ $doneLine }}</span>
+                    @elseif ($rc['status'] === 'failed')
+                        <span class="t-note" style="margin:0"><strong>Re-read stopped</strong> {{ $rc['finished_at'] }}: {{ $rc['error'] }} — run it again to continue.</span>
+                    @endif
+                @endif
+            </div>
+        @endif
         @php $sweep = $this->sweepPlan; @endphp
         @if ($sweep !== null && $sweep['tracked'] > 0)
             <div class="t-runall">
