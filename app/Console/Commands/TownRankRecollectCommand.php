@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\RecollectTownRank;
 use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -26,7 +27,8 @@ class TownRankRecollectCommand extends Command
         {--keyword= : One keyword (id or exact query, else substring); default: every keyword with a scan}
         {--execute : Re-read the phantom towns now (free reads) and write the real ranks}
         {--masked : Also re-read towns whose stored page holds Google\'s encrypted redirect wrappers (google.com/goto) — reads made before the parser saw through them}
-        {--minutes=25 : With --execute: stop after this many minutes and report; re-run for the rest}';
+        {--minutes=25 : With --execute: stop after this many minutes and report; re-run for the rest}
+        {--queue : Hand the whole backlog (phantom + masked) to the worker as a self-chaining job and return; the Town rank board shows the progress}';
 
     protected $description = 'Re-read Town Rank towns recorded as "not found" by a failed read (no results stored) from their existing DataForSEO tasks — report by default, --execute to repair. Free.';
 
@@ -35,6 +37,19 @@ class TownRankRecollectCommand extends Command
         $site = $this->site();
         if ($site === null) {
             return self::FAILURE;
+        }
+
+        if ((bool) $this->option('queue')) {
+            $keywordId = $this->queuedKeywordId($site);
+            $total = RecollectTownRank::start((string) $site->id, $keywordId);
+            if ($total === null) {
+                $this->warn('A re-read is already running for this site — the Town rank board shows its progress.');
+
+                return self::SUCCESS;
+            }
+            $this->info($total === 0 ? 'Nothing to re-read: no phantom or masked towns.' : "Queued: {$total} town(s) to re-read in chunks on the worker. The Town rank board shows the progress.");
+
+            return self::SUCCESS;
         }
 
         $scans = $this->scans($site);
@@ -117,6 +132,20 @@ class TownRankRecollectCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /** The one keyword --keyword names (id, exact query, else substring), or null for the whole site. */
+    private function queuedKeywordId(Site $site): ?string
+    {
+        $opt = trim((string) $this->option('keyword'));
+        if ($opt === '') {
+            return null;
+        }
+        $base = Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id);
+        $id = (clone $base)->where(fn ($w) => $w->where('id', $opt)->orWhereRaw('LOWER(query) = ?', [mb_strtolower($opt)]))->value('id')
+            ?? $base->where('query', 'like', "%{$opt}%")->value('id');
+
+        return is_string($id) ? $id : null;
     }
 
     /** @return Collection<int, TownRankScan> */
