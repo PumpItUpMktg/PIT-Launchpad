@@ -523,7 +523,7 @@ class DataForSeoClient
 
     /**
      * @param  array<int, mixed>  $result
-     * @return list<array{position: int, url: string, domain: string, title: string, website_name: string, masked: bool}>
+     * @return list<array{position: int, url: string, domain: string, title: string, website_name: string, breadcrumb: string, masked: bool}>
      */
     public static function parseOrganic(array $result): array
     {
@@ -549,6 +549,7 @@ class DataForSeoClient
                 'domain' => $domain,
                 'title' => (string) ($item['title'] ?? ''),
                 'website_name' => (string) ($item['website_name'] ?? ''),
+                'breadcrumb' => is_string($item['breadcrumb'] ?? null) ? (string) $item['breadcrumb'] : '',
                 'masked' => $masked,
             ];
         }

@@ -469,7 +469,7 @@ final class TownRankScanner
     /**
      * The site's rank + ranking URL at a town (first result on the site's own host) and the top results.
      *
-     * @param  list<array{position: int, url: string, domain: string, title?: string, website_name?: string, masked?: bool}>  $items
+     * @param  list<array{position: int, url: string, domain: string, title?: string, website_name?: string, breadcrumb?: string, masked?: bool}>  $items
      * @return array{rank: int|null, ranking_url: string|null, top_results: list<array{position: int, url: string, domain: string}>}
      */
     private function extract(array $items, ?string $host, ?string $brand = null): array
@@ -487,11 +487,18 @@ final class TownRankScanner
                 }
             }
         }
-        // A masked result (Google's encrypted redirect) with no breadcrumb to name its host: the visible site
-        // name is the last signal left — accept it only when it equals the tenant's brand exactly.
+        // A masked result (Google's encrypted redirect) whose breadcrumb did not name its host: the visible
+        // site name, else the page title's brand suffix ("… | Sump Pump Gurus" — every page the platform
+        // publishes carries it), is what is left. Both must equal the tenant's brand exactly; a title that
+        // merely mentions the brand (a directory's listing, "… Gurus of Texas") is never taken.
         if ($rank === null && $brand !== null && self::nameKey($brand) !== '') {
             foreach ($items as $item) {
-                if (($item['masked'] ?? false) === true && self::nameKey((string) ($item['website_name'] ?? '')) === self::nameKey($brand)) {
+                if (($item['masked'] ?? false) !== true) {
+                    continue;
+                }
+                $byName = self::nameKey((string) ($item['website_name'] ?? '')) === self::nameKey($brand);
+                $byTitle = self::titleCarriesBrand((string) ($item['title'] ?? ''), $brand);
+                if ($byName || $byTitle) {
                     $rank = $item['position'] > 0 ? $item['position'] : null;
                     $url = null; // the destination is encrypted — the rank is known, the URL is not
                     break;
@@ -518,6 +525,21 @@ final class TownRankScanner
         }
 
         return strtolower(preg_replace('/^www\./i', '', $host) ?? $host);
+    }
+
+    /** The page title is the brand, or ends with the brand after a separator ("Sump Pump Service in X | Brand"). */
+    public static function titleCarriesBrand(string $title, string $brand): bool
+    {
+        $t = trim($title);
+        $b = trim($brand);
+        if ($t === '' || $b === '') {
+            return false;
+        }
+        if (self::nameKey($t) === self::nameKey($b)) {
+            return true;
+        }
+
+        return preg_match('/[|\-–—:]\s*'.preg_quote($b, '/').'\s*$/iu', $t) === 1;
     }
 
     /** A brand / site name reduced to letters and digits for an exact-equality compare. */

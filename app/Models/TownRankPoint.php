@@ -25,7 +25,7 @@ use Illuminate\Support\Carbon;
  * @property string $query
  * @property int|null $rank
  * @property string|null $ranking_url
- * @property list<array{position: int, url: string, domain: string, title?: string, website_name?: string, masked?: bool}>|null $top_results
+ * @property list<array{position: int, url: string, domain: string, title?: string, website_name?: string, breadcrumb?: string, masked?: bool}>|null $top_results
  * @property string|null $provider_task_id
  * @property int $read_attempts reads that produced no answer; at the ceiling the point is closed unreadable
  * @property string|null $read_error why it could never be read — set means "no data", never "not found"

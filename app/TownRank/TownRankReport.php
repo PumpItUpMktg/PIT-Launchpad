@@ -27,11 +27,17 @@ final class TownRankReport
      * @return array{
      *     keyword: string,
      *     scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null>,
-     *     rows: list<array{coverage_area_id: string, label: string, state: string|null, population: int, page_url: string|null, page_match: string|null, page_published_at: string|null, local_rank: int|null, local_url: string|null, local_state: string, local_prev_rank: int|null, local_change: string|null, town_rank: int|null, town_url: string|null, town_state: string, town_prev_rank: int|null, town_change: string|null, local_top: list<string>, town_top: list<string>, map_rank: int|null, map_measured_at: Carbon|null}>,
+     *     rows: list<array{coverage_area_id: string, label: string, state: string|null, population: int, page_url: string|null, page_match: string|null, page_published_at: string|null, local_rank: int|null, local_url: string|null, local_state: string, local_prev_rank: int|null, local_change: string|null, town_rank: int|null, town_url: string|null, town_state: string, town_prev_rank: int|null, town_change: string|null, local_page_too_new: bool, town_page_too_new: bool, local_top: list<string>, town_top: list<string>, map_rank: int|null, map_measured_at: Carbon|null}>,
      *     summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, unreadable: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>
      * }
      */
-    public function forKeyword(Site $site, Keyword $keyword, ?int $sinceDays = null): array
+    /**
+     * A town page younger than this (at the latest scan) is set aside from every movement count: a page that
+     * has not had time to settle in the index cannot have "lost" or "gained" anything meaningful.
+     */
+    public const DEFAULT_MIN_PAGE_AGE_DAYS = 30;
+
+    public function forKeyword(Site $site, Keyword $keyword, ?int $sinceDays = null, int $minPageAgeDays = self::DEFAULT_MIN_PAGE_AGE_DAYS): array
     {
         // The town list first: a scan's points are linked to the towns that exist NOW (a coverage rebuild
         // gives every town a new row id, which would otherwise orphan every point — see TownPointLinks).
@@ -101,8 +107,12 @@ final class TownRankReport
                 // No data is not "not found": a point that could not be read on EITHER side carries no
                 // movement — otherwise a failed read on a #1 town prints as a lost #1.
                 $prevUnreadable = $prevPoint !== null && $prevPoint->read_error !== null;
-                $comparable = $hasPrevious && ! in_array($state, ['pending', 'unscanned', 'unreadable'], true) && ! $prevUnreadable;
+                // A page too new to judge — younger than the age floor at the latest scan, or published after
+                // the baseline scan — is set aside: it carries no movement and no then/now bucket.
+                $tooNew = self::pageTooNew($town['page_published_at'] ?? null, $scans[$mode]['scanned_at'] ?? null, $scans[$mode]['previous_scanned_at'] ?? null, $minPageAgeDays);
+                $comparable = $hasPrevious && ! $tooNew && ! in_array($state, ['pending', 'unscanned', 'unreadable'], true) && ! $prevUnreadable;
                 $change = $comparable ? self::changeOf($rank, $prevRank) : null;
+                $row["{$prefix}_page_too_new"] = $tooNew;
 
                 $row["{$prefix}_rank"] = $rank;
                 $row["{$prefix}_url"] = $point?->ranking_url;
@@ -113,7 +123,16 @@ final class TownRankReport
                 // behind a "not found": local plumbers means a real miss, generic national sites means the
                 // search was not placed at the town.
                 $row["{$prefix}_top"] = array_map(
-                    fn (array $r): string => $r['position'].' '.$r['domain'],
+                    function (array $r): string {
+                        $cell = $r['position'].' '.$r['domain'];
+                        if (($r['masked'] ?? false) === true) {
+                            // The wrapper hid the host: show every signal the provider still gave us.
+                            $signals = array_filter([$r['website_name'] ?? '', $r['breadcrumb'] ?? '', isset($r['title']) ? '«'.mb_strimwidth((string) $r['title'], 0, 48, '…').'»' : '']);
+                            $cell .= ' [masked'.($signals !== [] ? ': '.implode(' / ', $signals) : '').']';
+                        }
+
+                        return $cell;
+                    },
                     array_slice(is_array($point?->top_results) ? $point->top_results : [], 0, 5),
                 );
                 if ($scans[$mode] !== null && $state !== 'unscanned') {
@@ -127,6 +146,25 @@ final class TownRankReport
         }
 
         return ['keyword' => (string) $keyword->query, 'scans' => $scans, 'rows' => $rows, 'summary' => $summary];
+    }
+
+    /**
+     * Whether a town's page is too new to compare: published within $minAgeDays of the latest scan, or
+     * after the baseline scan it would be compared against. A town with no page is never "too new".
+     */
+    public static function pageTooNew(?string $publishedAt, ?string $latestScannedAt, ?string $previousScannedAt, int $minAgeDays): bool
+    {
+        if ($publishedAt === null || $publishedAt === '') {
+            return false;
+        }
+        if ($previousScannedAt !== null && $publishedAt > $previousScannedAt) {
+            return true;
+        }
+        if ($minAgeDays > 0 && $latestScannedAt !== null) {
+            return $publishedAt > Carbon::parse($latestScannedAt)->subDays($minAgeDays)->toDateTimeString();
+        }
+
+        return false;
     }
 
     /** Movement since the previous scan: up | down | same | new (ranked now, not before) | lost (the reverse). */

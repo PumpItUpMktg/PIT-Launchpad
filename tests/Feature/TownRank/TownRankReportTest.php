@@ -125,7 +125,7 @@ it('sets aside a town whose page went live after the baseline, and never counts 
         ->expectsOutputToContain('unreadable 1')
         ->expectsOutputToContain('▲ up 0 · ▼ down 0 · new 0 · lost 0 · unchanged 1')
         ->expectsOutputToContain('1 town(s) could not be read this scan')
-        ->expectsOutputToContain('1 town page(s) published after the baseline — set aside, not compared: Newpage, NJ #2')
+        ->expectsOutputToContain('1 town page(s) too new to judge (younger than 30 days at the latest scan, or published after the baseline) — set aside, not compared: Newpage, NJ #2')
         ->doesntExpectOutputToContain('Biggest losses:')
         ->assertExitCode(0);
 });
@@ -162,5 +162,35 @@ it('a "not found" with no results stored is a phantom read — no data, never a 
     $this->artisan('launchpad:town-rank', ['site' => $site->id, '--mode' => 'town', '--town' => 'Really'])
         ->expectsOutputToContain('Top of page (scan)')
         ->expectsOutputToContain('1 rival.com')
+        ->assertExitCode(0);
+});
+
+it('a page younger than the age floor at the latest scan is set aside even when it predates the baseline; an older one is compared; --page-age=0 compares all', function (): void {
+    $site = Site::factory()->create(['brand_name' => 'Sump Pump Gurus', 'domain_url' => 'https://spg.com']);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'lat' => 40.0, 'lng' => -74.0]);
+    $young = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Youngtown', 'state' => 'NJ', 'population' => 900, 'lat' => 40.0, 'lng' => -74.0, 'source_location_ids' => [$loc->id], 'geo_id' => '3404100001'])->id;
+    $old = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Oldtown', 'state' => 'NJ', 'population' => 800, 'lat' => 40.01, 'lng' => -74.0, 'source_location_ids' => [$loc->id], 'geo_id' => '3404100002'])->id;
+    // Youngtown's page: 10 days old at the latest scan (but before the baseline). Oldtown's: 45 days old.
+    Content::factory()->page()->published()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'status' => ContentStatus::Published, 'geo_id' => '3404100001', 'slug' => 'youngtown-nj', 'published_at' => '2026-10-19 09:00:00']);
+    Content::factory()->page()->published()->create(['site_id' => $site->id, 'page_type' => PageType::Location, 'status' => ContentStatus::Published, 'geo_id' => '3404100002', 'slug' => 'oldtown-nj', 'published_at' => '2026-09-14 09:00:00']);
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump repair', 'is_grid_keyword' => true]);
+    reportScan($site, $kw, 'town_query', 'complete', '2026-10-22 10:00:00', [$young => 1, $old => 1]);
+    reportScan($site, $kw, 'town_query', 'complete', '2026-10-29 10:00:00', [$young => null, $old => null]);
+
+    $report = app(TownRankReport::class);
+    $rows = collect($report->forKeyword($site, $kw)['rows'])->keyBy('coverage_area_id');
+    expect($rows[$young]['town_page_too_new'])->toBeTrue()->and($rows[$young]['town_change'])->toBeNull()
+        ->and($rows[$old]['town_page_too_new'])->toBeFalse()->and($rows[$old]['town_change'])->toBe('lost');
+
+    // The floor is adjustable; 0 compares every page.
+    $rows = collect($report->forKeyword($site, $kw, null, 0)['rows'])->keyBy('coverage_area_id');
+    expect($rows[$young]['town_change'])->toBe('lost');
+
+    $this->artisan('launchpad:town-rank', ['site' => $site->id, '--mode' => 'town', '--since' => 7])
+        ->expectsOutputToContain('▲ up 0 · ▼ down 0 · new 0 · lost 1 · unchanged 0')
+        ->expectsOutputToContain('1 town page(s) too new to judge (younger than 30 days at the latest scan, or published after the baseline) — set aside, not compared: Youngtown, NJ')
+        ->assertExitCode(0);
+    $this->artisan('launchpad:town-rank', ['site' => $site->id, '--mode' => 'town', '--since' => 7, '--page-age' => 0])
+        ->expectsOutputToContain('▲ up 0 · ▼ down 0 · new 0 · lost 2 · unchanged 0')
         ->assertExitCode(0);
 });
