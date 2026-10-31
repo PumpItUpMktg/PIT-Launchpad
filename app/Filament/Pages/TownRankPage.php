@@ -4,7 +4,6 @@ namespace App\Filament\Pages;
 
 use App\Activity\ActivityRecorder;
 use App\Filament\Pages\Concerns\BuildsTownPage;
-use App\Jobs\RecollectTownRank;
 use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -13,7 +12,6 @@ use App\Operator\ActiveTenant;
 use App\TownPages\PriorityKeywords;
 use App\TownRank\TownRankBoard;
 use App\TownRank\TownRankKeywords;
-use App\TownRank\TownRankRecollectProgress;
 use App\TownRank\TownRankRunAll;
 use BackedEnum;
 use Filament\Notifications\Notification;
@@ -235,42 +233,6 @@ class TownRankPage extends Page
         Notification::make()->success()
             ->title(sprintf('Queued %s keyword(s) · %s requests (~$%s)', number_format($result['queued']), number_format($result['requests']), number_format($result['cost'], 2)))
             ->body('One job per keyword; results collect over the next few minutes and each card updates as they land.')->send();
-    }
-
-    /**
-     * The queued re-read of phantom / masked points: its live progress record. The page never counts the
-     * backlog itself (that is a scan of every stored page — the job does it on the worker); the button is
-     * always offered while no chain is live, and the first chunk ends the run at once if there is nothing.
-     *
-     * @return array{status: string, total: int, read: int, ranked: int, not_found: int, skipped: int, remaining: int, started_at: ?string, updated_at: ?string, finished_at: ?string, error: ?string, running: bool}
-     */
-    #[Computed]
-    public function recollect(): array
-    {
-        $site = $this->site();
-        if ($site === null) {
-            return array_merge(TownRankRecollectProgress::get(''), ['running' => false]);
-        }
-
-        return array_merge(TownRankRecollectProgress::get((string) $site->id), ['running' => TownRankRecollectProgress::isRunning((string) $site->id)]);
-    }
-
-    /** Queue the re-read of every phantom / masked town across the site's scans — free reads, in chunks, on the worker. */
-    public function recollectMasked(): void
-    {
-        $site = $this->site();
-        if ($site === null) {
-            return;
-        }
-        if (! RecollectTownRank::start((string) $site->id)) {
-            unset($this->recollect);
-            Notification::make()->warning()->title('Already re-reading')->body('A re-read is in progress for this site — the line below updates as it goes.')->send();
-
-            return;
-        }
-        unset($this->recollect);
-        Notification::make()->success()->title('Re-read queued')
-            ->body('The worker counts the backlog first, then re-reads it in chunks — free reads from the stored task results. This page shows the progress; the cards update as ranks land.')->send();
     }
 
     public function runKeyword(string $id): void
