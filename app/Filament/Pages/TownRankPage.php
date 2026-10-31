@@ -238,21 +238,21 @@ class TownRankPage extends Page
     }
 
     /**
-     * The queued re-read of phantom / masked points: its live progress and the backlog it would start on.
+     * The queued re-read of phantom / masked points: its live progress record. The page never counts the
+     * backlog itself (that is a scan of every stored page — the job does it on the worker); the button is
+     * always offered while no chain is live, and the first chunk ends the run at once if there is nothing.
      *
-     * @return array{status: string, total: int, read: int, ranked: int, not_found: int, skipped: int, remaining: int, started_at: ?string, updated_at: ?string, finished_at: ?string, error: ?string, running: bool, backlog: int}
+     * @return array{status: string, total: int, read: int, ranked: int, not_found: int, skipped: int, remaining: int, started_at: ?string, updated_at: ?string, finished_at: ?string, error: ?string, running: bool}
      */
     #[Computed]
     public function recollect(): array
     {
         $site = $this->site();
         if ($site === null) {
-            return array_merge(TownRankRecollectProgress::get(''), ['running' => false, 'backlog' => 0]);
+            return array_merge(TownRankRecollectProgress::get(''), ['running' => false]);
         }
-        $p = TownRankRecollectProgress::get((string) $site->id);
-        $running = TownRankRecollectProgress::isRunning((string) $site->id);
 
-        return array_merge($p, ['running' => $running, 'backlog' => $running ? $p['remaining'] : RecollectTownRank::backlog((string) $site->id)]);
+        return array_merge(TownRankRecollectProgress::get((string) $site->id), ['running' => TownRankRecollectProgress::isRunning((string) $site->id)]);
     }
 
     /** Queue the re-read of every phantom / masked town across the site's scans — free reads, in chunks, on the worker. */
@@ -262,20 +262,15 @@ class TownRankPage extends Page
         if ($site === null) {
             return;
         }
-        $total = RecollectTownRank::start((string) $site->id);
-        unset($this->recollect);
-        if ($total === null) {
+        if (! RecollectTownRank::start((string) $site->id)) {
+            unset($this->recollect);
             Notification::make()->warning()->title('Already re-reading')->body('A re-read is in progress for this site — the line below updates as it goes.')->send();
 
             return;
         }
-        if ($total === 0) {
-            Notification::make()->title('Nothing to re-read')->body('No phantom or masked towns in any scan.')->send();
-
-            return;
-        }
-        Notification::make()->success()->title(sprintf('Re-reading %s town(s)', number_format($total)))
-            ->body('Free reads from the stored task results, in chunks on the worker. This page shows the progress; the cards update as ranks land.')->send();
+        unset($this->recollect);
+        Notification::make()->success()->title('Re-read queued')
+            ->body('The worker counts the backlog first, then re-reads it in chunks — free reads from the stored task results. This page shows the progress; the cards update as ranks land.')->send();
     }
 
     public function runKeyword(string $id): void

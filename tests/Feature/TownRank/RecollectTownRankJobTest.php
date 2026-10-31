@@ -40,9 +40,10 @@ it('start() counts the phantom + masked backlog, records a running chain, dispat
     [$site] = recollectJobSite();
 
     expect(RecollectTownRank::backlog($site->id))->toBe(2)   // the real miss is not work
-        ->and(RecollectTownRank::start($site->id))->toBe(2)
+        ->and(RecollectTownRank::start($site->id))->toBeTrue()
         ->and(TownRankRecollectProgress::isRunning($site->id))->toBeTrue()
-        ->and(RecollectTownRank::start($site->id))->toBeNull();   // already running
+        ->and(TownRankRecollectProgress::get($site->id)['total'])->toBe(0)   // counted by the job, never in the request
+        ->and(RecollectTownRank::start($site->id))->toBeFalse();   // already running
     Queue::assertPushed(RecollectTownRank::class, 1);
 });
 
@@ -68,7 +69,7 @@ it('the job re-reads the backlog (a masked town recovers its rank by the title s
         ->and($byLabel['phantom-town']->top_results)->toHaveCount(1)   // a real not-found now, no longer a phantom
         ->and($scan->fresh()->found_count)->toBe(1)
         ->and($p['status'])->toBe(TownRankRecollectProgress::STATUS_DONE)
-        ->and($p)->toMatchArray(['read' => 2, 'ranked' => 1, 'not_found' => 1, 'skipped' => 0, 'remaining' => 0])
+        ->and($p)->toMatchArray(['total' => 2, 'read' => 2, 'ranked' => 1, 'not_found' => 1, 'skipped' => 0, 'remaining' => 0])
         ->and(RecollectTownRank::backlog($site->id))->toBe(0);
     Queue::assertPushed(RecollectTownRank::class, 1);   // the start — no continuation needed
 });
@@ -101,16 +102,25 @@ it('the Town rank board offers the re-read, queues it, and shows the live progre
     [$site] = recollectJobSite();
 
     Livewire::test(TownRankPage::class)->set('siteId', $site->id)
-        ->assertSee('Re-read masked towns (2)')
+        ->assertSee('Re-read masked towns')
         ->call('recollectMasked')
         ->assertSee('Re-reading masked towns:')
-        ->assertSee('2 of 2 left');
+        ->assertSee('counting the backlog');
     Queue::assertPushed(RecollectTownRank::class, 1);
 
     TownRankRecollectProgress::clear($site->id);
     expect(Artisan::call('launchpad:town-rank-recollect', ['site' => 'Sump Pump Gurus', '--queue' => true]))->toBe(0);
-    expect(Artisan::output())->toContain('Queued: 2 town(s)');
+    expect(Artisan::output())->toContain('Queued: the worker counts the backlog');
     Queue::assertPushed(RecollectTownRank::class, 2);
     expect(Artisan::call('launchpad:town-rank-recollect', ['site' => 'Sump Pump Gurus', '--queue' => true]))->toBe(0);
     expect(Artisan::output())->toContain('already running');
+});
+
+it('a run on a site with nothing to re-read ends in its first chunk', function () {
+    Queue::fake();
+    $site = Site::factory()->create(['brand_name' => 'Clean Co', 'domain_url' => 'https://clean.com']);
+    expect(RecollectTownRank::start($site->id))->toBeTrue();
+    (new RecollectTownRank($site->id))->handle(app(TownRankScanner::class));
+    expect(TownRankRecollectProgress::get($site->id))->toMatchArray(['status' => TownRankRecollectProgress::STATUS_DONE, 'total' => 0, 'read' => 0]);
+    Queue::assertPushed(RecollectTownRank::class, 1);
 });

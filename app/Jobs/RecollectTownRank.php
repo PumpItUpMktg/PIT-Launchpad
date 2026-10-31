@@ -41,24 +41,19 @@ class RecollectTownRank implements ShouldQueue
     ) {}
 
     /**
-     * Start a chain for a site unless one is live. Returns the backlog size it will work through, or null
-     * when a chain is already running (nothing dispatched).
+     * Start a chain for a site unless one is live: record the run and dispatch at once. The backlog is
+     * COUNTED BY THE JOB in its first chunk, never here — the count scans every stored page of the site
+     * and belongs on the worker, not inside a page request. False when a chain is already running.
      */
-    public static function start(string $siteId, ?string $keywordId = null): ?int
+    public static function start(string $siteId, ?string $keywordId = null): bool
     {
         if (TownRankRecollectProgress::isRunning($siteId)) {
-            return null;
+            return false;
         }
-        $total = self::backlog($siteId, $keywordId);
-        TownRankRecollectProgress::start($siteId, $total);
-        if ($total === 0) {
-            TownRankRecollectProgress::finish($siteId);
-
-            return 0;
-        }
+        TownRankRecollectProgress::start($siteId, 0);
         self::dispatch($siteId, $keywordId);
 
-        return $total;
+        return true;
     }
 
     /** The finished scans with work left, newest first (the current picture is repaired before history). @return Collection<int, TownRankScan> */
@@ -88,6 +83,17 @@ class RecollectTownRank implements ShouldQueue
 
     public function handle(TownRankScanner $scanner): void
     {
+        if (! $this->continuation) {
+            // The first chunk sizes the run (one SQL count over the site's stored pages) and ends it at once
+            // when there is nothing to do.
+            $total = self::backlog($this->siteId, $this->keywordId);
+            TownRankRecollectProgress::size($this->siteId, $total);
+            if ($total === 0) {
+                TownRankRecollectProgress::finish($this->siteId);
+
+                return;
+            }
+        }
         $deadline = microtime(true) + max(5, $this->chunkSeconds);
         $read = 0;
         $ranked = 0;
