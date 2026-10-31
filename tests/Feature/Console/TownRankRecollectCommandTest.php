@@ -94,8 +94,9 @@ it('sees through Google\'s encrypted redirect wrapper: the breadcrumb names the 
         // suffix is what is left — it equals the brand, so the rank is taken, the URL is not. A listing that
         // merely mentions the brand, or a near-miss brand, is never taken.
         '*/task_get/advanced/task-y' => Http::response($task([
+            ['type' => 'organic', 'rank_absolute' => 1, 'url' => 'https://google.com/goto?url=CAESxx', 'domain' => 'google.com', 'title' => 'Sump Pump Gurus | Better Business Bureau® Profile', 'website_name' => 'BBB', 'breadcrumb' => 'https://google.com › goto'],
             ['type' => 'organic', 'rank_absolute' => 2, 'url' => 'https://google.com/goto?url=CAESyy', 'domain' => 'google.com', 'title' => 'SUMP PUMP GURUS - Updated October 2026 - 12 Photos - Yelp', 'website_name' => 'Yelp', 'breadcrumb' => 'https://google.com › goto'],
-            ['type' => 'organic', 'rank_absolute' => 3, 'url' => 'https://google.com/goto?url=CAESzz', 'domain' => 'google.com', 'title' => 'Sump Pump Service in Hoboken, NJ | Sump Pump Gurus', 'website_name' => 'google.com', 'breadcrumb' => 'https://google.com › goto'],
+            ['type' => 'organic', 'rank_absolute' => 3, 'url' => 'https://google.com/goto?url=CAESzz', 'domain' => 'google.com', 'title' => 'Sump Pump Gurus | Sump Pump & Basement Water Specialists', 'website_name' => 'google.com', 'breadcrumb' => 'https://google.com › goto'],
             ['type' => 'organic', 'rank_absolute' => 4, 'url' => 'https://google.com/goto?url=CAESqq', 'domain' => 'google.com', 'title' => 'Basement help | Sump Pump Gurus of Texas', 'website_name' => 'Sump Pump Gurus of Texas'],
         ])),
     ]);
