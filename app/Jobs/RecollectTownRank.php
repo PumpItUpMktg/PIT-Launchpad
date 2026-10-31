@@ -74,15 +74,10 @@ class RecollectTownRank implements ShouldQueue
         return $q->get();
     }
 
-    /** Phantom + masked points still to re-read across the site's scans. */
+    /** Phantom + masked points still to re-read across the site's scans — one SQL count (the page reads this). */
     public static function backlog(string $siteId, ?string $keywordId = null): int
     {
-        $n = 0;
-        foreach (self::scans($siteId, $keywordId) as $scan) {
-            $n += self::work($scan)->count();
-        }
-
-        return $n;
+        return TownRankScanner::backlogCount($siteId, $keywordId);
     }
 
     /** @return Collection<int, TownRankPoint> */
