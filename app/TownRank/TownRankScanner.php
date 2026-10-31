@@ -7,6 +7,7 @@ use App\Integrations\DataForSeo\DataForSeoException;
 use App\Jobs\CollectTownRankScan;
 use App\Models\Directory;
 use App\Models\Keyword;
+use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
@@ -622,6 +623,34 @@ final class TownRankScanner
                 return false;
             })
             ->values();
+    }
+
+    /**
+     * How many phantom + masked points a site (or one keyword) still has across its finished scans — one
+     * SQL count, never a PHP walk over every point (a whole-site walk is hundreds of thousands of rows and
+     * timed out the Town rank page). The text match mirrors {@see phantoms()} ("[]" / null stored) and
+     * {@see masked()} (a google.com/goto wrapper on the stored page) closely enough for a progress count.
+     */
+    public static function backlogCount(string $siteId, ?string $keywordId = null): int
+    {
+        $json = DB::connection()->getDriverName() === 'pgsql' ? 'town_rank_points.top_results::text' : 'town_rank_points.top_results';
+
+        return (int) TownRankPoint::withoutGlobalScope(SiteScope::class)
+            ->join('town_rank_scans', 'town_rank_scans.id', '=', 'town_rank_points.scan_id')
+            ->where('town_rank_scans.site_id', $siteId)
+            ->whereIn('town_rank_scans.status', ['complete', 'partial'])
+            ->when($keywordId !== null, fn ($q) => $q->where('town_rank_scans.keyword_id', $keywordId))
+            ->whereNotNull('town_rank_points.provider_task_id')
+            ->whereNotNull('town_rank_points.collected_at')
+            ->whereNull('town_rank_points.rank')
+            ->where(fn ($q) => $q
+                ->whereNull('town_rank_points.top_results')
+                ->orWhereRaw("{$json} IN ('[]', 'null')")
+                // JSON escapes the slash ("google.com\/goto"), so the pattern leaves it out — and no backslash
+                // reaches LIKE, where Postgres would read it as the escape character.
+                ->orWhereRaw("{$json} LIKE ?", ['%google.com%goto?url=%'])
+                ->orWhereRaw("{$json} LIKE ?", ['%google.com%url?q=%']))
+            ->count();
     }
 
     private static function sameHost(string $domain, string $host): bool
