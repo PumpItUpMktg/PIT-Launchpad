@@ -121,12 +121,16 @@ class RecollectTownRank implements ShouldQueue
             return;
         }
 
-        $remaining = self::backlog($this->siteId, $this->keywordId);
+        // Remaining is kept arithmetically (a resolved point leaves the backlog; an unreadable one stays) —
+        // never re-counted: the count is a scan of every stored page, and the worker shares the database
+        // with the board.
+        $before = TownRankRecollectProgress::get($this->siteId)['remaining'];
+        $remaining = max(0, $before - ($ranked + $notFound));
         TownRankRecollectProgress::advance($this->siteId, $read, $ranked, $notFound, $skipped, $remaining);
 
-        // Unreadable points stay in the backlog by design (left as they were), so "remaining" alone would
-        // chain forever on a dead task: continue only when this chunk actually resolved something.
-        if ($remaining > 0 && ($read - $skipped) > 0) {
+        // Unreadable points stay in the backlog by design, so "remaining" alone would chain forever on a
+        // dead task: continue only when this chunk actually resolved something.
+        if ($remaining > 0 && ($ranked + $notFound) > 0) {
             self::dispatch($this->siteId, $this->keywordId, true, $this->chunkSeconds);
 
             return;

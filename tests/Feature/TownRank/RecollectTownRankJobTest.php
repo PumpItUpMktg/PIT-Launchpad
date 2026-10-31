@@ -3,6 +3,7 @@
 use App\Enums\UserRole;
 use App\Filament\Pages\TownRankPage;
 use App\Jobs\RecollectTownRank;
+use App\Livewire\TownRankRecollectStatus;
 use App\Models\Keyword;
 use App\Models\Site;
 use App\Models\TownRankPoint;
@@ -101,9 +102,10 @@ it('the Town rank board offers the re-read, queues it, and shows the live progre
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     [$site] = recollectJobSite();
 
-    Livewire::test(TownRankPage::class)->set('siteId', $site->id)
+    Livewire::test(TownRankPage::class)->set('siteId', $site->id)->assertSee('Re-read masked towns');   // the control is embedded
+    Livewire::test(TownRankRecollectStatus::class, ['siteId' => $site->id])
         ->assertSee('Re-read masked towns')
-        ->call('recollectMasked')
+        ->call('recollect')
         ->assertSee('Re-reading masked towns:')
         ->assertSee('counting the backlog');
     Queue::assertPushed(RecollectTownRank::class, 1);
