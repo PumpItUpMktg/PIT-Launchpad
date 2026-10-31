@@ -41,6 +41,12 @@ final class TownRankRecollectProgress
         ]));
     }
 
+    /** The first chunk's count of the backlog — the run's total and remaining. */
+    public static function size(string $siteId, int $total): void
+    {
+        self::put($siteId, array_merge(self::get($siteId), ['status' => self::STATUS_RUNNING, 'total' => $total, 'remaining' => $total, 'updated_at' => Carbon::now()->toDateTimeString()]));
+    }
+
     /** Add one chunk's outcome and the live remaining count. */
     public static function advance(string $siteId, int $read, int $ranked, int $notFound, int $skipped, int $remaining): void
     {

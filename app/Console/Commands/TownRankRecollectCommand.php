@@ -41,13 +41,12 @@ class TownRankRecollectCommand extends Command
 
         if ((bool) $this->option('queue')) {
             $keywordId = $this->queuedKeywordId($site);
-            $total = RecollectTownRank::start((string) $site->id, $keywordId);
-            if ($total === null) {
+            if (! RecollectTownRank::start((string) $site->id, $keywordId)) {
                 $this->warn('A re-read is already running for this site — the Town rank board shows its progress.');
 
                 return self::SUCCESS;
             }
-            $this->info($total === 0 ? 'Nothing to re-read: no phantom or masked towns.' : "Queued: {$total} town(s) to re-read in chunks on the worker. The Town rank board shows the progress.");
+            $this->info('Queued: the worker counts the backlog, then re-reads it in chunks. The Town rank board shows the progress.');
 
             return self::SUCCESS;
         }

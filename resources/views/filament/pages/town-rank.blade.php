@@ -112,23 +112,21 @@
         {{-- The queued re-read of phantom / masked towns (free): a button while there is a backlog, a live
              progress line while a chain runs, a one-line result after. --}}
         @php $rc = $this->recollect; @endphp
-        @if ($rc['running'] || $rc['backlog'] > 0 || $rc['status'] === 'done' || $rc['status'] === 'failed')
-            <div class="t-runall" @if ($rc['running']) wire:poll.10s @endif>
+        @if ($this->siteId !== null)
+            <div class="t-runall" @if ($rc['running']) wire:poll.15s @endif>
                 @if ($rc['running'])
                     <span class="t-note" style="margin:0">
-                        <strong>Re-reading masked towns:</strong> {{ number_format($rc['remaining']) }} of {{ number_format($rc['total']) }} left
+                        <strong>Re-reading masked towns:</strong> {{ $rc['total'] > 0 ? number_format($rc['remaining']).' of '.number_format($rc['total']).' left' : 'counting the backlog…' }}
                         · {{ number_format($rc['ranked']) }} ranks recovered · {{ number_format($rc['not_found']) }} confirmed not found
                         @if ($rc['skipped'] > 0) · {{ number_format($rc['skipped']) }} unreadable @endif
                         · started {{ $rc['started_at'] }} · last update {{ $rc['updated_at'] }}
                     </span>
                 @else
-                    @if ($rc['backlog'] > 0)
-                        <button type="button" wire:click="recollectMasked" wire:loading.attr="disabled" wire:target="recollectMasked"
-                                wire:confirm="Re-read {{ number_format($rc['backlog']) }} town(s) recorded as not found by a failed or masked read? Free — the provider's stored results are read again; nothing is posted.">
-                            <span wire:loading.remove wire:target="recollectMasked">Re-read masked towns ({{ number_format($rc['backlog']) }})</span>
-                            <span wire:loading wire:target="recollectMasked">Queueing…</span>
-                        </button>
-                    @endif
+                    <button type="button" wire:click="recollectMasked" wire:loading.attr="disabled" wire:target="recollectMasked"
+                            wire:confirm="Re-read every town recorded as not found by a failed or masked read? Free — the provider's stored results are read again; nothing is posted. The worker counts the backlog first.">
+                        <span wire:loading.remove wire:target="recollectMasked">Re-read masked towns</span>
+                        <span wire:loading wire:target="recollectMasked">Queueing…</span>
+                    </button>
                     @if ($rc['status'] === 'done')
                         @php
                             // One sentence with an optional clause — built here, never an @if spliced mid-word.
