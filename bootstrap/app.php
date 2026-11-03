@@ -21,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // The capture API is a token-authenticated, cookieless PWA surface — CSRF does not apply.
         $middleware->validateCsrfTokens(except: [
             'capture/api/*',
+            'webhooks/*',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

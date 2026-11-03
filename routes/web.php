@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ColdOutreach\InstantlyWebhookController;
 use App\Http\Controllers\GoogleConnectController;
 use App\Http\Controllers\Interview\ClientInterviewController;
 use App\Http\Controllers\JobCapture\CaptureController;
@@ -70,3 +71,9 @@ Route::prefix('capture/api')->group(function (): void {
         Route::post('jobs', [CaptureController::class, 'store']);
     });
 });
+
+// Cold outreach: Instantly engagement webhooks (opens, replies, interest tags, bounces, unsubscribes).
+// Authenticated by the per-site X-Launchpad-Token header, not a session — CSRF-exempt in bootstrap/app.php.
+Route::post('webhooks/instantly/{site}', InstantlyWebhookController::class)
+    ->middleware('throttle:600,1')
+    ->name('webhooks.instantly');

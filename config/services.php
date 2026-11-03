@@ -275,6 +275,19 @@ return [
         'geocoder_timeout' => (int) env('CENSUS_GEOCODER_TIMEOUT', 15),
     ],
 
+    // Cold outreach pipeline. Platform-wide (agency) keys; a site can override each with its own
+    // Bird / Instantly / Brevo connection on the Cold outreach settings screen.
+    'bird' => [
+        'api_key' => env('BIRD_API_KEY'),
+        'base_url' => env('BIRD_BASE_URL'), // optional; derived from the key's region prefix when blank
+    ],
+    'instantly' => [
+        'api_key' => env('INSTANTLY_API_KEY'),
+    ],
+    'brevo' => [
+        'api_key' => env('BREVO_API_KEY'),
+    ],
+
     // Krayin CRM — won-stage leads → conversions (self-hosted, shared instance;
     // deferred until deployed). `won_stages` are the pipeline stages counted.
     'krayin' => [

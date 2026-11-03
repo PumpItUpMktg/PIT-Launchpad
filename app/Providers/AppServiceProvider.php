@@ -47,6 +47,13 @@ use App\Integrations\Claude\ClaudeClientFactory;
 use App\Integrations\Cloudflare\CloudflareClient;
 use App\Integrations\Cloudflare\HttpCloudflareClient;
 use App\Integrations\Cloudflare\MockCloudflareClient;
+use App\Integrations\ColdOutreach\BirdEmailVerifier;
+use App\Integrations\ColdOutreach\BrevoClient;
+use App\Integrations\ColdOutreach\EmailVerifier;
+use App\Integrations\ColdOutreach\InstantlyClient;
+use App\Integrations\ColdOutreach\MarketingPlatform;
+use App\Integrations\ColdOutreach\OutreachCredentials;
+use App\Integrations\ColdOutreach\WarmupPlatform;
 use App\Integrations\Conversions\ConversionProvider;
 use App\Integrations\Conversions\ConversionProviders;
 use App\Integrations\Conversions\Ga4ConversionProvider;
@@ -493,6 +500,16 @@ class AppServiceProvider extends ServiceProvider
             MauticConversionProvider::class,
         ], 'conversion.providers');
         $this->app->singleton(ConversionProviders::class, fn ($app) => new ConversionProviders(app: $app));
+
+        // Cold outreach pipeline seams: Bird (verify) → Instantly (warm) → Brevo (promote). Real adapters by
+        // default; each resolves its key per site (site Connection, else platform env) and refuses when none is set.
+        $this->app->bind(EmailVerifier::class, fn ($app) => new BirdEmailVerifier(
+            $app->make(Http::class),
+            $app->make(OutreachCredentials::class),
+            config('services.bird.base_url') !== null ? (string) config('services.bird.base_url') : null,
+        ));
+        $this->app->bind(WarmupPlatform::class, InstantlyClient::class);
+        $this->app->bind(MarketingPlatform::class, BrevoClient::class);
 
         // §5 pipeline driver — the caller that runs discovery + position tracking
         // per site (cadence read off durable artifacts). §5 internals unchanged.

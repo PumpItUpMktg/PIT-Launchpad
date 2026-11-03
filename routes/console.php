@@ -1,6 +1,7 @@
 <?php
 
 use App\Integrations\Conversions\IngestConversions;
+use App\Jobs\AdvanceColdPipelines;
 use App\Integrations\DataForSeo\IngestSerpTasks;
 use App\Jobs\CloseMonthlySnapshots;
 use App\Jobs\IngestCoverageScans;
@@ -214,3 +215,8 @@ Schedule::command('launchpad:queue-babysit')->everyMinute()->withoutOverlapping(
 // Review Capture reminders — day-3 / day-10 nudges for unsubmitted review requests (capped at 2, per-tenant
 // toggle). Daily; the command itself decides which requests are due. Everything it sends is queued.
 Schedule::command('launchpad:send-review-reminders')->dailyAt('09:20')->onOneServer();
+
+// Cold outreach pipeline (verify with Bird → warm in Instantly → promote to Brevo) for every site that has it
+// switched on. Hourly: Instantly webhooks move contacts live; this pass verifies new imports, enrolls them, polls
+// engagement as a backstop for missed webhooks, and promotes warm contacts.
+Schedule::job(new AdvanceColdPipelines)->hourly()->withoutOverlapping()->onOneServer();
