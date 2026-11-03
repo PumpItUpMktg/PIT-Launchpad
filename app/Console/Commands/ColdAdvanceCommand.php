@@ -29,7 +29,7 @@ class ColdAdvanceCommand extends Command
 
                 continue;
             }
-            $this->line("<options=bold>{$site->name}</>");
+            $this->line("<options=bold>{$site->brand_name}</>");
             foreach ($pipeline->advance($site) as $step => $outcome) {
                 if ($outcome['error'] !== null) {
                     $failed = true;
