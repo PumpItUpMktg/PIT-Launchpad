@@ -639,3 +639,46 @@ client-facing surface. View-models under `app/Client/`; widgets under
   primary_color/accent_color); `Conversion` model + table (no attribution column,
   by design); enums `ConversionType` / `ConversionSource`; the `ConversionProvider`
   (GA4/GHL) mock-first seam.
+
+## Cold Outreach pipeline (import → Bird verify → Instantly warm → Brevo)
+
+Per-site pipeline that takes contacts from a cold-email database and only hands
+**verified, engaged** contacts to Brevo. Logic under `app/ColdOutreach/`; vendor
+adapters under `app/Integrations/ColdOutreach/`; surface `ColdContactResource`
+("Cold outreach" in the Territory nav, operator-only via `ManageEngineControls`).
+
+- **Stages** (`ColdContactStage`): `imported → verified | risky | invalid →
+  warming → warm | disqualified → promoted`. Contacts only move forward;
+  `invalid` / `disqualified` / `promoted` are terminal. `email` is stored as
+  imported (Bird treats the local part as case-sensitive); `email_key`
+  (lower-cased) is the per-site dedupe key.
+- **Import** (`ContactImporter`): CSV from Apollo/ZoomInfo/Clay/any sheet, loose
+  header matching, unmapped columns → `custom` (sent as Instantly variables).
+  Re-imports never reset an existing contact. Bad-syntax rows are dropped before
+  Bird (lookups are billed). UI "Import CSV" or `launchpad:cold-import {site} {file}`.
+- **Verify** (`BirdEmailVerifier` → `DeliverabilityGate`): Bird
+  `POST /v1/lookup/email/batch`, region from the key prefix, deterministic
+  `Idempotency-Key` per chunk so retries aren't re-billed. valid ≥ floor →
+  verified; neutral → verified only if `accept_neutral`; risky (role etc.) →
+  held for operator approval; undeliverable/typo/disposable → invalid; unknown
+  future verdicts fall back to `delivery_confidence`.
+- **Warm** (`InstantlyClient`): verified → added to the site's Instantly campaign
+  (`skip_if_in_workspace`). Engagement arrives live via
+  `POST /webhooks/instantly/{site}` (auth: per-site `X-Launchpad-Token` header,
+  constant-time compare — Instantly doesn't sign payloads) and hourly via
+  `POST /leads/list` polling as a backstop. `EngagementRecorder` + `WarmthRule`:
+  bounce / unsubscribe / negative tag → disqualified (always wins over a reply);
+  reply or interested-family tag → warm; opens only if `warm_min_opens > 0`
+  (off by default — opens are noisy and are not consent).
+- **Promote** (`BrevoClient`): warm → `POST /v3/contacts` with `listIds` +
+  `updateEnabled` (201 or 204 both = promoted). Automatic unless
+  `auto_promote` is off; the operator can always "Send to Brevo".
+- **Settings** (`ColdOutreachConfig`, one row per site): enabled, Instantly
+  campaign id, Brevo list id, thresholds. **Keys** are `Connection` rows
+  (`bird` / `instantly` / `brevo` providers, `encrypted:array`, stored clean so
+  they pass §9's gate) via `OutreachCredentials`, falling back to platform env
+  keys (`BIRD_API_KEY`, `INSTANTLY_API_KEY`, `BREVO_API_KEY`).
+- **Runs**: `AdvanceColdPipelines` hourly for every site with `enabled`;
+  `AdvanceColdPipeline` (unique per site) for "Run pipeline now";
+  `launchpad:cold-advance [--site=]`. Each step is bounded per run; a fatal
+  error (no key / campaign / list) stops that step only and is reported.

@@ -58,7 +58,8 @@ class ColdPipeline
         foreach (['verify', 'enroll', 'sync', 'promote'] as $step) {
             try {
                 $report[$step] = ['done' => $this->{$step}($site, $config), 'error' => null];
-            } catch (ColdOutreachException $e) {
+            } catch (Throwable $e) {
+                // One step failing (a key missing, a provider down) never blocks the others.
                 $report[$step] = ['done' => 0, 'error' => $e->getMessage()];
                 Log::warning('cold-outreach '.$step.' stopped', ['site_id' => $site->id, 'error' => $e->getMessage()]);
             }
