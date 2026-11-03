@@ -1,8 +1,8 @@
 <?php
 
 use App\Integrations\Conversions\IngestConversions;
-use App\Jobs\AdvanceColdPipelines;
 use App\Integrations\DataForSeo\IngestSerpTasks;
+use App\Jobs\AdvanceColdPipelines;
 use App\Jobs\CloseMonthlySnapshots;
 use App\Jobs\IngestCoverageScans;
 use App\Jobs\IngestTownRankScans;

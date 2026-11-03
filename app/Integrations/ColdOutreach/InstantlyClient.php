@@ -7,6 +7,7 @@ use App\Models\ColdContact;
 use App\Models\Site;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as Http;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 
@@ -67,7 +68,7 @@ class InstantlyClient implements WarmupPlatform
         return ['leads' => $leads, 'next' => is_string($next) && $next !== '' ? $next : null];
     }
 
-    private function request(Site $site): \Illuminate\Http\Client\PendingRequest
+    private function request(Site $site): PendingRequest
     {
         return $this->http
             ->withToken($this->credentials->apiKey($site, ConnectionProvider::Instantly))

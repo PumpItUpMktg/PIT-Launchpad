@@ -6,6 +6,7 @@ use App\Enums\ConnectionProvider;
 use App\Integrations\ColdOutreach\OutreachCredentials;
 use App\Models\ColdContact;
 use App\Models\ColdOutreachConfig;
+use App\Models\Connection;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use Illuminate\Http\Client\Request;
@@ -184,7 +185,7 @@ it('falls back to the platform key when a site has none, and refuses when neithe
 it('stores site keys as clean connections that never block the launch gate', function () {
     $site = pipelineSite();
 
-    $conn = \App\Models\Connection::withoutGlobalScope(SiteScope::class)
+    $conn = Connection::withoutGlobalScope(SiteScope::class)
         ->where('site_id', $site->id)->where('provider', 'brevo')->sole();
 
     expect($conn->compromised)->toBeFalse()->and($conn->needsRotation())->toBeFalse()
