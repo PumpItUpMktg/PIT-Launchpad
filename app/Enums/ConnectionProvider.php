@@ -17,4 +17,8 @@ enum ConnectionProvider: string
     case Fal = 'fal';
     case Anthropic = 'anthropic';
     case WpAppPassword = 'wp_app_password';
+    // Cold outreach pipeline: Bird (deliverability lookup), Instantly (warm-up sequences), Brevo (marketing list).
+    case Bird = 'bird';
+    case Instantly = 'instantly';
+    case Brevo = 'brevo';
 }
