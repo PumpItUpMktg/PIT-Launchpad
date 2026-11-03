@@ -25,6 +25,7 @@ use App\Filament\Pages\RankingsBoard;
 use App\Filament\Pages\ServiceAreasPage;
 use App\Filament\Pages\TownRankPage;
 use App\Filament\Pages\UsersBoard;
+use App\Filament\Resources\ColdContactResource;
 use App\Filament\Resources\ConnectionsResource;
 use App\Filament\Resources\KeywordResource;
 use App\Filament\Resources\LeadFormResource;
@@ -36,7 +37,7 @@ use App\Filament\Resources\VoiceProfileResource;
 /**
  * The operator console navigation — the single source of the header IA (Relay 3 · PR 5). A
  * **four-column header**: four groups (Build · Territory · Results · System), no dropdowns, exactly
- * 30 items. Every item is either a live link to its surface or a "soon" placeholder for a surface
+ * 31 items. Every item is either a live link to its surface or a "soon" placeholder for a surface
  * that has not shipped yet — the IA is complete and legible from day one; each placeholder goes live
  * as its own PR lands (see `docs/specs/5-nav-cutover.md`, the authoritative mapping).
  *
@@ -78,6 +79,8 @@ class ConsoleNav
                 // Link prospects: competitor-link intersect + local opportunities (sponsorships, memberships,
                 // dealer locators, job boards) and the reviewed, capped outreach — off-site presence, beside Citations.
                 ['label' => 'Links', 'surface' => LinkProspectsPage::class, 'soon' => false],
+                // Cold outreach: cold-email contacts verified (Bird) → warmed (Instantly) → promoted to Brevo.
+                ['label' => 'Cold outreach', 'surface' => ColdContactResource::class, 'soon' => false],
                 ['label' => 'Silos', 'surface' => SiloManagementResource::class, 'soon' => false],
                 ['label' => 'Keywords', 'surface' => KeywordResource::class, 'soon' => false],
                 ['label' => 'Internal links', 'surface' => InternalLinks::class, 'soon' => false],
