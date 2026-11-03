@@ -1,0 +1,137 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\ContentEngine\Questions\QuestionMiner;
+use App\ContentEngine\Questions\QuestionMiningReport;
+use App\Models\Site;
+use App\Support\SiteFinder;
+use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
+
+/**
+ * Question mining — what a site's searchers are asking, from its own Search Console store. Report-first:
+ * the default run prints the counts and the top topics with where the site already ranks for each and
+ * changes nothing.
+ */
+class MineQuestionsCommand extends Command
+{
+    protected $signature = 'launchpad:mine-questions
+        {site? : Site id, brand name, or domain (partial ok)}
+        {--all : Every site with a Search Console property picked}
+        {--window= : Trailing window in days (default config launchpad.questions.window_days)}
+        {--top= : Topics to show (default config launchpad.questions.top)}
+        {--dropped : Also list every query the bot guard dropped, with the rule}';
+
+    protected $description = 'Mine question-shaped searches from the Search Console store (no vendor call): question shape → bot guard → clustered topics, most impressions first.';
+
+    public function handle(QuestionMiner $miner): int
+    {
+        $sites = $this->sites();
+        if ($sites === null) {
+            return self::FAILURE;
+        }
+        if ($sites->isEmpty()) {
+            $this->warn('No site to mine — pass a site, or --all for every site with a Search Console property picked.');
+
+            return self::SUCCESS;
+        }
+
+        $window = $this->option('window') !== null ? max(1, (int) $this->option('window')) : null;
+        $top = $this->option('top') !== null ? max(1, (int) $this->option('top')) : (int) config('launchpad.questions.top', 15);
+
+        foreach ($sites as $site) {
+            $report = $miner->mine($site, $window);
+            $this->printReport($site, $report, $top);
+        }
+
+        return self::SUCCESS;
+    }
+
+    private function printReport(Site $site, QuestionMiningReport $report, int $top): void
+    {
+        $this->newLine();
+        $this->line(sprintf('<info>%s</info> — Search Console questions, %s → %s (%d days)', $site->brand_name, $report->from, $report->to, $report->windowDays));
+        $byRule = $report->botDroppedByRule();
+        $this->line(sprintf(
+            '  queries read %d · question-shaped %d · dropped as machine traffic %d%s · topics %d',
+            $report->queriesRead,
+            $report->questionShaped,
+            count($report->botDropped),
+            $byRule !== [] ? ' ('.implode(', ', array_map(fn (string $r, int $n): string => "{$r} {$n}", array_keys($byRule), $byRule)).')' : '',
+            count($report->clusters),
+        ));
+
+        if ($report->clusters === []) {
+            $this->comment('  No question-shaped searches in the window — is the Search Console sync filling this site\'s store?');
+
+            return;
+        }
+
+        $rows = [];
+        foreach ($report->top($top) as $i => $cluster) {
+            $rows[] = [
+                $i + 1,
+                $this->truncate($cluster->query(), 58),
+                count($cluster->variants) > 1 ? '+'.(count($cluster->variants) - 1) : '',
+                $cluster->impressions(),
+                $cluster->clicks(),
+                $cluster->position() !== null ? number_format($cluster->position(), 1) : '—',
+                $this->path($cluster->topUrl()),
+            ];
+        }
+        $this->table(['#', 'Question', 'Also', 'Impr.', 'Clicks', 'Pos.', 'Ranking URL'], $rows);
+        if (count($report->clusters) > $top) {
+            $this->line(sprintf('  … %d more topic(s) below the top %d.', count($report->clusters) - $top, $top));
+        }
+
+        if ((bool) $this->option('dropped') && $report->botDropped !== []) {
+            $this->newLine();
+            $this->line('  Dropped as machine traffic:');
+            $this->table(['Query', 'Rule', 'Impr.', 'Clicks', 'Pos.'], array_map(fn (array $d): array => [
+                $this->truncate($d['query'], 58), $d['reason'], $d['impressions'], $d['clicks'],
+                $d['position'] !== null ? number_format($d['position'], 1) : '—',
+            ], $report->botDropped));
+        }
+    }
+
+    private function path(?string $url): string
+    {
+        if ($url === null) {
+            return '—';
+        }
+        $path = parse_url($url, PHP_URL_PATH);
+
+        return $this->truncate(is_string($path) && $path !== '' ? $path : $url, 44);
+    }
+
+    private function truncate(string $s, int $max): string
+    {
+        return mb_strlen($s) > $max ? mb_substr($s, 0, $max - 1).'…' : $s;
+    }
+
+    /** @return Collection<int, Site>|null null on an unresolvable site argument */
+    private function sites(): ?Collection
+    {
+        if ((bool) $this->option('all')) {
+            return Site::withoutGlobalScopes()->whereNotNull('gsc_property')->where('gsc_property', '!=', '')->orderBy('brand_name')->get();
+        }
+        $needle = trim((string) $this->argument('site'));
+        if ($needle === '') {
+            return collect();
+        }
+        $matches = SiteFinder::matches($needle);
+        if ($matches->isEmpty()) {
+            $this->error("No site matches [{$needle}].");
+
+            return null;
+        }
+        if ($matches->count() > 1) {
+            $this->error("[{$needle}] is ambiguous — it matches {$matches->count()} sites. Re-run with the id.");
+
+            return null;
+        }
+
+        return $matches->values();
+    }
+}

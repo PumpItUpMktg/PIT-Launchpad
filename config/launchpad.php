@@ -897,6 +897,31 @@ return [
     | (max 25000); larger pulls paginate with startRow. `backfill_months` is the
     | one-time recovery depth.
     */
+    // Question mining — the blog lane's demand feed. Reads the Search Console query store (gsc_url_query_daily,
+    // first-party, already synced daily) for question-shaped queries real searchers typed, drops machine
+    // traffic with three generic rules, clusters near-identical phrasings, and files the top N as "Questions"
+    // candidates (or marks the post already ranking for a refresh). Report-first; the operator generates.
+    'questions' => [
+        'window_days' => (int) env('LAUNCHPAD_QUESTIONS_WINDOW_DAYS', 90),
+        'top' => (int) env('LAUNCHPAD_QUESTIONS_TOP', 15),
+        'min_words' => (int) env('LAUNCHPAD_QUESTIONS_MIN_WORDS', 3),
+        'cluster_jaccard' => (float) env('LAUNCHPAD_QUESTIONS_CLUSTER_JACCARD', 0.75),
+        // Bot guard — any one rule drops the query. Thresholds are generic (no query word lists): machine
+        // traffic shows as impressions nobody clicks, appearing overnight, at a position that real searchers
+        // would click.
+        'bot' => [
+            'zero_click_impressions' => (int) env('LAUNCHPAD_QUESTIONS_BOT_ZERO_CLICK_IMPRESSIONS', 50),
+            'onset_days' => (int) env('LAUNCHPAD_QUESTIONS_BOT_ONSET_DAYS', 14),
+            'onset_daily_impressions' => (int) env('LAUNCHPAD_QUESTIONS_BOT_ONSET_DAILY', 100),
+            'ctr_position' => (float) env('LAUNCHPAD_QUESTIONS_BOT_CTR_POSITION', 10),
+            'ctr_impressions' => (int) env('LAUNCHPAD_QUESTIONS_BOT_CTR_IMPRESSIONS', 200),
+            'ctr_floor' => (float) env('LAUNCHPAD_QUESTIONS_BOT_CTR_FLOOR', 0.001),
+        ],
+        // Coverage verdict bounds (position of the URL already ranking for the question).
+        'covered_max_position' => (float) env('LAUNCHPAD_QUESTIONS_COVERED_MAX_POSITION', 5),
+        'refresh_max_position' => (float) env('LAUNCHPAD_QUESTIONS_REFRESH_MAX_POSITION', 30),
+    ],
+
     'gsc' => [
         'trailing_repull_days' => (int) env('LAUNCHPAD_GSC_REPULL_DAYS', 4),
         'query_grain_retention_days' => (int) env('LAUNCHPAD_GSC_QUERY_RETENTION_DAYS', 180),
