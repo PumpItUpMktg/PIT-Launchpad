@@ -2,17 +2,23 @@
 
 namespace App\Console\Commands;
 
+use App\ContentEngine\Questions\QuestionCluster;
+use App\ContentEngine\Questions\QuestionIntake;
 use App\ContentEngine\Questions\QuestionMiner;
 use App\ContentEngine\Questions\QuestionMiningReport;
+use App\ContentEngine\Questions\QuestionVerdict;
+use App\Models\Content;
+use App\Models\Silo;
 use App\Models\Site;
 use App\Support\SiteFinder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 
 /**
- * Question mining — what a site's searchers are asking, from its own Search Console store. Report-first:
- * the default run prints the counts and the top topics with where the site already ranks for each and
- * changes nothing.
+ * Question mining — what a site's searchers are asking, from its own Search Console store, and what the
+ * blog should do about each. Report-first: the default run prints the counts, the top topics, where the
+ * site already ranks for each and the planned action, and changes nothing; --execute files the new
+ * "questions" candidates and marks the posts to refresh. Monthly on the schedule with --all --execute.
  */
 class MineQuestionsCommand extends Command
 {
@@ -20,12 +26,13 @@ class MineQuestionsCommand extends Command
         {site? : Site id, brand name, or domain (partial ok)}
         {--all : Every site with a Search Console property picked}
         {--window= : Trailing window in days (default config launchpad.questions.window_days)}
-        {--top= : Topics to show (default config launchpad.questions.top)}
+        {--top= : Topics to act on per run (default config launchpad.questions.top)}
+        {--execute : File the new candidates and mark the posts to refresh (default: report only)}
         {--dropped : Also list every query the bot guard dropped, with the rule}';
 
-    protected $description = 'Mine question-shaped searches from the Search Console store (no vendor call): question shape → bot guard → clustered topics, most impressions first.';
+    protected $description = 'Mine question-shaped searches from the Search Console store (no vendor call): question shape → bot guard → clustered topics → coverage verdict; --execute files candidates / marks refreshes.';
 
-    public function handle(QuestionMiner $miner): int
+    public function handle(QuestionMiner $miner, QuestionIntake $intake): int
     {
         $sites = $this->sites();
         if ($sites === null) {
@@ -40,15 +47,27 @@ class MineQuestionsCommand extends Command
         $window = $this->option('window') !== null ? max(1, (int) $this->option('window')) : null;
         $top = $this->option('top') !== null ? max(1, (int) $this->option('top')) : (int) config('launchpad.questions.top', 15);
 
+        $execute = (bool) $this->option('execute');
+
         foreach ($sites as $site) {
             $report = $miner->mine($site, $window);
-            $this->printReport($site, $report, $top);
+            $plan = $intake->plan($site, $report, $top);
+            $this->printReport($site, $report, $plan, $top);
+            if (! $execute) {
+                continue;
+            }
+            $done = $intake->apply($site, $report, $plan);
+            $this->line(sprintf('  <info>Applied</info>: filed %d candidate(s) · marked %d post(s) for refresh · re-stamped %d standing candidate(s).', $done['filed'], $done['marked'], $done['refreshed']));
+        }
+        if (! $execute) {
+            $this->comment('Report only — nothing written. Re-run with --execute to file the candidates and mark the refreshes.');
         }
 
         return self::SUCCESS;
     }
 
-    private function printReport(Site $site, QuestionMiningReport $report, int $top): void
+    /** @param  list<array{cluster: QuestionCluster, verdict: QuestionVerdict, silo: Silo|null, action: string, existing: Content|null}>  $plan */
+    private function printReport(Site $site, QuestionMiningReport $report, array $plan, int $top): void
     {
         $this->newLine();
         $this->line(sprintf('<info>%s</info> — Search Console questions, %s → %s (%d days)', $site->brand_name, $report->from, $report->to, $report->windowDays));
@@ -69,20 +88,28 @@ class MineQuestionsCommand extends Command
         }
 
         $rows = [];
-        foreach ($report->top($top) as $i => $cluster) {
+        $actions = [];
+        foreach ($plan as $i => $row) {
+            $cluster = $row['cluster'];
+            $verdict = $row['verdict'];
+            $actions[$row['action']] = ($actions[$row['action']] ?? 0) + 1;
             $rows[] = [
                 $i + 1,
-                $this->truncate($cluster->query(), 58),
+                $this->truncate($cluster->query(), 48),
                 count($cluster->variants) > 1 ? '+'.(count($cluster->variants) - 1) : '',
                 $cluster->impressions(),
                 $cluster->clicks(),
-                $cluster->position() !== null ? number_format($cluster->position(), 1) : '—',
-                $this->path($cluster->topUrl()),
+                $verdict->position !== null ? number_format($verdict->position, 1) : '—',
+                $this->path($verdict->rankingUrl),
+                $this->actionLabel($row),
             ];
         }
-        $this->table(['#', 'Question', 'Also', 'Impr.', 'Clicks', 'Pos.', 'Ranking URL'], $rows);
-        if (count($report->clusters) > $top) {
-            $this->line(sprintf('  … %d more topic(s) below the top %d.', count($report->clusters) - $top, $top));
+        $this->table(['#', 'Question', 'Also', 'Impr.', 'Clicks', 'Pos.', 'Ranking URL', 'Action'], $rows);
+        ksort($actions);
+        $this->line('  '.implode(' · ', array_map(fn (string $a, int $n): string => "{$a} {$n}", array_keys($actions), $actions)));
+        $beyond = count($report->clusters) - count($plan);
+        if ($beyond > 0) {
+            $this->line(sprintf('  … %d more topic(s) beyond this run\'s cap of %d — they wait for next month.', $beyond, $top));
         }
 
         if ((bool) $this->option('dropped') && $report->botDropped !== []) {
@@ -93,6 +120,21 @@ class MineQuestionsCommand extends Command
                 $d['position'] !== null ? number_format($d['position'], 1) : '—',
             ], $report->botDropped));
         }
+    }
+
+    /** @param  array{cluster: QuestionCluster, verdict: QuestionVerdict, silo: Silo|null, action: string, existing: Content|null}  $row */
+    private function actionLabel(array $row): string
+    {
+        $who = $row['existing'] !== null ? ' → '.$this->truncate((string) $row['existing']->title, 34) : '';
+
+        return match ($row['action']) {
+            QuestionIntake::ACTION_FILE => 'file ['.$this->truncate((string) $row['silo']?->name, 22).']',
+            QuestionIntake::ACTION_MARK => 'refresh'.$who,
+            QuestionIntake::ACTION_ALREADY => 'on board'.$who,
+            QuestionIntake::ACTION_DISMISSED => 'dismissed before',
+            QuestionIntake::ACTION_UNROUTED => 'unrouted (no silo claims it)',
+            default => 'covered'.$who,
+        };
     }
 
     private function path(?string $url): string

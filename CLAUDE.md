@@ -536,6 +536,35 @@ mechanism** with the post flow and keep policy explicit per kind:
 - Pages flow through the **same review queue + publish path** as posts
   (`hasDraft()` gates, `PublishContentService`/`MetaBlobAssembler` are slot-keyed).
 
+### Questions lane (Search Console → blog candidates)
+
+The blog lane's demand feed, under `app/ContentEngine/Questions/`. It reads the
+first-party Search Console query store the daily `launchpad:sync-gsc` already fills
+(`gsc_url_query_daily`; the platform-shared Google grant + `Site.gsc_property`) — no
+vendor call, no credit.
+
+- **`QuestionMiner`** aggregates per query over a trailing window (default 90 days)
+  with GSC's own impressions/clicks/impression-weighted position (never re-weighted),
+  keeps the question-shaped (`QuestionShape`: a question word or cost/vs intent, ≥3
+  words, never the tenant's brand — read from the site), drops machine traffic
+  (`BotQueryGuard`, any one rule: `zero_click` / `sudden_onset` / `implausible_ctr`,
+  generic thresholds in `config/launchpad.php` `questions.bot`), attaches the ranking
+  URLs and clusters near-identical phrasings (`QuestionCluster`, token-set Jaccard).
+- **`QuestionCoverage`** gives each topic a verdict from where the site already ranks:
+  our post in the top slots → *covered*; our post lower → *refresh that post*; the home
+  page / hub / service page / a legacy URL / nothing → *author*, unless a live post reads
+  as the same topic by title (§6a near-dup detector) → refresh it.
+- **`QuestionIntake`** plans (read-only) then applies: *file* a `source_name='questions'`
+  post candidate (`DraftTrigger::Question`, evergreen, pinned to the silo the §5
+  `Bucketer` routes it to; **unrouted questions are listed, never guessed**), *mark* the
+  ranking post (`meta.question_refresh`), *already* re-stamps a standing candidate,
+  *dismissed* (a rejected candidate) is never re-filed. Cap per run (default 15) counts
+  file/mark/already only. **Nothing drafts on its own** — the operator still generates.
+- **`launchpad:mine-questions {site|--all} [--execute] [--window=] [--top=] [--dropped]`**
+  is report-first; the schedule runs `--all --execute` monthly (4th, 04:30). The
+  Candidates board shows question candidates cap-exempt with an "Asked N× · pos" tag and
+  a "Refresh suggested" panel of marked posts.
+
 ## Operator-Admin Cockpit (§7b — surfaces)
 
 `§7b` is the operator's multi-tenant cockpit that wraps the §6c review queue:

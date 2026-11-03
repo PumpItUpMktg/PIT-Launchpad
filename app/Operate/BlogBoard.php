@@ -2,6 +2,7 @@
 
 namespace App\Operate;
 
+use App\ContentEngine\Questions\QuestionIntake;
 use App\Enums\BlogTargetStatus;
 use App\Enums\CandidateClassification;
 use App\Enums\ContentKind;
@@ -64,6 +65,8 @@ class BlogBoard
                 // Legacy-revival candidates (a recovered top-performer) sort ahead of feed candidates,
                 // most lost impressions first — the biggest reclaim jumps to the top of the backlog.
                 fn (Content $a, Content $b) => (int) $this->revivedImpressions($b) <=> (int) $this->revivedImpressions($a),
+                // Questions-lane candidates (a question searchers typed) rank by their demand, ahead of feed scores.
+                fn (Content $a, Content $b) => (int) $this->questionImpressions($b) <=> (int) $this->questionImpressions($a),
                 fn (Content $a, Content $b) => (float) ($b->relevance_score ?? 0) <=> (float) ($a->relevance_score ?? 0),
             ])
             ->values()
@@ -79,6 +82,9 @@ class BlogBoard
                 'scope' => $c->meta['scope'] ?? null,
                 // A hand-typed operator idea (PR 7) — shown cap-exempt in the group (never hidden by the cap).
                 'manual' => $c->source_name === 'manual',
+                // A Search Console question (the questions lane): the demand behind it, for the card's tag.
+                // Cap-exempt like a manual idea — the lane files at most a handful a month.
+                'question' => $this->questionFacts($c),
                 // The article's real publish date (source pubDate) when captured at ingest, else the ingest date.
                 'date' => $c->meta['source_published_at'] ?? $c->created_at?->toDateString(),
                 'classification' => $this->classificationOf($c)?->label(),
@@ -112,10 +118,12 @@ class BlogBoard
                 // Stable sort (PHP 8 sort is stable): local before general/unknown, score order kept within each.
                 $ordered = $group->sortBy(fn (array $r): int => ($r['scope'] ?? null) === 'local' ? 0 : 1)->values();
 
-                // Manual (hand-typed) candidates are CAP-EXEMPT — an operator's explicit ask is never hidden
-                // behind a silo's ingestion backlog. Show all of them, then fill the rest up to the cap.
-                $manual = $ordered->filter(fn (array $r): bool => (bool) ($r['manual'] ?? false))->values();
-                $rest = $ordered->reject(fn (array $r): bool => (bool) ($r['manual'] ?? false))->values();
+                // Manual (hand-typed) and questions-lane candidates are CAP-EXEMPT — an operator's explicit
+                // ask, or a question real searchers typed, is never hidden behind a silo's ingestion backlog.
+                // Show all of them, then fill the rest up to the cap.
+                $pinned = fn (array $r): bool => (bool) ($r['manual'] ?? false) || ($r['question'] ?? null) !== null;
+                $manual = $ordered->filter($pinned)->values();
+                $rest = $ordered->reject($pinned)->values();
                 $visibleRest = $cap > 0 ? $rest->take($cap) : $rest;
 
                 return [
@@ -521,6 +529,68 @@ class BlogBoard
                 ->where('site_id', $site->id)->whereNotNull('content_id')
                 ->pluck('content_id')->filter()->flip(),
         ];
+    }
+
+    /**
+     * The demand facts a questions-lane candidate carries (meta.question), null for any other candidate.
+     *
+     * @return array{query: string, phrasings: list<string>, impressions: int, clicks: int, position: float|null}|null
+     */
+    private function questionFacts(Content $c): ?array
+    {
+        $q = $c->meta['question'] ?? null;
+        if ($c->source_name !== QuestionIntake::SOURCE || ! is_array($q)) {
+            return null;
+        }
+
+        return [
+            'query' => (string) ($q['query'] ?? $c->title),
+            'phrasings' => is_array($q['phrasings'] ?? null) ? array_values(array_map('strval', $q['phrasings'])) : [],
+            'impressions' => (int) ($q['impressions'] ?? 0),
+            'clicks' => (int) ($q['clicks'] ?? 0),
+            'position' => isset($q['position']) ? (float) $q['position'] : null,
+        ];
+    }
+
+    private function questionImpressions(Content $c): int
+    {
+        return $this->questionFacts($c)['impressions'] ?? 0;
+    }
+
+    /**
+     * Published posts the questions lane marked for a refresh (meta.question_refresh): the post already
+     * answers a question searchers ask but ranks below the covered bound. Most demand first.
+     *
+     * @return list<array{id: string, title: string, url: string|null, query: string, phrasings: list<string>, impressions: int, clicks: int, position: float|null, reason: string, marked_at: string|null, silo: string|null, tenant: string|null}>
+     */
+    public function questionRefreshMarks(?string $siteId = null, ?string $siloId = null): array
+    {
+        return $this->posts($siteId, $siloId)
+            ->where('status', ContentStatus::Published->value)
+            ->with(['site', 'matchedSilo'])
+            ->get()
+            ->filter(fn (Content $c): bool => is_array($c->meta['question_refresh'] ?? null))
+            ->map(function (Content $c): array {
+                $m = (array) $c->meta['question_refresh'];
+
+                return [
+                    'id' => (string) $c->id,
+                    'title' => (string) $c->title,
+                    'url' => $this->url($c->site, $c->slug),
+                    'query' => (string) ($m['query'] ?? ''),
+                    'phrasings' => is_array($m['phrasings'] ?? null) ? array_values(array_map('strval', $m['phrasings'])) : [],
+                    'impressions' => (int) ($m['impressions'] ?? 0),
+                    'clicks' => (int) ($m['clicks'] ?? 0),
+                    'position' => isset($m['position']) ? (float) $m['position'] : null,
+                    'reason' => (string) ($m['reason'] ?? ''),
+                    'marked_at' => isset($m['mined_at']) ? substr((string) $m['mined_at'], 0, 10) : null,
+                    'silo' => $c->matchedSilo?->name,
+                    'tenant' => $c->site?->brand_name,
+                ];
+            })
+            ->sortByDesc('impressions')
+            ->values()
+            ->all();
     }
 
     private function url(?Site $site, ?string $slug): ?string

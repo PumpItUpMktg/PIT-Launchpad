@@ -8,7 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
-function gscRow(Site $site, string $date, string $query, int $impressions, int $clicks, ?float $position, string $url = 'https://x.test/p/'): void
+function questionGscRow(Site $site, string $date, string $query, int $impressions, int $clicks, ?float $position, string $url = 'https://x.test/p/'): void
 {
     DB::table('gsc_url_query_daily')->insert([
         'id' => (string) Str::ulid(),
@@ -33,22 +33,22 @@ it('aggregates the window per query with GSC-weighted position, keeps questions,
     $asOf = CarbonImmutable::parse('2026-11-01');
 
     // A real question over two days on two URLs.
-    gscRow($site, '2026-10-01', 'how long do sump pumps last', 60, 2, 10.0, 'https://acmepumps.test/blog/life/');
-    gscRow($site, '2026-10-20', 'how long do sump pumps last', 40, 1, 20.0, 'https://acmepumps.test/blog/life/');
-    gscRow($site, '2026-10-20', 'how long do sump pumps last', 10, 0, 30.0, 'https://acmepumps.test/');
+    questionGscRow($site, '2026-10-01', 'how long do sump pumps last', 60, 2, 10.0, 'https://acmepumps.test/blog/life/');
+    questionGscRow($site, '2026-10-20', 'how long do sump pumps last', 40, 1, 20.0, 'https://acmepumps.test/blog/life/');
+    questionGscRow($site, '2026-10-20', 'how long do sump pumps last', 10, 0, 30.0, 'https://acmepumps.test/');
     // Its sibling phrasing clusters in.
-    gscRow($site, '2026-10-05', 'how long does a sump pump last', 20, 1, 15.0, 'https://acmepumps.test/blog/life/');
+    questionGscRow($site, '2026-10-05', 'how long does a sump pump last', 20, 1, 15.0, 'https://acmepumps.test/blog/life/');
     // A keyword, not a question.
-    gscRow($site, '2026-10-05', 'sump pump repair', 500, 30, 3.0);
+    questionGscRow($site, '2026-10-05', 'sump pump repair', 500, 30, 3.0);
     // A brand query.
-    gscRow($site, '2026-10-05', 'is acme pumps any good', 30, 10, 1.0);
+    questionGscRow($site, '2026-10-05', 'is acme pumps any good', 30, 10, 1.0);
     // Machine traffic: appeared this week at volume, never clicked.
-    gscRow($site, '2026-10-29', 'how to organize sump pump', 1300, 0, 7.0);
+    questionGscRow($site, '2026-10-29', 'how to organize sump pump', 1300, 0, 7.0);
     // Outside the window.
-    gscRow($site, '2026-06-01', 'why is my sump pump so loud', 80, 3, 5.0);
+    questionGscRow($site, '2026-06-01', 'why is my sump pump so loud', 80, 3, 5.0);
     // Another tenant.
     $other = Site::factory()->create();
-    gscRow($other, '2026-10-05', 'why does my sump pump smell', 90, 4, 4.0);
+    questionGscRow($other, '2026-10-05', 'why does my sump pump smell', 90, 4, 4.0);
 
     $report = (new QuestionMiner(new BotQueryGuard))->mine($site, 90, $asOf);
 
@@ -70,7 +70,7 @@ it('aggregates the window per query with GSC-weighted position, keeps questions,
         ->and($c->lead->firstSeen)->toBe('2026-10-01')
         ->and($c->lead->peakDaily)->toBe(60)
         ->and($c->topUrl())->toBe('https://acmepumps.test/blog/life/')
-        ->and($c->topUrlPosition())->toBe(13.3);           // (10×60 + 20×40 + 15×20) / 120
+        ->and($c->topUrlPosition())->toBe(14.2);           // (10×60 + 20×40 + 15×20) / 120 = 14.17
 });
 
 it('reports an empty store honestly', function () {

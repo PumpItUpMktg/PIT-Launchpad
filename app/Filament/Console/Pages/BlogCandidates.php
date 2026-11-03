@@ -68,6 +68,18 @@ class BlogCandidates extends ConsolePage
         return app(BlogBoard::class)->group($this->getCandidatesProperty(), $cap);
     }
 
+    /**
+     * Published posts the questions lane marked for a refresh — shown above the groups so the operator
+     * sees "this post already answers a question people ask, and ranks below the fold" without a second
+     * candidate on the board.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function getQuestionRefreshMarksProperty(): array
+    {
+        return app(BlogBoard::class)->questionRefreshMarks($this->siteId, $this->siloId);
+    }
+
     /** Add a hand-typed idea as a candidate on the board (source=manual, topical, cap-exempt). */
     public function addManual(): void
     {
