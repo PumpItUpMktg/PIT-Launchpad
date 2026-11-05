@@ -57,7 +57,20 @@ class QuestionMiner
         }
 
         $kept = $this->attachUrls($site, $from, $to, $kept);
-        $clusters = QuestionCluster::cluster($kept, $jaccard);
+
+        // The guard again at TOPIC level: three phrasings of one bot query each sit under a threshold the
+        // topic as a whole is far past (66 unclicked impressions at #1 across "+2" phrasings). Judged on
+        // the summed numbers, the earliest first-seen and the highest single-day peak.
+        $clusters = [];
+        foreach (QuestionCluster::cluster($kept, $jaccard) as $cluster) {
+            $reason = $guard->reason($cluster->asStat(), $asOf);
+            if ($reason !== null) {
+                $botDropped[] = ['query' => $cluster->query(), 'reason' => $reason, 'impressions' => $cluster->impressions(), 'clicks' => $cluster->clicks(), 'position' => $cluster->position()];
+
+                continue;
+            }
+            $clusters[] = $cluster;
+        }
 
         return new QuestionMiningReport((string) $site->id, $windowDays, $from, $to, $queriesRead, $questionShaped, $botDropped, $clusters);
     }

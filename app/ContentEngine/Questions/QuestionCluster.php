@@ -46,6 +46,18 @@ final class QuestionCluster
         return $den > 0 ? round($num / $den, 1) : null;
     }
 
+    /** The topic as one stat — summed demand, the earliest first-seen, the highest single-day peak — for the guard. */
+    public function asStat(): QuestionStat
+    {
+        $first = min(array_map(fn (QuestionStat $v): string => $v->firstSeen, $this->variants));
+        $last = max(array_map(fn (QuestionStat $v): string => $v->lastSeen, $this->variants));
+        $peak = max(array_map(fn (QuestionStat $v): int => $v->peakDaily, $this->variants));
+        $days = max(array_map(fn (QuestionStat $v): int => $v->daysSeen, $this->variants));
+        $best = array_filter(array_map(fn (QuestionStat $v): ?float => $v->bestPosition, $this->variants), fn (?float $p): bool => $p !== null);
+
+        return new QuestionStat($this->query(), $this->impressions(), $this->clicks(), $this->position(), $best !== [] ? min($best) : null, $days, $first, $last, $peak);
+    }
+
     /** @return list<string> the other phrasings, most impressions first */
     public function otherPhrasings(): array
     {
