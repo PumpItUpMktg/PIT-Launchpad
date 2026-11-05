@@ -114,6 +114,7 @@ class AlertFlags
         DraftTrigger::OnDemand->value,
         DraftTrigger::Seasonal->value,
         DraftTrigger::Backfill->value,
+        DraftTrigger::Question->value,
     ];
 
     private static function hasRenderFailure(Content $content): bool

@@ -18,6 +18,17 @@
         .bc-group-meta .local { color:#2E7D6B; font-weight:700; }
         .bc-more { font-size:12.5px; color:#64748b; padding:8px 2px 2px; font-style:italic; }
         @media (prefers-color-scheme: dark) { .bc-group-silo { color:#f1f5f9; } }
+        .bc-asked { display:flex; flex-direction:column; gap:6px; padding:12px 14px; border:1px solid var(--line,#e5e7eb); border-radius:12px; margin:6px 0 10px; background:rgba(46,125,107,.05); }
+        .bc-asked-head { display:flex; align-items:baseline; gap:10px; }
+        .bc-asked-head .t { font-size:13px; font-weight:800; color:#0f172a; }
+        .bc-asked-head .m { font-size:11.5px; color:#64748b; }
+        .bc-asked-row { display:flex; flex-wrap:wrap; gap:6px 12px; align-items:baseline; font-size:12.5px; padding:4px 0; border-top:1px dashed var(--line,#e5e7eb); }
+        .bc-asked-row:first-of-type { border-top:0; }
+        .bc-asked-row .q { font-weight:700; color:#0f172a; }
+        .bc-asked-row .n { color:#64748b; }
+        .bc-asked-row .p { color:#2E7D6B; font-weight:700; }
+        .bc-asked-row a { color:#0f172a; text-decoration:underline; text-underline-offset:2px; }
+        @media (prefers-color-scheme: dark) { .bc-asked-head .t, .bc-asked-row .q, .bc-asked-row a { color:#f1f5f9; } }
     </style>
 
     @if ($this->can(\App\Security\Capability::EditContent))
@@ -44,6 +55,25 @@
                 <span wire:loading wire:target="addManual">Adding…</span>
             </button>
             <div class="hint">A hand-typed idea joins the board immediately (always shown, never capped) and expires in 30 days if nobody writes it.</div>
+        </div>
+    @endif
+
+    @php $marks = $this->questionRefreshMarks; @endphp
+    @if ($marks !== [])
+        <div class="bc-asked">
+            <div class="bc-asked-head">
+                <span class="t">Refresh suggested — questions people ask that a post of ours already answers</span>
+                <span class="m">{{ count($marks) }} {{ \Illuminate\Support\Str::plural('post', count($marks)) }} · from the Search Console questions lane · ranks below the top slots, so refresh the post rather than write a second one</span>
+            </div>
+            @foreach ($marks as $m)
+                <div class="bc-asked-row" wire:key="mark-{{ $m['id'] }}">
+                    <span class="q">“{{ $m['query'] }}”</span>
+                    <span class="n">asked {{ number_format($m['impressions']) }}× @if ($m['position'] !== null)· <span class="p">pos {{ number_format($m['position'], 1) }}</span>@endif</span>
+                    <span class="n">→ @if ($m['url'])<a href="{{ $m['url'] }}" target="_blank" rel="noopener">{{ $m['title'] }} ↗</a>@else{{ $m['title'] }}@endif</span>
+                    @if (! empty($m['silo'])) <span class="bc-chip silo">{{ $m['silo'] }}</span> @endif
+                    @if ($m['marked_at']) <span class="n">marked {{ $m['marked_at'] }}</span> @endif
+                </div>
+            @endforeach
         </div>
     @endif
 

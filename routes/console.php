@@ -183,6 +183,12 @@ Schedule::command('launchpad:refresh-gbp-profiles --all')->monthlyOn(3, '05:30')
 // Citation scan — monthly directory-listing sweep for every NAP-profiled location. Queues one scan per
 // location; the run records what changed (new/fixed/regressed/lost), verifies in-flight submissions, and
 // refreshes the Local Presence Score. withoutOverlapping so a slow month can't stack.
+// Search Console questions — monthly, every site with a property picked: mine the questions searchers
+// typed from the site's own query store (no vendor call), file the top N as "questions" candidates or
+// mark the post already answering one for a refresh. Report-only without --execute; the operator still
+// generates. Early in the month, after the GSC rollup has settled.
+Schedule::command('launchpad:mine-questions --all --execute')->monthlyOn(4, '04:30')->withoutOverlapping()->onOneServer();
+
 Schedule::command('launchpad:citation-scan --all')->monthlyOn(1, '06:00')->withoutOverlapping()->onOneServer();
 
 // Coverage scan scheduler — dispatch the queued town-scans for every per-GBP coverage plan whose cadence has
