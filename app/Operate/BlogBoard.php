@@ -599,7 +599,7 @@ class BlogBoard
      * the marker is read directly), `failed` (the recorded cause, re-triggerable), `refreshed` (done this
      * cycle and back live after review — no button until the next mining run re-marks it).
      *
-     * @return list<array{id: string, title: string, url: string|null, query: string, phrasings: list<string>, impressions: int, clicks: int, position: float|null, reason: string, marked_at: string|null, silo: string|null, tenant: string|null, state: string, error: string|null, refreshed_at: string|null}>
+     * @return list<array{id: string, title: string, url: string|null, query: string, phrasings: list<string>, also: list<string>, impressions: int, clicks: int, position: float|null, reason: string, marked_at: string|null, silo: string|null, tenant: string|null, state: string, error: string|null, refreshed_at: string|null}>
      */
     public function questionRefreshMarks(?string $siteId = null, ?string $siloId = null): array
     {
@@ -617,6 +617,8 @@ class BlogBoard
                     'url' => $this->url($c->site, $c->slug),
                     'query' => (string) ($m['query'] ?? ''),
                     'phrasings' => is_array($m['phrasings'] ?? null) ? array_values(array_map('strval', $m['phrasings'])) : [],
+                    // The post's other questions from the same run (one post, several topics).
+                    'also' => array_values(array_filter(array_map(fn ($o): string => is_array($o) ? (string) ($o['query'] ?? '') : '', is_array($m['also'] ?? null) ? $m['also'] : []))),
                     'impressions' => (int) ($m['impressions'] ?? 0),
                     'clicks' => (int) ($m['clicks'] ?? 0),
                     'position' => isset($m['position']) ? (float) $m['position'] : null,
