@@ -96,3 +96,36 @@ it('closes a scan past the expiry window as partial over what it has when its ta
     expect($stale->fresh()->status)->toBe('partial')
         ->and(TownRankPoint::query()->withoutGlobalScopes()->where('scan_id', $stale->id)->value('read_attempts'))->toBe(0);
 });
+
+it('dispatches "collect first" scans ahead of the rest, and the other collectors yield while one is pending', function () {
+    Bus::fake();
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    $older = directScan($site);
+    $older->forceFill(['scanned_at' => now()->subHours(3)])->save();
+    $first = directScan($site);
+    $first->forceFill(['collect_first_at' => now()])->save();
+    $other = directScan($site);
+
+    (new IngestTownRankScans)->handle();
+
+    $order = [];
+    Bus::assertDispatched(CollectTownRankScan::class, function (CollectTownRankScan $j) use (&$order): bool {
+        $order[] = $j->scanId;
+
+        return true;
+    });
+    expect($order[0])->toBe($first->id)->and($order)->toHaveCount(3);
+
+    // A plain collector declines its turn while a collect-first scan is pending; the collect-first one reads.
+    config(['services.dataforseo.rate_limit_backoff_ms' => 0]);
+    Http::fake(['*/task_get/advanced/*' => Http::response(['status_code' => 20000, 'tasks' => [['id' => 'g', 'status_code' => 20000, 'result' => [['items' => []]]]]])]);
+    (new CollectTownRankScan($other->id))->handle(app(TownRankScanner::class));
+    expect(TownRankPoint::query()->withoutGlobalScopes()->where('scan_id', $other->id)->whereNotNull('collected_at')->count())->toBe(0);
+
+    (new CollectTownRankScan($first->id))->handle(app(TownRankScanner::class));
+    expect($first->fresh()->status)->toBe('complete');
+
+    // The stamp is spent with the scan: the plain collector reads again once nothing collect-first is pending.
+    (new CollectTownRankScan($other->id))->handle(app(TownRankScanner::class));
+    expect($other->fresh()->status)->toBe('complete');
+});

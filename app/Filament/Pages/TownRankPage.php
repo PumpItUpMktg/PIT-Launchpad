@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Activity\ActivityRecorder;
 use App\Filament\Pages\Concerns\BuildsTownPage;
+use App\Jobs\CollectTownRankScan;
 use App\Models\Keyword;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -251,6 +252,38 @@ class TownRankPage extends Page
         Notification::make()->success()
             ->title(sprintf('Posting %s DataForSEO requests (~$%s) for “%s”', number_format($result['requests']), number_format($result['cost'], 2), $keyword->query))
             ->body('Results collect over the next few minutes; the card updates as they land.')->send();
+    }
+
+    /**
+     * "Collect first" on a collecting card: stamp the keyword's pending scans so the collector lane serves
+     * them ahead of the rest (the other collectors yield), and queue their collectors now rather than at
+     * the next minute. Click again to take the stamp off. The stamp means nothing once the scan completes.
+     */
+    public function collectFirst(string $id): void
+    {
+        $site = $this->site();
+        $keyword = $site === null ? null : Keyword::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->whereKey($id)->first();
+        if ($site === null || $keyword === null) {
+            return;
+        }
+        $pending = TownRankScan::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)->where('keyword_id', $keyword->id)->where('status', 'pending')->get();
+        if ($pending->isEmpty()) {
+            Notification::make()->warning()->title('Nothing collecting for that keyword.')->send();
+
+            return;
+        }
+        $on = $pending->contains(fn (TownRankScan $s): bool => $s->collect_first_at === null);
+        foreach ($pending as $scan) {
+            $scan->forceFill(['collect_first_at' => $on ? now() : null])->save();
+            if ($on) {
+                CollectTownRankScan::dispatch((string) $scan->id);
+            }
+        }
+        Notification::make()->success()
+            ->title($on ? sprintf('Collecting “%s” first', $keyword->query) : sprintf('“%s” back in the normal order', $keyword->query))
+            ->body($on ? 'The other collectors yield to it until it completes; the card updates as results land.' : null)
+            ->send();
     }
 
     /** Card click: open the keyword's board. */

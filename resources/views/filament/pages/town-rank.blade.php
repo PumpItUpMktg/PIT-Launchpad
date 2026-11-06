@@ -79,6 +79,7 @@
     .trk .t-cardfoot { display:flex; align-items:center; gap:10px; margin-top:10px; padding-top:10px; border-top:1px solid var(--t-line); font-size:11.5px; color:var(--t-faint); }
     .trk .t-run { font-size:12px; border:1px solid #2563eb; color:#2563eb; background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; }
     .trk .t-run:disabled { opacity:.55; cursor:default; }
+    .trk .t-run.on { background:#2563eb; color:#fff; }
     .trk .t-rm { font-size:12px; border:1px solid var(--t-line); color:var(--t-muted); background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; margin-left:auto; }
     .trk .t-rm:hover { border-color:#c0392b; color:#c0392b; }
     .trk .t-star { font-size:12px; border:1px solid var(--t-line); color:var(--t-muted); background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; }
@@ -219,7 +220,13 @@
                                     @disabled($card['pending'])>
                                 {{ $card['pending'] ? 'Collecting…' : 'Run ranking report' }}
                             </button>
-                            <span>{{ $card['pending'] ? 'a report is collecting — the card updates as results land' : number_format($runRequests).' requests · ~$'.number_format($runCost, 2) }}</span>
+                            @if ($card['pending'])
+                                <button type="button" class="t-run {{ $card['collect_first'] ? 'on' : '' }}" wire:click="collectFirst('{{ $card['keyword_id'] }}')" wire:loading.attr="disabled" wire:target="collectFirst"
+                                        title="{{ $card['collect_first'] ? 'Collecting ahead of the other keywords — click to put it back in the normal order' : 'Collect this keyword ahead of the others (the other collectors yield to it until it completes)' }}">
+                                    {{ $card['collect_first'] ? '⇧ Collecting first' : '⇧ Collect first' }}
+                                </button>
+                            @endif
+                            <span>{{ $card['pending'] ? ($card['collect_first'] ? 'collecting ahead of the other keywords — the card updates as results land' : 'a report is collecting — the card updates as results land') : number_format($runRequests).' requests · ~$'.number_format($runCost, 2) }}</span>
                             <button type="button" class="t-star {{ $card['priority'] !== null ? 'on' : '' }}" wire:click="togglePriority('{{ $card['keyword_id'] }}')" wire:loading.attr="disabled" wire:target="togglePriority"
                                     title="{{ $card['priority'] !== null ? 'Priority #'.$card['priority'].' — its own section on town pages. Click to take it off the list.' : 'Make this a town-page priority keyword (its own drafted section on the towns big enough to search for it)' }}">
                                 {{ $card['priority'] !== null ? '★ Priority #'.$card['priority'] : '☆ Priority' }}

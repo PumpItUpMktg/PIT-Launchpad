@@ -30,6 +30,15 @@ class CollectTownRankScan implements ShouldBeUnique, ShouldQueue
 
     public int $uniqueFor = 300;
 
+    /** Whether any pending scan, any tenant, is stamped "collect first" (one worker lane serves them all). */
+    public static function collectFirstPending(): bool
+    {
+        return TownRankScan::withoutGlobalScope(SiteScope::class)
+            ->where('status', 'pending')
+            ->whereNotNull('collect_first_at')
+            ->exists();
+    }
+
     /** Seconds kept back from the timeout so the read in flight and the finalize never race the kill. */
     private const DEADLINE_MARGIN_SECONDS = 40;
 
@@ -50,6 +59,14 @@ class CollectTownRankScan implements ShouldBeUnique, ShouldQueue
     {
         $scan = TownRankScan::withoutGlobalScope(SiteScope::class)->find($this->scanId);
         if ($scan === null || $scan->status !== 'pending') {
+            return;
+        }
+        // Yield to a "Collect first" scan: while any pending scan carries the stamp, every collector that is
+        // not one of them returns at once, so the shared lane goes to the keyword the operator asked for.
+        // A lane with one worker process cannot reorder a queue; it can only decline to spend its turn.
+        if ($scan->collect_first_at === null && self::collectFirstPending()) {
+            Log::info('Town-rank scan collector: yielded to a collect-first scan.', ['scan_id' => $scan->id]);
+
             return;
         }
 
