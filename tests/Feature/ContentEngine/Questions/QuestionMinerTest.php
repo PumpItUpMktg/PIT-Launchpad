@@ -80,3 +80,19 @@ it('reports an empty store honestly', function () {
 
     expect($report->queriesRead)->toBe(0)->and($report->clusters)->toBe([]);
 });
+
+it('drops a bot topic whose phrasings each sit under the threshold but add up past it', function () {
+    $site = Site::factory()->create(['brand_name' => 'Acme Pumps', 'domain_url' => 'https://acmepumps.test']);
+    $asOf = CarbonImmutable::parse('2026-11-01');
+    foreach (['what to do when your sump pump fails', 'what to do when sump pump fails', 'what to do when the sump pump fails'] as $i => $q) {
+        questionGscRow($site, '2026-09-1'.$i, $q, 27 - $i, 0, 1.0, 'https://acmepumps.test/hoboken/');
+    }
+
+    $report = (new QuestionMiner(new BotQueryGuard))->mine($site, 90, $asOf);
+
+    expect($report->clusters)->toBe([])
+        ->and(count($report->botDropped))->toBe(1)
+        ->and($report->botDropped[0]['query'])->toBe('what to do when your sump pump fails')
+        ->and($report->botDropped[0]['reason'])->toBe('zero_click')
+        ->and($report->botDropped[0]['impressions'])->toBe(78);
+});

@@ -77,3 +77,25 @@ it('never resolves another tenant\'s post', function () {
 
     expect($verdict->kind)->toBe(QuestionVerdict::AUTHOR);
 });
+
+it('resolves the slug WordPress rewrote — a numeric suffix or a category prefix — to our post', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://acme.test']);
+    $post = Content::factory()->post()->create(['site_id' => $site->id, 'slug' => 'sump-pump-installation-cost-breakdown', 'title' => 'Sump pump installation cost breakdown', 'status' => ContentStatus::Published, 'body' => 'x']);
+    Content::factory()->post()->create(['site_id' => $site->id, 'slug' => 'sump-pump-battery-backup-installation-cost', 'title' => 'Sump Pump Battery Backup Installation Cost', 'status' => ContentStatus::Published, 'body' => 'x']);
+
+    $coverage = app(QuestionCoverage::class);
+    $suffixed = $coverage->verdict($site, questionClusterAt('how much does it cost to install a sump pump', 'https://acme.test/sump-pump-installation-cost-breakdown-10/', 58.3));
+    $prefixed = $coverage->verdict($site, questionClusterAt('sump pump installation cost', 'https://acme.test/blog/sump-pump-installation-cost-breakdown/', 59.8));
+
+    expect($suffixed->kind)->toBe(QuestionVerdict::REFRESH)->and($suffixed->content?->id)->toBe($post->id)
+        ->and($prefixed->kind)->toBe(QuestionVerdict::REFRESH)->and($prefixed->content?->id)->toBe($post->id);
+});
+
+it('does not take a post that merely shares a few words as the twin', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://acme.test']);
+    Content::factory()->post()->create(['site_id' => $site->id, 'slug' => 'sump-pump-battery-backup-installation-cost', 'title' => 'Sump Pump Battery Backup Installation Cost', 'status' => ContentStatus::Published, 'body' => 'x']);
+
+    $verdict = app(QuestionCoverage::class)->verdict($site, questionClusterAt('how much does it cost to install a sump pump', 'https://acme.test/', 58.3));
+
+    expect($verdict->kind)->toBe(QuestionVerdict::AUTHOR);
+});

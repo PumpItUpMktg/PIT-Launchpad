@@ -920,6 +920,10 @@ return [
         // Coverage verdict bounds (position of the URL already ranking for the question).
         'covered_max_position' => (float) env('LAUNCHPAD_QUESTIONS_COVERED_MAX_POSITION', 5),
         'refresh_max_position' => (float) env('LAUNCHPAD_QUESTIONS_REFRESH_MAX_POSITION', 30),
+        // A live post counts as the question's twin (→ refresh it, not a second post) only on a strong
+        // embedding match OR a near-identical title — each signal to its own floor, never the blend.
+        'twin_semantic' => (float) env('LAUNCHPAD_QUESTIONS_TWIN_SEMANTIC', 0.85),
+        'twin_overlap' => (float) env('LAUNCHPAD_QUESTIONS_TWIN_OVERLAP', 0.6),
     ],
 
     'gsc' => [
