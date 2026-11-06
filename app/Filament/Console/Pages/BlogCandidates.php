@@ -4,7 +4,9 @@ namespace App\Filament\Console\Pages;
 
 use App\ContentEngine\BlogQueue\ManualCandidateIntake;
 use App\ContentEngine\Review\ReviewActions;
+use App\Enums\ContentStatus;
 use App\Jobs\GeneratePost;
+use App\Jobs\RefreshPostForQuestion;
 use App\Operate\BlogBoard;
 use App\Security\Capability;
 use BackedEnum;
@@ -78,6 +80,38 @@ class BlogCandidates extends ConsolePage
     public function getQuestionRefreshMarksProperty(): array
     {
         return app(BlogBoard::class)->questionRefreshMarks($this->siteId, $this->siloId);
+    }
+
+    /**
+     * Refresh a marked post for the question it already answers: queues the questions lane's Refresh
+     * (one model call on the worker — direct answer at the top, Q&A + FAQ schema at the end, title/SEO
+     * proposal) and returns; the post lands in the Review tab as needs_review. One post at a time.
+     */
+    public function refreshForQuestion(string $contentId): void
+    {
+        if (! $this->can(Capability::GenerateContent)) {
+            return;
+        }
+        $post = $this->ownedPost($contentId);
+        if ($post === null || ! is_array($post->meta['question_refresh'] ?? null)) {
+            Notification::make()->title('That post carries no question mark.')->warning()->send();
+
+            return;
+        }
+        if ($post->status !== ContentStatus::Published) {
+            Notification::make()->title('Only a live post can be refreshed — this one is already in the pipeline.')->warning()->send();
+
+            return;
+        }
+        if (($post->meta['generating_at'] ?? null) !== null) {
+            Notification::make()->title('Already refreshing.')->send();
+
+            return;
+        }
+
+        RefreshPostForQuestion::enqueue($post, actorId: Auth::id());
+
+        Notification::make()->title('Refreshing — it will appear in Review shortly.')->success()->send();
     }
 
     /** Add a hand-typed idea as a candidate on the board (source=manual, topical, cap-exempt). */

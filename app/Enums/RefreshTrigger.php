@@ -13,4 +13,5 @@ enum RefreshTrigger: string
     case NearDuplicateMerge = 'near_dup_merge';
     case NewsDevelopment = 'news_development';
     case Manual = 'manual';
+    case SearchQuestion = 'search_question';
 }
