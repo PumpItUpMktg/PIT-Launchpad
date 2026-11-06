@@ -9,6 +9,7 @@ use App\Enums\PageType;
 use App\Integrations\Embedding\EmbeddingProvider;
 use App\Integrations\Embedding\MockEmbeddingProvider;
 use App\Models\Content;
+use App\Models\Redirect;
 use App\Models\Site;
 
 beforeEach(function () {
@@ -98,4 +99,29 @@ it('does not take a post that merely shares a few words as the twin', function (
     $verdict = app(QuestionCoverage::class)->verdict($site, questionClusterAt('how much does it cost to install a sump pump', 'https://acme.test/', 58.3));
 
     expect($verdict->kind)->toBe(QuestionVerdict::AUTHOR);
+});
+
+it('follows Launchpad\'s own redirect from a retired duplicate to its keeper', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://acme.test']);
+    $keeper = Content::factory()->post()->create(['site_id' => $site->id, 'slug' => 'sump-pump-installation-cost-breakdown', 'title' => 'Sump pump installation cost breakdown', 'status' => ContentStatus::Published, 'body' => 'x']);
+    $loser = Content::factory()->post()->create(['site_id' => $site->id, 'slug' => 'sump-pump-installation-cost-breakdown-10', 'title' => 'Sump pump installation cost breakdown', 'status' => ContentStatus::Published, 'body' => 'x']);
+    Redirect::factory()->create(['site_id' => $site->id, 'from_url' => '/sump-pump-installation-cost-breakdown-10', 'to_url' => '/sump-pump-installation-cost-breakdown', 'status' => 'active']);
+    $loser->delete();
+
+    $verdict = app(QuestionCoverage::class)->verdict($site, questionClusterAt('sump pump installation cost', 'https://acme.test/sump-pump-installation-cost-breakdown-10/', 58.6));
+
+    expect($verdict->kind)->toBe(QuestionVerdict::REFRESH)->and($verdict->content?->id)->toBe($keeper->id);
+});
+
+it('calls a retired, unredirected row Google still shows orphaned — never author', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://acme.test']);
+    $retired = Content::factory()->post()->create(['site_id' => $site->id, 'slug' => 'sump-pump-installation-cost-breakdown-10', 'title' => 'Sump pump installation cost breakdown', 'status' => ContentStatus::Published, 'body' => 'x']);
+    $retired->delete();
+
+    $verdict = app(QuestionCoverage::class)->verdict($site, questionClusterAt('sump pump installation cost', 'https://acme.test/sump-pump-installation-cost-breakdown-10/', 58.6));
+
+    expect($verdict->kind)->toBe(QuestionVerdict::ORPHANED)
+        ->and($verdict->content?->id)->toBe($retired->id)
+        ->and($verdict->reason)->toContain('retired that post (published, deleted ')
+        ->and($verdict->reason)->toContain('no redirect');
 });

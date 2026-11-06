@@ -8,6 +8,7 @@ use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\DraftTrigger;
 use App\Enums\IntakeType;
+use App\Enums\PageType;
 use App\Integrations\Embedding\EmbeddingProvider;
 use App\Integrations\Embedding\MockEmbeddingProvider;
 use App\Models\Content;
@@ -156,4 +157,29 @@ it('titles a question with a question mark and leaves an intent query as typed',
     expect(QuestionIntake::titleFor('how long do sump pumps last'))->toBe('How long do sump pumps last?')
         ->and(QuestionIntake::titleFor('how long do sump pumps last?'))->toBe('How long do sump pumps last?')
         ->and(QuestionIntake::titleFor('sump pump replacement cost'))->toBe('Sump pump replacement cost');
+});
+
+it('routes a rule-set-silent question through the silo of the page already ranking for it, and lists an orphaned topic without filing', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://acme.test']);
+    $silo = Silo::factory()->create(['site_id' => $site->id, 'name' => 'Backup Systems', 'rule_set' => ['include_patterns' => ['battery backup'], 'seed_terms' => [], 'exclude_patterns' => []]]);
+    Content::factory()->page()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'page_type' => PageType::Service, 'slug' => 'backup-sump-pump-solutions/water-powered-backup-sump-pumps', 'title' => 'Water-powered backup sump pumps', 'status' => ContentStatus::Published]);
+    $retired = Content::factory()->post()->create(['site_id' => $site->id, 'slug' => 'sump-pump-installation-cost-breakdown-10', 'title' => 'Sump pump installation cost breakdown', 'status' => ContentStatus::Published, 'body' => 'x']);
+    $retired->delete();
+
+    $report = questionReport($site, [
+        questionTopic('sump pump installation cost', 373, 'https://acme.test/sump-pump-installation-cost-breakdown-10/', 58.6),
+        questionTopic('how do water powered sump pumps work', 51, 'https://acme.test/backup-sump-pump-solutions/water-powered-backup-sump-pumps/', 32.6),
+    ]);
+
+    $intake = app(QuestionIntake::class);
+    $plan = $intake->plan($site, $report, 15);
+
+    expect($plan[0]['action'])->toBe(QuestionIntake::ACTION_ORPHANED)->and($plan[0]['existing']?->id)->toBe($retired->id)
+        ->and($plan[1]['action'])->toBe(QuestionIntake::ACTION_FILE)->and($plan[1]['silo']?->id)->toBe($silo->id)->and($plan[1]['routed_via'])->toBe('ranking_page');
+
+    $intake->apply($site, $report, $plan);
+    $filed = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('source_name', 'questions')->get();
+    expect($filed)->toHaveCount(1)
+        ->and($filed[0]->title)->toBe('How do water powered sump pumps work?')
+        ->and($filed[0]->meta['question']['routed_via'])->toBe('ranking_page');
 });

@@ -30,7 +30,11 @@ use Illuminate\Support\Str;
  *    no second row. Counts toward the cap (it is the standing ask).
  *  - mark: the post that answers it gets a refresh mark (meta.question_refresh) — the operator sees it
  *    on the board; no second post is filed. Counts toward the cap.
- *  - unrouted: no silo's rule_set claims the question — listed for the operator, never guessed.
+ *  - orphaned: Google still shows a URL whose Launchpad row is retired and unredirected — listed for the
+ *    operator, nothing filed (a new post would recreate the "-N" duplicate family), not counted.
+ *  - unrouted: no silo's rule_set claims the question AND the page already ranking for it has no silo —
+ *    listed for the operator, never guessed. (When a rule_set is silent but the ranking page sits in a
+ *    silo, that silo routes it: the page Google already pairs with the question says where it belongs.)
  *  - file: a new "questions" post candidate, pinned to its silo, the question as the angle. Counts.
  *
  * The cap (`top`) is spent by file / mark / already only — the standing asks on the board.
@@ -53,6 +57,8 @@ class QuestionIntake
 
     public const ACTION_UNROUTED = 'unrouted';
 
+    public const ACTION_ORPHANED = 'orphaned';
+
     public function __construct(
         private readonly QuestionCoverage $coverage,
         private readonly Bucketer $bucketer,
@@ -60,7 +66,7 @@ class QuestionIntake
     ) {}
 
     /**
-     * @return list<array{cluster: QuestionCluster, verdict: QuestionVerdict, silo: Silo|null, action: string, existing: Content|null}>
+     * @return list<array{cluster: QuestionCluster, verdict: QuestionVerdict, silo: Silo|null, action: string, existing: Content|null, routed_via: string|null}>
      */
     public function plan(Site $site, QuestionMiningReport $report, ?int $top = null): array
     {
@@ -75,10 +81,15 @@ class QuestionIntake
                 break;
             }
             $verdict = $this->coverage->verdict($site, $cluster);
-            $row = ['cluster' => $cluster, 'verdict' => $verdict, 'silo' => null, 'action' => self::ACTION_COVERED, 'existing' => null];
+            $row = ['cluster' => $cluster, 'verdict' => $verdict, 'silo' => null, 'action' => self::ACTION_COVERED, 'existing' => null, 'routed_via' => null];
 
             if ($verdict->isCovered()) {
                 $rows[] = $row;
+
+                continue;
+            }
+            if ($verdict->isOrphaned()) {
+                $rows[] = [...$row, 'action' => self::ACTION_ORPHANED, 'existing' => $verdict->content];
 
                 continue;
             }
@@ -105,13 +116,18 @@ class QuestionIntake
             }
 
             $silo = $this->bucketer->bucket($cluster->query(), $silos);
+            $via = $silo !== null ? 'rule_set' : null;
+            if ($silo === null) {
+                $silo = $this->siloOfRankingPage($site, $verdict, $silos);
+                $via = $silo !== null ? 'ranking_page' : null;
+            }
             if ($silo === null) {
                 $rows[] = [...$row, 'action' => self::ACTION_UNROUTED];
 
                 continue;
             }
 
-            $rows[] = [...$row, 'silo' => $silo, 'action' => self::ACTION_FILE];
+            $rows[] = [...$row, 'silo' => $silo, 'action' => self::ACTION_FILE, 'routed_via' => $via];
             $spent++;
         }
 
@@ -121,7 +137,7 @@ class QuestionIntake
     /**
      * Perform a plan's writes. Idempotent per topic: re-applying re-stamps numbers, never duplicates.
      *
-     * @param  list<array{cluster: QuestionCluster, verdict: QuestionVerdict, silo: Silo|null, action: string, existing: Content|null}>  $plan
+     * @param  list<array{cluster: QuestionCluster, verdict: QuestionVerdict, silo: Silo|null, action: string, existing: Content|null, routed_via: string|null}>  $plan
      * @return array{filed: int, marked: int, refreshed: int}
      */
     public function apply(Site $site, QuestionMiningReport $report, array $plan): array
@@ -138,7 +154,7 @@ class QuestionIntake
                 case self::ACTION_FILE:
                     /** @var Silo $silo */
                     $silo = $row['silo'];
-                    $this->file($site, $cluster, $silo, $facts);
+                    $this->file($site, $cluster, $silo, [...$facts, 'routed_via' => $row['routed_via']]);
                     $out['filed']++;
                     break;
 
@@ -165,6 +181,23 @@ class QuestionIntake
         }
 
         return $out;
+    }
+
+    /**
+     * The silo of the page Google already pairs with the question (a service page or a hub inside a silo),
+     * when the rule_sets are silent. Null when the ranking URL is nothing of ours or sits in no silo.
+     *
+     * @param  Collection<int, Silo>  $silos
+     */
+    private function siloOfRankingPage(Site $site, QuestionVerdict $verdict, Collection $silos): ?Silo
+    {
+        if ($verdict->rankingUrl === null) {
+            return null;
+        }
+        $page = $this->coverage->contentAt($site, $verdict->rankingUrl);
+        $siloId = $page === null ? null : ($page->matched_silo_id ?? $page->silo_id);
+
+        return $siloId !== null ? $silos->firstWhere('id', $siloId) : null;
     }
 
     /** @return array<string, mixed> the demand facts stored on a candidate or a mark */

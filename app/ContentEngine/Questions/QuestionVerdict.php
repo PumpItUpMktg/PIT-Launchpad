@@ -13,6 +13,9 @@ use App\Models\Content;
  *    same topic) — refresh THAT post rather than file a second one. `content` names it.
  *  - author: nothing of ours answers it as a post (the ranking URL is the home page, a hub or a service
  *    page, a legacy URL, or nothing ranks at all) — a new post candidate.
+ *  - orphaned: Google still shows a URL whose Launchpad row is retired (soft-deleted or no longer
+ *    published) with no redirect to a live post. Nothing live answers it, but filing a new post would
+ *    recreate the "-N" duplicate family — the operator decides. `content` names the retired row.
  */
 final class QuestionVerdict
 {
@@ -21,6 +24,8 @@ final class QuestionVerdict
     public const REFRESH = 'refresh';
 
     public const AUTHOR = 'author';
+
+    public const ORPHANED = 'orphaned';
 
     public function __construct(
         public readonly string $kind,
@@ -44,6 +49,16 @@ final class QuestionVerdict
     public static function author(?string $url, ?float $position, string $reason): self
     {
         return new self(self::AUTHOR, null, $url, $position, $reason);
+    }
+
+    public static function orphaned(Content $content, string $url, ?float $position, string $reason): self
+    {
+        return new self(self::ORPHANED, $content, $url, $position, $reason);
+    }
+
+    public function isOrphaned(): bool
+    {
+        return $this->kind === self::ORPHANED;
     }
 
     public function isCovered(): bool

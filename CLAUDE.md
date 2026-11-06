@@ -548,15 +548,23 @@ vendor call, no credit.
   keeps the question-shaped (`QuestionShape`: a question word or cost/vs intent, ≥3
   words, never the tenant's brand — read from the site), drops machine traffic
   (`BotQueryGuard`, any one rule: `zero_click` / `sudden_onset` / `implausible_ctr`,
-  generic thresholds in `config/launchpad.php` `questions.bot`), attaches the ranking
-  URLs and clusters near-identical phrasings (`QuestionCluster`, token-set Jaccard).
-- **`QuestionCoverage`** gives each topic a verdict from where the site already ranks:
-  our post in the top slots → *covered*; our post lower → *refresh that post*; the home
-  page / hub / service page / a legacy URL / nothing → *author*, unless a live post reads
-  as the same topic by title (§6a near-dup detector) → refresh it.
+  generic thresholds in `config/launchpad.php` `questions.bot`, applied per phrasing
+  and again per clustered topic), attaches the ranking URLs and clusters near-identical
+  phrasings (`QuestionCluster`, token-set Jaccard).
+- **`QuestionCoverage`** gives each topic a verdict from where the site already ranks.
+  The ranking URL resolves to our content by path — Launchpad's own active `Redirect`s
+  are followed first (a retired `-N` duplicate 301s to its keeper), then exact slug, the
+  slug minus a trailing `-N`, then the last segment (a category prefix). Our post in the
+  top slots → *covered*; our post lower → *refresh that post*; the home page / hub /
+  service page / a legacy URL / nothing → *author*, unless a live post reads as the same
+  topic (embedding ≥ `twin_semantic` OR title overlap ≥ `twin_overlap`, each to its own
+  floor) → refresh it. A URL whose row is retired (soft-deleted / unpublished) with no
+  redirect → *orphaned*: listed, never filed (a new post would recreate the duplicate
+  family).
 - **`QuestionIntake`** plans (read-only) then applies: *file* a `source_name='questions'`
   post candidate (`DraftTrigger::Question`, evergreen, pinned to the silo the §5
-  `Bucketer` routes it to; **unrouted questions are listed, never guessed**), *mark* the
+  `Bucketer` routes it to, else the silo of the page already ranking for it
+  (`routed_via` recorded); **a question neither claims is listed, never guessed**), *mark* the
   ranking post (`meta.question_refresh`), *already* re-stamps a standing candidate,
   *dismissed* (a rejected candidate) is never re-filed. Cap per run (default 15) counts
   file/mark/already only. **Nothing drafts on its own** — the operator still generates.
