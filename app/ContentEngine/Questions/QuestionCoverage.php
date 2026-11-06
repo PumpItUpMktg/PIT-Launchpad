@@ -6,6 +6,7 @@ use App\ContentEngine\NearDuplicateDetector;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Models\Content;
+use App\Models\Redirect;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use Illuminate\Support\Collection;
@@ -26,6 +27,9 @@ class QuestionCoverage
     /** @var array<string, Collection<int, Content>> */
     private array $published = [];
 
+    /** @var array<string, array<string, string>> per site: from path => to path */
+    private array $redirects = [];
+
     public function __construct(private readonly NearDuplicateDetector $nearDup) {}
 
     public function verdict(Site $site, QuestionCluster $cluster): QuestionVerdict
@@ -45,6 +49,17 @@ class QuestionCoverage
                 : 'our post carries it without a recorded position — refresh it');
         }
 
+        $retired = $url !== null && $ranking === null ? $this->retiredAt($site, $url) : null;
+        if ($retired !== null) {
+            return QuestionVerdict::orphaned($retired, (string) $url, $position, sprintf(
+                'Google still shows %s, but Launchpad retired that %s (%s%s) and no redirect points it at a live post — resolve it before writing another',
+                $this->pathOf($url),
+                $retired->kind === ContentKind::Post ? 'post' : 'page',
+                $retired->status->value,
+                $retired->deleted_at !== null ? ', deleted '.$retired->deleted_at->toDateString() : '',
+            ));
+        }
+
         $twin = $this->twin($site, $cluster);
         if ($twin !== null) {
             [$post, $similarity] = $twin;
@@ -62,33 +77,73 @@ class QuestionCoverage
     }
 
     /**
-     * Our content at a URL, by path. Host-agnostic (www / http variants of the site resolve alike) and
-     * tolerant of the two ways WordPress rewrites a slug we published: a numeric suffix when the slug
-     * collided on its side ("…-cost-breakdown-10" for our "…-cost-breakdown"), and a category or date
-     * prefix in front of the post slug. Exact path first; then the path with its trailing "-N" removed;
-     * then the last segment alone. Published rows only — nothing else is on the live site.
+     * Our live content at a URL, by path. Host-agnostic (www / http variants of the site resolve alike),
+     * follows Launchpad's own active redirects first (a retired "-N" duplicate 301s to its keeper, and
+     * the keeper is what answers now), and tolerates a numeric suffix or a category / date prefix in
+     * front of the slug: exact path, then the path with its trailing "-N" removed, then the last segment
+     * alone. Published rows only — nothing else is on the live site.
      */
     public function contentAt(Site $site, string $url): ?Content
     {
-        $path = trim((string) (parse_url($url, PHP_URL_PATH) ?? ''), '/');
+        $path = $this->followRedirects($site, $this->pathOf($url));
         if ($path === '') {
             return null;
         }
-        $rows = $this->published($site);
-        $bySlug = [];
-        foreach ($rows as $row) {
-            $bySlug[trim((string) $row->slug, '/')] = $row;
+
+        return $this->matchSlug($path, $this->published($site));
+    }
+
+    /**
+     * The retired Launchpad row at a URL Google still shows — soft-deleted or no longer published, and
+     * not redirected to anything live. Null when the URL is nothing of ours (or something live).
+     */
+    public function retiredAt(Site $site, string $url): ?Content
+    {
+        $path = $this->followRedirects($site, $this->pathOf($url));
+        if ($path === '') {
+            return null;
+        }
+        $rows = Content::withoutGlobalScope(SiteScope::class)->withTrashed()
+            ->where('site_id', $site->id)
+            ->whereNotNull('slug')
+            ->where(fn ($q) => $q->where('status', '!=', ContentStatus::Published->value)->orWhereNotNull('deleted_at'))
+            ->get(['id', 'site_id', 'kind', 'page_type', 'slug', 'title', 'status', 'meta', 'deleted_at', 'silo_id', 'matched_silo_id']);
+
+        return $this->matchSlug($path, $rows);
+    }
+
+    /** The path a URL's path ends up at after Launchpad's active redirects (at most a few hops). */
+    private function followRedirects(Site $site, string $path): string
+    {
+        $map = $this->redirects[(string) $site->id] ??= Redirect::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('status', 'active')
+            ->get(['from_url', 'to_url'])
+            ->mapWithKeys(fn (Redirect $r): array => [$this->pathOf((string) $r->from_url) => $this->pathOf((string) $r->to_url)])
+            ->all();
+        for ($hop = 0; $hop < 4 && isset($map[$path]) && $map[$path] !== $path; $hop++) {
+            $path = $map[$path];
         }
 
+        return $path;
+    }
+
+    /** @param  Collection<int, Content>  $rows */
+    private function matchSlug(string $path, Collection $rows): ?Content
+    {
+        $bySlug = [];
+        foreach ($rows as $row) {
+            $bySlug[mb_strtolower(trim((string) $row->slug, '/'))] = $row;
+        }
         if (isset($bySlug[$path])) {
             return $bySlug[$path];
         }
-        $unsuffixed = preg_replace('/-\d+$/', '', $path) ?? $path;
+        $unsuffixed = preg_replace('/-\\d+$/', '', $path) ?? $path;
         if ($unsuffixed !== $path && isset($bySlug[$unsuffixed])) {
             return $bySlug[$unsuffixed];
         }
-        $last = (string) basename($path);
-        $lastUnsuffixed = preg_replace('/-\d+$/', '', $last) ?? $last;
+        $last = basename($path);
+        $lastUnsuffixed = preg_replace('/-\\d+$/', '', $last) ?? $last;
         foreach ([$last, $lastUnsuffixed] as $needle) {
             foreach ($bySlug as $slug => $row) {
                 if ($slug !== '' && basename($slug) === $needle) {
@@ -100,6 +155,14 @@ class QuestionCoverage
         return null;
     }
 
+    /** A URL or path → its lowercase path with no leading/trailing slash ("" for the home page). */
+    private function pathOf(string $url): string
+    {
+        $path = str_contains($url, '://') ? (parse_url($url, PHP_URL_PATH) ?? '') : $url;
+
+        return mb_strtolower(trim((string) $path, '/'));
+    }
+
     /** @return Collection<int, Content> */
     private function published(Site $site): Collection
     {
@@ -107,7 +170,7 @@ class QuestionCoverage
             ->where('site_id', $site->id)
             ->whereNotNull('slug')
             ->where('status', ContentStatus::Published->value)
-            ->get(['id', 'site_id', 'kind', 'page_type', 'slug', 'title', 'status', 'meta']);
+            ->get(['id', 'site_id', 'kind', 'page_type', 'slug', 'title', 'status', 'meta', 'silo_id', 'matched_silo_id']);
     }
 
     /**
@@ -148,7 +211,7 @@ class QuestionCoverage
     private function describe(?Content $content, ?string $url): string
     {
         if ($content === null) {
-            $path = $url !== null ? trim((string) (parse_url($url, PHP_URL_PATH) ?? ''), '/') : '';
+            $path = $url !== null ? $this->pathOf($url) : '';
 
             return $path === '' ? 'the home page' : "a URL outside the platform (/{$path})";
         }

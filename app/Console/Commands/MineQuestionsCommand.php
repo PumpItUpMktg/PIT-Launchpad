@@ -66,7 +66,7 @@ class MineQuestionsCommand extends Command
         return self::SUCCESS;
     }
 
-    /** @param  list<array{cluster: QuestionCluster, verdict: QuestionVerdict, silo: Silo|null, action: string, existing: Content|null}>  $plan */
+    /** @param  list<array{cluster: QuestionCluster, verdict: QuestionVerdict, silo: Silo|null, action: string, existing: Content|null, routed_via: string|null}>  $plan */
     private function printReport(Site $site, QuestionMiningReport $report, array $plan, int $top): void
     {
         $this->newLine();
@@ -122,13 +122,14 @@ class MineQuestionsCommand extends Command
         }
     }
 
-    /** @param  array{cluster: QuestionCluster, verdict: QuestionVerdict, silo: Silo|null, action: string, existing: Content|null}  $row */
+    /** @param  array{cluster: QuestionCluster, verdict: QuestionVerdict, silo: Silo|null, action: string, existing: Content|null, routed_via: string|null}  $row */
     private function actionLabel(array $row): string
     {
         $who = $row['existing'] !== null ? ' → '.$this->truncate((string) $row['existing']->title, 34) : '';
 
         return match ($row['action']) {
-            QuestionIntake::ACTION_FILE => 'file ['.$this->truncate((string) $row['silo']?->name, 22).']',
+            QuestionIntake::ACTION_FILE => 'file ['.$this->truncate((string) $row['silo']?->name, 22).']'.($row['routed_via'] === 'ranking_page' ? ' via ranking page' : ''),
+            QuestionIntake::ACTION_ORPHANED => 'orphaned → '.$this->truncate((string) $row['existing']?->title, 28).' ('.($row['existing']?->status->value ?? '?').($row['existing']?->deleted_at !== null ? ', deleted' : '').')',
             QuestionIntake::ACTION_MARK => 'refresh'.$who,
             QuestionIntake::ACTION_ALREADY => 'on board'.$who,
             QuestionIntake::ACTION_DISMISSED => 'dismissed before',
