@@ -24,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property int $points_count
  * @property int $found_count
  * @property Carbon|null $scanned_at
+ * @property Carbon|null $collect_first_at set by the card's "Collect first": this pending scan is collected ahead of the rest
  */
 class TownRankScan extends Model
 {
@@ -45,6 +46,7 @@ class TownRankScan extends Model
             'points_count' => 'integer',
             'found_count' => 'integer',
             'scanned_at' => 'datetime',
+            'collect_first_at' => 'datetime',
         ];
     }
 

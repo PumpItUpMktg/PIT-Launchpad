@@ -568,6 +568,15 @@ vendor call, no credit.
   ranking post (`meta.question_refresh`), *already* re-stamps a standing candidate,
   *dismissed* (a rejected candidate) is never re-filed. Cap per run (default 15) counts
   file/mark/already only. **Nothing drafts on its own** — the operator still generates.
+- **Refresh (`QuestionRefresher`, `RefreshPostForQuestion` job, `launchpad:refresh-question`)**
+  on a marked post, one at a time from the board's "Refresh suggested" panel: ONE narrow
+  model call → a direct-answer block at the top of the body (`.lp-question-answer`), a
+  Q&A section at the end (`.lp-question-faq`) mirrored into the `faq` slot the plugin's
+  FAQPage schema reads, and a title / SEO-title / meta proposal applied to the draft with
+  the old values kept in `meta.question_refresh.proposal` (the review card shows the diff).
+  The rest of the body is untouched; re-runs replace the blocks. Takes the drafting
+  engine's refresh shape (version +1, `RefreshEvent` `SearchQuestion`, `needs_review`);
+  approve → release → publish updates the same WP post. No images. Never automatic.
 - **`launchpad:mine-questions {site|--all} [--execute] [--window=] [--top=] [--dropped]`**
   is report-first; the schedule runs `--all --execute` monthly (4th, 04:30). The
   Candidates board shows question candidates cap-exempt with an "Asked N× · pos" tag and

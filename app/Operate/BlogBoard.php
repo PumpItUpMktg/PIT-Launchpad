@@ -276,6 +276,9 @@ class BlogBoard
                 'excerpt' => $this->excerpt($c, $c->angle_hint),
                 'score' => $c->relevance_score !== null ? round((float) $c->relevance_score, 2) : null,
                 'image' => $this->thumbnail($c),
+                // A questions-lane Refresh in review: the question, the direct answer, the Q&A count and
+                // the title / SEO diff — the reviewer sees what changed before approving.
+                'refresh' => $this->questionRefreshDiff($c),
             ])
             ->all();
     }
@@ -532,6 +535,36 @@ class BlogBoard
     }
 
     /**
+     * The Refresh a reviewer is looking at (meta.question_refresh after the refresher ran), or null.
+     *
+     * @return array{query: string, answer: string, faq_count: int, changes: list<array{field: string, before: string, after: string}>}|null
+     */
+    private function questionRefreshDiff(Content $c): ?array
+    {
+        $m = $c->meta['question_refresh'] ?? null;
+        if (! is_array($m) || ! isset($m['refreshed_at']) || ! is_array($m['proposal'] ?? null)) {
+            return null;
+        }
+        $labels = ['title' => 'Title', 'seo_title' => 'SEO title', 'meta_description' => 'Meta description'];
+        $changes = [];
+        foreach ((array) ($m['proposal']['changed'] ?? []) as $field) {
+            $field = (string) $field;
+            $changes[] = [
+                'field' => $labels[$field] ?? $field,
+                'before' => (string) ($m['proposal']['before'][$field] ?? ''),
+                'after' => (string) ($m['proposal']['after'][$field] ?? ''),
+            ];
+        }
+
+        return [
+            'query' => (string) ($m['query'] ?? ''),
+            'answer' => (string) ($m['answer'] ?? ''),
+            'faq_count' => is_array($m['faq'] ?? null) ? count($m['faq']) : 0,
+            'changes' => $changes,
+        ];
+    }
+
+    /**
      * The demand facts a questions-lane candidate carries (meta.question), null for any other candidate.
      *
      * @return array{query: string, phrasings: list<string>, impressions: int, clicks: int, position: float|null}|null
@@ -561,7 +594,12 @@ class BlogBoard
      * Published posts the questions lane marked for a refresh (meta.question_refresh): the post already
      * answers a question searchers ask but ranks below the covered bound. Most demand first.
      *
-     * @return list<array{id: string, title: string, url: string|null, query: string, phrasings: list<string>, impressions: int, clicks: int, position: float|null, reason: string, marked_at: string|null, silo: string|null, tenant: string|null}>
+     * Each row carries the Refresh action's state: `idle` (button), `refreshing` (the job is queued or
+     * running — the row's generating marker; a published post's generationState() reads "drafted", so
+     * the marker is read directly), `failed` (the recorded cause, re-triggerable), `refreshed` (done this
+     * cycle and back live after review — no button until the next mining run re-marks it).
+     *
+     * @return list<array{id: string, title: string, url: string|null, query: string, phrasings: list<string>, impressions: int, clicks: int, position: float|null, reason: string, marked_at: string|null, silo: string|null, tenant: string|null, state: string, error: string|null, refreshed_at: string|null}>
      */
     public function questionRefreshMarks(?string $siteId = null, ?string $siloId = null): array
     {
@@ -586,6 +624,14 @@ class BlogBoard
                     'marked_at' => isset($m['mined_at']) ? substr((string) $m['mined_at'], 0, 10) : null,
                     'silo' => $c->matchedSilo?->name,
                     'tenant' => $c->site?->brand_name,
+                    'state' => match (true) {
+                        ($c->meta['generating_at'] ?? null) !== null => 'refreshing',
+                        $c->draftError() !== null => 'failed',
+                        isset($m['refreshed_at']) => 'refreshed',
+                        default => 'idle',
+                    },
+                    'error' => $c->draftError(),
+                    'refreshed_at' => isset($m['refreshed_at']) ? substr((string) $m['refreshed_at'], 0, 10) : null,
                 ];
             })
             ->sortByDesc('impressions')

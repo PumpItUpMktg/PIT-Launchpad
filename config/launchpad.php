@@ -924,6 +924,17 @@ return [
         // embedding match OR a near-identical title — each signal to its own floor, never the blend.
         'twin_semantic' => (float) env('LAUNCHPAD_QUESTIONS_TWIN_SEMANTIC', 0.85),
         'twin_overlap' => (float) env('LAUNCHPAD_QUESTIONS_TWIN_OVERLAP', 0.6),
+        // The Refresh action on a marked post: a direct-answer block at the top of the body, a short Q&A
+        // section at the end (FAQPage schema via the faq slot), and a title / SEO proposal applied to the
+        // draft with the old values kept beside it for review. One narrow model call, no images.
+        'refresh' => [
+            'answer_max_chars' => (int) env('LAUNCHPAD_QUESTIONS_REFRESH_ANSWER_MAX', 700),
+            'faq_max' => (int) env('LAUNCHPAD_QUESTIONS_REFRESH_FAQ_MAX', 4),
+            'faq_answer_max_chars' => (int) env('LAUNCHPAD_QUESTIONS_REFRESH_FAQ_ANSWER_MAX', 400),
+            'title_max_chars' => (int) env('LAUNCHPAD_QUESTIONS_REFRESH_TITLE_MAX', 70),
+            'meta_max_chars' => (int) env('LAUNCHPAD_QUESTIONS_REFRESH_META_MAX', 160),
+            'body_excerpt_chars' => (int) env('LAUNCHPAD_QUESTIONS_REFRESH_BODY_EXCERPT', 6000),
+        ],
     ],
 
     'gsc' => [

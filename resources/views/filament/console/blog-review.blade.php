@@ -29,6 +29,20 @@
                     @if (count($r['towns'] ?? []) > 4) <span class="bc-tag">+{{ count($r['towns']) - 4 }}</span> @endif
                 </div>
 
+                {{-- A questions-lane Refresh: what changed, before approving --}}
+                @if (! empty($r['refresh']))
+                    @php $rf = $r['refresh']; @endphp
+                    <div class="bc-excerpt" style="border-left:3px solid #2E7D6B; padding-left:10px;">
+                        <strong>Refreshed for “{{ $rf['query'] }}”</strong> — direct answer added at the top{{ $rf['faq_count'] > 0 ? ', '.$rf['faq_count'].' Q&A '.\Illuminate\Support\Str::plural('pair', $rf['faq_count']).' with FAQ schema at the end' : '' }}.
+                        <div style="margin-top:4px;">{{ $rf['answer'] }}</div>
+                        @forelse ($rf['changes'] as $ch)
+                            <div style="margin-top:4px;"><span style="color:#64748b;">{{ $ch['field'] }}:</span> <s style="color:#94a3b8;">{{ $ch['before'] }}</s> → <strong>{{ $ch['after'] }}</strong></div>
+                        @empty
+                            <div style="margin-top:4px; color:#64748b;">Title and SEO fields unchanged.</div>
+                        @endforelse
+                    </div>
+                @endif
+
                 {{-- Excerpt (or draft error) --}}
                 @if (! empty($r['draft_error']))
                     <div class="bc-excerpt" style="color:#dc2626;">{{ $r['draft_error'] }}</div>

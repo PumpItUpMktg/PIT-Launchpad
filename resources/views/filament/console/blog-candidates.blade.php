@@ -63,7 +63,7 @@
         <div class="bc-asked">
             <div class="bc-asked-head">
                 <span class="t">Refresh suggested — questions people ask that a post of ours already answers</span>
-                <span class="m">{{ count($marks) }} {{ \Illuminate\Support\Str::plural('post', count($marks)) }} · from the Search Console questions lane · ranks below the top slots, so refresh the post rather than write a second one</span>
+                <span class="m">{{ count($marks) }} {{ \Illuminate\Support\Str::plural('post', count($marks)) }} · from the Search Console questions lane · Refresh adds a direct answer at the top, a Q&A section with FAQ schema at the end, and a title proposal — into Review, nothing publishes until approved</span>
             </div>
             @foreach ($marks as $m)
                 <div class="bc-asked-row" wire:key="mark-{{ $m['id'] }}">
@@ -72,6 +72,19 @@
                     <span class="n">→ @if ($m['url'])<a href="{{ $m['url'] }}" target="_blank" rel="noopener">{{ $m['title'] }} ↗</a>@else{{ $m['title'] }}@endif</span>
                     @if (! empty($m['silo'])) <span class="bc-chip silo">{{ $m['silo'] }}</span> @endif
                     @if ($m['marked_at']) <span class="n">marked {{ $m['marked_at'] }}</span> @endif
+                    @if ($m['state'] === 'refreshing')
+                        <span class="bc-tag writing">Refreshing…</span>
+                    @elseif ($m['state'] === 'refreshed')
+                        <span class="bc-tag">refreshed {{ $m['refreshed_at'] }}</span>
+                    @else
+                        @if ($m['state'] === 'failed') <span class="bc-tag bad" title="{{ $m['error'] }}">refresh failed</span> @endif
+                        @if ($this->can(\App\Security\Capability::GenerateContent))
+                            <button class="bc-btn primary" wire:click="refreshForQuestion('{{ $m['id'] }}')" wire:loading.attr="disabled" wire:target="refreshForQuestion('{{ $m['id'] }}')">
+                                <span wire:loading.remove wire:target="refreshForQuestion('{{ $m['id'] }}')">{{ $m['state'] === 'failed' ? 'Retry refresh' : 'Refresh' }}</span>
+                                <span wire:loading wire:target="refreshForQuestion('{{ $m['id'] }}')">Queuing…</span>
+                            </button>
+                        @endif
+                    @endif
                 </div>
             @endforeach
         </div>

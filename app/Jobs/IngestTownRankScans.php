@@ -40,8 +40,12 @@ class IngestTownRankScans implements ShouldBeUnique, ShouldQueue
 
     public function handle(): void
     {
+        // "Collect first" scans lead the minute's dispatch (and the other collectors yield to them — see
+        // CollectTownRankScan); the rest keep their oldest-first order.
         $pending = TownRankScan::withoutGlobalScope(SiteScope::class)
             ->where('status', 'pending')
+            ->orderByRaw('CASE WHEN collect_first_at IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('collect_first_at')
             ->orderBy('scanned_at')
             ->pluck('id');
 
