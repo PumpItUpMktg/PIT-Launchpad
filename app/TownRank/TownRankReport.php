@@ -37,7 +37,7 @@ final class TownRankReport
      */
     public const DEFAULT_MIN_PAGE_AGE_DAYS = 30;
 
-    public function forKeyword(Site $site, Keyword $keyword, ?int $sinceDays = null, int $minPageAgeDays = self::DEFAULT_MIN_PAGE_AGE_DAYS): array
+    public function forKeyword(Site $site, Keyword $keyword, ?int $sinceDays = null, int $minPageAgeDays = self::DEFAULT_MIN_PAGE_AGE_DAYS, bool $withTopResults = true): array
     {
         // The town list first: a scan's points are linked to the towns that exist NOW (a coverage rebuild
         // gives every town a new row id, which would otherwise orphan every point — see TownPointLinks).
@@ -59,7 +59,9 @@ final class TownRankReport
                 ->whereKeyNot($scan->id)
                 ->where('scanned_at', '<=', $sinceDays !== null && $scan->scanned_at !== null ? $scan->scanned_at->copy()->subDays($sinceDays) : $scan->scanned_at)
                 ->orderByDesc('scanned_at')->first();
-            $rawPoints = $scan === null ? collect() : $scan->points()->get();
+            // The wall needs ranks and states, not what each page SAW: without the per-point results JSON
+            // (the bulk of a point row) a whole-site build reads a fraction of the bytes.
+            $rawPoints = $scan === null ? collect() : ($withTopResults ? $scan->points()->get() : $scan->points()->light()->get());
             $points = TownPointLinks::byTown($towns, $rawPoints);
             $scans[$mode] = $scan === null ? null : [
                 'id' => (string) $scan->id,
@@ -71,7 +73,7 @@ final class TownRankReport
                 'previous_scanned_at' => $previous?->scanned_at?->toDateTimeString(),
             ];
             $pointsByMode[$mode] = $points;
-            $prevByMode[$mode] = $previous === null ? null : TownPointLinks::byTown($towns, $previous->points()->get());
+            $prevByMode[$mode] = $previous === null ? null : TownPointLinks::byTown($towns, $withTopResults ? $previous->points()->get() : $previous->points()->light()->get());
         }
 
         $mapRanks = $this->mapPackRanks($site, $keyword, $towns);
@@ -203,7 +205,7 @@ final class TownRankReport
             // A genuine not-found carries the results that DID rank. "Not found" with NOTHING stored is a
             // phantom — a read that came back empty (rate limit, transport, an empty page) — and is no data,
             // never evidence that the site dropped out. `launchpad:town-rank-recollect` re-reads them free.
-            return $point->provider_task_id !== null && ($point->top_results ?? []) === [] ? 'unreadable' : 'not_found';
+            return $point->provider_task_id !== null && $point->hasNoResults() ? 'unreadable' : 'not_found';
         }
 
         return match (true) {
