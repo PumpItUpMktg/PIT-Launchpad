@@ -146,7 +146,10 @@
                 </span>
             </div>
         @endif
-        @if ($cards === [])
+        @php($wall = $this->wall)
+        @if ($wall === null)
+            <div class="t-note" wire:poll.10s>Building the wall on the worker — the cards appear here in a moment.</div>
+        @elseif ($cards === [])
             <div class="t-empty">No keywords tracked for Town Rank yet. Add one above, or run <code>launchpad:town-rank {site} --keyword="…" --scan --yes</code>.</div>
         @else
             @php($collecting = collect($cards)->contains(fn (array $c): bool => $c['pending']))
@@ -155,6 +158,7 @@
                  architecture already names these, so the wall reads in the same terms. --}}
             @php($groups = collect($cards)->groupBy(fn (array $c): string => $c['silo'] ?? '')->all())
             <div @if ($collecting) wire:poll.30s @endif>
+            <div class="t-note" style="margin:0 0 8px">Wall built {{ \Illuminate\Support\Carbon::parse($wall['built_at'])->diffForHumans() }}{{ $collecting ? ' · rebuilt on the worker as results land' : '' }}</div>
             @foreach ($groups as $siloName => $group)
                 <div class="t-silo">
                     <h3>{{ $siloName !== '' ? $siloName : 'No silo' }}</h3>

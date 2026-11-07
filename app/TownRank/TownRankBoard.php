@@ -181,7 +181,7 @@ final class TownRankBoard
      *     markers: list<array{id: string, x: float, y: float, rank: int|null, prev_rank: int|null, change: string|null, color: string, delta_color: string, label: string, population: int, page: bool}>
      * }>
      */
-    public function cards(Site $site): array
+    public function cards(Site $site, bool $withTopResults = true): array
     {
         $keywords = $this->keywords($site);
         if ($keywords === []) {
@@ -196,7 +196,7 @@ final class TownRankBoard
             if ($keyword === null) {
                 continue;
             }
-            $data = $this->report->forKeyword($site, $keyword);
+            $data = $this->report->forKeyword($site, $keyword, withTopResults: $withTopResults);
             $thumbMode = $data['scans'][TownRankScan::MODE_TOWN_QUERY] !== null ? TownRankScan::MODE_TOWN_QUERY : TownRankScan::MODE_LOCAL;
             $modes = [];
             $progress = [];

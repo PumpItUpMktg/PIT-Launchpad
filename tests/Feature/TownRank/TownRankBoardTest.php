@@ -125,3 +125,17 @@ it('diagnoses the remaining rules: not ranking for its own town, holding top 3, 
     $unscanned = TownDiagnosis::for([...$base, 'town_query' => $mode(null, 'unscanned'), 'local' => $mode(null, 'pending')]);
     expect(array_column($unscanned, 'key'))->toBe(['scan_town_query', 'scan_local', 'no_map_scan']);
 });
+
+it('the wall build without the results JSON reads the same ranks, states and markers as the full report', function () {
+    [$site] = boardSite();
+
+    $full = app(TownRankBoard::class)->cards($site, true);
+    $light = app(TownRankBoard::class)->cards($site, false);
+
+    expect($light)->toHaveCount(count($full));
+    foreach ($full as $i => $card) {
+        expect($light[$i]['modes'])->toBe($card['modes'])
+            ->and($light[$i]['markers'])->toBe($card['markers'])
+            ->and($light[$i]['visibility'])->toBe($card['visibility']);
+    }
+});

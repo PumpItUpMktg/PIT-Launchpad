@@ -1,6 +1,7 @@
 <?php
 
 use App\Filament\Pages\TownRankPage;
+use App\Jobs\BuildTownRankWall;
 use App\Jobs\CollectTownRankScan;
 use App\Models\Keyword;
 use App\Models\Site;
@@ -8,6 +9,7 @@ use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
 use App\Models\User;
 use App\TownRank\TownRankBoard;
+use App\TownRank\TownRankWall;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Bus;
 use Livewire\Livewire;
@@ -34,6 +36,7 @@ function collectFirstSite(): array
 it('the card offers Collect first while collecting; the toggle stamps both modes, queues their collectors now, and clears on a second click', function () {
     Bus::fake();
     [$site, $kw, $scans] = collectFirstSite();
+    TownRankWall::build($site);   // the page reads the worker-built wall (Bus is faked here, so build it by hand)
 
     $page = Livewire::test(TownRankPage::class)->set('siteId', $site->id)
         ->assertOk()
@@ -46,7 +49,9 @@ it('the card offers Collect first while collecting; the toggle stamps both modes
     }
     Bus::assertDispatchedTimes(CollectTownRankScan::class, 2);
     expect(collect(app(TownRankBoard::class)->cards($site))->firstWhere('keyword_id', (string) $kw->id)['collect_first'])->toBeTrue();
-    $page->assertSee('⇧ Collecting first');
+    Bus::assertDispatched(BuildTownRankWall::class);              // the action asked for a wall rebuild
+    TownRankWall::build($site);
+    Livewire::test(TownRankPage::class)->set('siteId', $site->id)->assertSee('⇧ Collecting first');
 
     $page->call('collectFirst', (string) $kw->id);
     foreach ($scans as $scan) {
@@ -61,7 +66,15 @@ it('a completed keyword has no button and the stamp means nothing once its scans
         $scan->forceFill(['status' => 'complete', 'collect_first_at' => now()])->save();
     }
 
-    Livewire::test(TownRankPage::class)->set('siteId', $site->id)->assertOk()->assertDontSee('Collect first');
+    Livewire::test(TownRankPage::class)->set('siteId', $site->id)->assertOk()->assertDontSee('Collect first')->assertSee('Wall built');
     expect(CollectTownRankScan::collectFirstPending())->toBeFalse()
         ->and(collect(app(TownRankBoard::class)->cards($site))->firstWhere('keyword_id', (string) $kw->id)['collect_first'])->toBeFalse();
+});
+
+it('shows "building" until the worker has built the wall', function () {
+    Bus::fake();
+    [$site] = collectFirstSite();
+
+    Livewire::test(TownRankPage::class)->set('siteId', $site->id)->assertOk()->assertSee('Building the wall on the worker');
+    Bus::assertDispatched(BuildTownRankWall::class);
 });

@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToSite;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * One town in a town-rank scan (§ Town Rank): the query sent for it, the rank the site's domain holds there
@@ -36,6 +38,34 @@ class TownRankPoint extends Model
     use BelongsToSite, HasUlids;
 
     protected $guarded = [];
+
+    /**
+     * The point without its results JSON (the bulk of the row): everything the wall needs — rank, state,
+     * link — plus a `no_results` flag standing in for "nothing stored", which {@see hasNoResults()} reads.
+     *
+     * @param  Builder<TownRankPoint>  $query
+     * @return Builder<TownRankPoint>
+     */
+    public function scopeLight(Builder $query): Builder
+    {
+        $json = DB::connection()->getDriverName() === 'pgsql' ? 'top_results::text' : 'top_results';
+
+        return $query->select([
+            'id', 'site_id', 'scan_id', 'coverage_area_id', 'geo_id', 'label', 'state', 'lat', 'lng', 'query',
+            'rank', 'ranking_url', 'collected_at', 'read_error', 'read_attempts', 'provider_task_id',
+            DB::raw("CASE WHEN top_results IS NULL OR {$json} IN ('[]', 'null') THEN 1 ELSE 0 END AS no_results"),
+        ]);
+    }
+
+    /** Whether nothing was stored for this point — read from the results themselves, or the light flag. */
+    public function hasNoResults(): bool
+    {
+        if (array_key_exists('no_results', $this->getAttributes())) {
+            return (int) $this->getAttributes()['no_results'] === 1;
+        }
+
+        return ($this->top_results ?? []) === [];
+    }
 
     /** @return array<string, string> */
     protected function casts(): array

@@ -84,6 +84,10 @@ class CollectTownRankScan implements ShouldBeUnique, ShouldQueue
             $expired = true;
         }
 
+        if ($scan->fresh()?->status !== 'pending') {
+            BuildTownRankWall::dispatch((string) $scan->site_id);   // the card flips from "collecting" to its result
+        }
+
         Log::info('Town-rank scan collector: run finished.', [
             'scan_id' => $scan->id,
             'task_gets' => $spent,

@@ -14,6 +14,7 @@ use App\TownPages\PriorityKeywords;
 use App\TownRank\TownRankBoard;
 use App\TownRank\TownRankKeywords;
 use App\TownRank\TownRankRunAll;
+use App\TownRank\TownRankWall;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -113,6 +114,7 @@ class TownRankPage extends Page
             return;
         }
         $this->newKeyword = '';
+        TownRankWall::refresh($site);
         Notification::make()->success()->title("Tracking “{$keyword->query}”")
             ->body('Run its ranking report from the card, or wait for the Monday sweep.')->send();
     }
@@ -137,6 +139,7 @@ class TownRankPage extends Page
 
             return;
         }
+        TownRankWall::refresh($site);
         app(ActivityRecorder::class)->record((string) $site->id, ActivityRecorder::PRIORITY_KEYWORD, $on ? "“{$keyword->query}” made town-page priority #{$keyword->town_priority_rank}" : "“{$keyword->query}” taken off the town-page priorities", [], (string) $keyword->query, Auth::id());
         Notification::make()->success()
             ->title($on ? "★ “{$keyword->query}” is priority #{$keyword->town_priority_rank}" : "“{$keyword->query}” is no longer a priority")
@@ -160,6 +163,7 @@ class TownRankPage extends Page
 
         $was = app(TownRankKeywords::class)->untrack($site, $keyword);
 
+        TownRankWall::refresh($site);
         Notification::make()->success()->title("Removed “{$keyword->query}”")
             ->body($was['scans'] > 0
                 ? sprintf('Off the wall and out of the weekly sweep. Its %s scan(s) are kept — add the keyword back and the history returns.', number_format($was['scans']))
@@ -231,6 +235,7 @@ class TownRankPage extends Page
             return;
         }
 
+        TownRankWall::refresh($site);
         Notification::make()->success()
             ->title(sprintf('Queued %s keyword(s) · %s requests (~$%s)', number_format($result['queued']), number_format($result['requests']), number_format($result['cost'], 2)))
             ->body('One job per keyword; results collect over the next few minutes and each card updates as they land.')->send();
@@ -249,6 +254,7 @@ class TownRankPage extends Page
 
             return;
         }
+        TownRankWall::refresh($site);
         Notification::make()->success()
             ->title(sprintf('Posting %s DataForSEO requests (~$%s) for “%s”', number_format($result['requests']), number_format($result['cost'], 2), $keyword->query))
             ->body('Results collect over the next few minutes; the card updates as they land.')->send();
@@ -280,6 +286,7 @@ class TownRankPage extends Page
                 CollectTownRankScan::dispatch((string) $scan->id);
             }
         }
+        TownRankWall::refresh($site);
         Notification::make()->success()
             ->title($on ? sprintf('Collecting “%s” first', $keyword->query) : sprintf('“%s” back in the normal order', $keyword->query))
             ->body($on ? 'The other collectors yield to it until it completes; the card updates as results land.' : null)
@@ -301,12 +308,23 @@ class TownRankPage extends Page
         $this->filter = '';
     }
 
-    /** @return list<array<string, mixed>> */
-    public function getCardsProperty(): array
+    /**
+     * The wall as the worker last built it ({@see TownRankWall}) — a missing or stale copy is rebuilt on
+     * the worker; the page never computes it. Null while the first build is still running.
+     *
+     * @return array{cards: list<array<string, mixed>>, built_at: string}|null
+     */
+    public function getWallProperty(): ?array
     {
         $site = $this->site();
 
-        return $site !== null ? app(TownRankBoard::class)->cards($site) : [];
+        return $site !== null ? TownRankWall::ensureFresh($site) : ['cards' => [], 'built_at' => now()->toIso8601String()];
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function getCardsProperty(): array
+    {
+        return $this->wall['cards'] ?? [];
     }
 
     public function selectTown(string $id): void
