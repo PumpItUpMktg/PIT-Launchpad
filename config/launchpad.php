@@ -890,6 +890,29 @@ return [
         'excerpt_chars' => (int) env('LAUNCHPAD_SOCIAL_EXCERPT_CHARS', 320),
         'reshare_cooldown_days' => (int) env('LAUNCHPAD_SOCIAL_RESHARE_COOLDOWN_DAYS', 60),
         'slot_hour' => (int) env('LAUNCHPAD_SOCIAL_SLOT_HOUR', 14),   // UTC hour a capped channel's overflow posts at
+        // Upward movement in Search Console → a suggestion on the board (any one rule fires).
+        'momentum' => [
+            'impressions_ratio' => (float) env('LAUNCHPAD_SOCIAL_MOMENTUM_RATIO', 2.0),   // trailing 7d ≥ ratio × prior 7d …
+            'impressions_min' => (int) env('LAUNCHPAD_SOCIAL_MOMENTUM_MIN', 30),          // … with at least this many impressions
+            'position_gain' => (float) env('LAUNCHPAD_SOCIAL_MOMENTUM_GAIN', 3.0),        // average position improved by ≥ this …
+            'position_within' => (float) env('LAUNCHPAD_SOCIAL_MOMENTUM_WITHIN', 20.0),   // … and now inside the top N
+            'clicks_min' => (int) env('LAUNCHPAD_SOCIAL_MOMENTUM_CLICKS', 3),             // first clicks: ≥ this many after none
+        ],
+        // Heavy rain → an automatic re-share drawn from the rain pool, one per rain event, never the same post twice.
+        'weather' => [
+            'inches_1d' => (float) env('LAUNCHPAD_SOCIAL_RAIN_1D', 1.0),       // observed inches in the latest day …
+            'inches_2d' => (float) env('LAUNCHPAD_SOCIAL_RAIN_2D', 1.5),       // … or over the latest two days
+            'event_days' => (int) env('LAUNCHPAD_SOCIAL_RAIN_EVENT_DAYS', 3),  // one share per storm: no second fire inside this window
+            'cooldown_days' => (int) env('LAUNCHPAD_SOCIAL_RAIN_COOLDOWN', 30),   // a post shared to a channel inside this is out of that channel's draw
+            'terms' => ['sump pump', 'flood', 'water in the basement', 'basement water', 'running constantly', 'runs constantly', 'backup', 'check valve', 'heavy rain', 'storm', 'power outage', 'french drain', 'wet basement', 'seepage'],
+            'leads' => [
+                'Heavy rain is hitting {area} this week.',
+                'Storms are soaking {area} — a good time to check the basement.',
+                'After the rain we just had in {area}, a few things are worth knowing.',
+                'Wet week in {area}. If the pump is running more than usual, read this.',
+                'The rain gauge filled up fast in {area}.',
+            ],
+        ],
     ],
 
     /*

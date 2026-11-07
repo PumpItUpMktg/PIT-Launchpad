@@ -108,6 +108,11 @@ Schedule::command('sandhog:sync-ga4')->daily()->withoutOverlapping()->onOneServe
 // is what stops the rolling 16-month window from erasing history.
 Schedule::command('launchpad:sync-gsc')->daily()->withoutOverlapping()->onOneServer();
 
+// Social: channels come from the posting provider (daily); the re-share rules run after the Search Console
+// sync — upward movement → the board, heavy rain → an automatic share drawn from the rain pool.
+Schedule::command('launchpad:sync-social-channels --all')->dailyAt('05:20')->withoutOverlapping()->onOneServer();
+Schedule::command('launchpad:social-rules --all --execute')->dailyAt('06:10')->withoutOverlapping()->onOneServer();
+
 // Observed rainfall — NOAA daily summaries for every site's stations into the metric spine, so a result
 // trend can be read against the weather it happened in (demand for a sump-pump or waterproofing client
 // is partly weather; "clicks doubled" means something different in a week that saw four inches). Daily,

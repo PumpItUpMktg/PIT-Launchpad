@@ -11,6 +11,7 @@ use App\Models\Job;
 use App\Models\Scopes\SiteScope;
 use App\Models\SocialChannel;
 use App\Models\SocialPost;
+use App\Models\SocialSuggestion;
 use App\Social\Provider\SocialProvider;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -45,8 +46,8 @@ final class SocialSharer
         $location = $this->router->forJob($job);
         $out = [];
         foreach ($channels as $channel) {
-            if ($channel->network->perLocation() && $channel->location_id !== null && $channel->location_id !== $location?->id) {
-                continue;   // another location's Business Profile
+            if ($channel->network->perLocation() && ($channel->location_id === null || $channel->location_id !== $location?->id)) {
+                continue;   // another location's Business Profile, or a GBP profile the sync could not match
             }
             if (! $this->allowed($channel, SocialPost::SUBJECT_JOB, (string) $job->id, $trigger)) {
                 continue;
@@ -62,7 +63,14 @@ final class SocialSharer
      * @param  array<string, mixed>|null  $snapshot
      * @return list<SocialPost>
      */
-    public function sharePost(Content $post, SocialTrigger $trigger, ?array $snapshot = null): array
+    /**
+     * @param  array<string, mixed>|null  $snapshot
+     * @param  list<SocialNetwork>|null  $networks  only these networks (null = every enabled channel)
+     * @param  list<string>|null  $locationIds  the GBP locations to post to (null = every matched GBP)
+     * @param  string|null  $lead  a line the composer puts first (the rain rule's storm line)
+     * @return list<SocialPost>
+     */
+    public function sharePost(Content $post, SocialTrigger $trigger, ?array $snapshot = null, ?array $networks = null, ?array $locationIds = null, ?SocialSuggestion $suggestion = null, ?string $lead = null): array
     {
         $channels = $this->channels((string) $post->site_id);
         if ($channels->isEmpty()) {
@@ -73,11 +81,22 @@ final class SocialSharer
         }
         $out = [];
         foreach ($channels as $channel) {
+            if ($networks !== null && ! in_array($channel->network, $networks, true)) {
+                continue;
+            }
+            if ($channel->network->perLocation()) {
+                if ($channel->location_id === null) {
+                    continue;   // a GBP profile the sync could not tie to a location never receives a share
+                }
+                if ($locationIds !== null && ! in_array($channel->location_id, $locationIds, true)) {
+                    continue;
+                }
+            }
             if (! $this->allowed($channel, SocialPost::SUBJECT_POST, (string) $post->id, $trigger)) {
                 continue;
             }
-            $copy = $this->composer->post($post, $channel->network, $trigger);
-            $out[] = $this->queue($channel, SocialPost::SUBJECT_POST, (string) $post->id, $trigger, $copy, $snapshot);
+            $copy = $this->composer->post($post, $channel->network, $trigger, $lead);
+            $out[] = $this->queue($channel, SocialPost::SUBJECT_POST, (string) $post->id, $trigger, $copy, $snapshot, $suggestion);
         }
 
         return $out;
@@ -147,9 +166,13 @@ final class SocialSharer
             SocialTrigger::JobPublished, SocialTrigger::PostPublished => ! (clone $rows)->where('trigger', $trigger->value)->where('status', '!=', SocialPostStatus::Failed->value)->exists(),
             // A refresh re-share needs the refresh to be newer than the last share (checked per post above)
             // and no share of this post on this channel inside the cooldown.
-            SocialTrigger::PostRefreshed, SocialTrigger::Momentum, SocialTrigger::Weather => ! (clone $rows)
+            SocialTrigger::PostRefreshed, SocialTrigger::Momentum => ! (clone $rows)
                 ->whereIn('status', [SocialPostStatus::Queued->value, SocialPostStatus::Sent->value])
                 ->where('created_at', '>=', Carbon::now()->subDays((int) config('launchpad.social.reshare_cooldown_days', 60)))
+                ->exists(),
+            SocialTrigger::Weather => ! (clone $rows)
+                ->whereIn('status', [SocialPostStatus::Queued->value, SocialPostStatus::Sent->value])
+                ->where('created_at', '>=', Carbon::now()->subDays((int) config('launchpad.social.weather.cooldown_days', 30)))
                 ->exists(),
             SocialTrigger::Manual => true,
         };
@@ -173,12 +196,13 @@ final class SocialSharer
     }
 
     /** @param  array<string, mixed>|null  $snapshot */
-    private function queue(SocialChannel $channel, string $subjectType, string $subjectId, SocialTrigger $trigger, SocialCopy $copy, ?array $snapshot): SocialPost
+    private function queue(SocialChannel $channel, string $subjectType, string $subjectId, SocialTrigger $trigger, SocialCopy $copy, ?array $snapshot, ?SocialSuggestion $suggestion = null): SocialPost
     {
         $when = $this->slot($channel);
         $post = SocialPost::withoutGlobalScope(SiteScope::class)->create([
             'site_id' => $channel->site_id,
             'social_channel_id' => $channel->id,
+            'social_suggestion_id' => $suggestion?->id,
             'subject_type' => $subjectType,
             'subject_id' => $subjectId,
             'network' => $channel->network,

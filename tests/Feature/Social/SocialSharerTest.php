@@ -10,6 +10,7 @@ use App\JobCapture\Publishing\JobPublisher;
 use App\Jobs\SendSocialPost;
 use App\Jobs\ShareJobSocially;
 use App\Jobs\SharePostSocially;
+use App\Jobs\SuggestPostShare;
 use App\Models\Content;
 use App\Models\Job;
 use App\Models\JobCity;
@@ -61,6 +62,7 @@ it('a published job shares to the serving location\'s GBP and the site-level Pag
     $far = Location::factory()->create(['site_id' => $site->id, 'name' => 'Far', 'lat' => 41.5, 'lng' => -74.0]);
     $homeGbp = sharerChannel($site, SocialNetwork::Gbp, $home);
     sharerChannel($site, SocialNetwork::Gbp, $far);
+    sharerChannel($site, SocialNetwork::Gbp, null, ['provider_channel_id' => 'gbp-unmatched']);   // a GBP profile the sync could not place
     $page = sharerChannel($site, SocialNetwork::Facebook);
     sharerChannel($site, SocialNetwork::Instagram, null, ['enabled' => false]);
     $job = sharerJob($site);   // coordinates from the factory sit nearer Home
@@ -150,7 +152,7 @@ it('a capped channel schedules the overflow for the next day at the slot hour', 
     Carbon::setTestNow();
 });
 
-it('the job publisher queues the share after a successful push; the content publisher on a post\'s first publish, and on a refresh', function () {
+it('the job publisher queues the share after a successful push; the content publisher shares a post\'s first publish and sends a refresh to the board', function () {
     Queue::fake();
     $site = PublishHarness::site();
     Http::fake([
@@ -180,9 +182,10 @@ it('the job publisher queues the share after a successful push; the content publ
     Queue::assertPushed(SharePostSocially::class, 1);
 
     $post = $post->fresh();
-    $post->forceFill(['status' => ContentStatus::Approved, 'meta' => array_merge($post->meta ?? [], ['question_refresh' => ['question' => 'q', 'answer' => 'a', 'refreshed_at' => now()->toIso8601String()]])])->save();
+    $post->forceFill(['status' => ContentStatus::Approved, 'meta' => array_merge($post->meta ?? [], ['question_refresh' => ['question' => 'how much is it', 'answer' => 'a', 'refreshed_at' => now()->toIso8601String()]])])->save();
     app(PublishContentService::class)->publish($post->fresh(), 'op');
-    Queue::assertPushed(SharePostSocially::class, fn (SharePostSocially $j) => $j->trigger === 'post_refreshed');
+    Queue::assertPushed(SharePostSocially::class, 1);   // no second automatic share …
+    Queue::assertPushed(SuggestPostShare::class, fn (SuggestPostShare $j) => $j->contentId === $post->id && $j->trigger === 'post_refreshed' && str_contains($j->reason, 'how much is it'));   // … the refresh goes to the board
 });
 
 it('the share jobs only act on live subjects', function () {

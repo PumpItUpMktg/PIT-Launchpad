@@ -2,22 +2,22 @@
 
 namespace App\Filament\Pages\Operate;
 
-use App\Enums\SocialNetwork;
 use App\Enums\SocialTrigger;
 use App\Models\Content;
-use App\Models\Job;
 use App\Models\Scopes\SiteScope;
-use App\Models\SocialChannel;
-use App\Models\SocialPost;
+use App\Models\SocialSuggestion;
 use App\Operator\ActiveTenant;
-use App\Social\SharesBoard;
-use App\Social\SocialSharer;
+use App\Social\ChannelSync;
+use App\Social\SuggestionBoard;
 use Filament\Notifications\Notification;
+use Throwable;
 
 /**
- * Operate → Shares: the tenant's social channels (a GBP per physical location, the Pages), what was
- * shared where and whether it landed, a retry for a failed share, a manual share of any published job
- * or post, and the GBP Q&A pairs of the question posts to copy onto the Business Profile by hand.
+ * Operate → Shares: the re-share board. Jobs share on their own and never appear here. A card per
+ * suggested post — why it is proposed, the copy as it will post, the platforms pre-ticked, the GBP
+ * locations resolved from the post — Approve posts it, Skip dismisses it. Below, what went out and why
+ * (approved and the rain rule's automatic shares). Channels are read from the posting provider; the
+ * only control is Sync now.
  */
 class OperateShares extends OperatePage
 {
@@ -31,19 +31,10 @@ class OperateShares extends OperatePage
 
     public ?string $siteId = null;
 
-    // Add-channel form
-    public string $newNetwork = SocialNetwork::Gbp->value;
+    /** @var array<string, array<string, bool>> suggestion id → network → ticked */
+    public array $picks = [];
 
-    public ?string $newLocationId = null;
-
-    public string $newChannelId = '';
-
-    public string $newLabel = '';
-
-    // Manual share
-    public ?string $shareJobId = null;
-
-    public ?string $sharePostId = null;
+    public ?string $pickPostId = null;
 
     public function mount(): void
     {
@@ -51,145 +42,116 @@ class OperateShares extends OperatePage
     }
 
     /** @return list<array<string, mixed>> */
-    public function getChannelsProperty(): array
+    public function getOpenProperty(): array
     {
-        return $this->siteId === null ? [] : app(SharesBoard::class)->channels($this->siteId);
-    }
+        if ($this->siteId === null) {
+            return [];
+        }
+        $rows = app(SuggestionBoard::class)->open($this->siteId);
+        foreach ($rows as $row) {
+            if (! isset($this->picks[$row['id']])) {
+                $this->picks[$row['id']] = array_fill_keys($row['networks'], true);
+            }
+        }
 
-    /** @return array<string, string> */
-    public function getLocationOptionsProperty(): array
-    {
-        return $this->siteId === null ? [] : app(SharesBoard::class)->locationOptions($this->siteId);
+        return $rows;
     }
 
     /** @return list<array<string, mixed>> */
-    public function getSharesProperty(): array
+    public function getDecidedProperty(): array
     {
-        return $this->siteId === null ? [] : app(SharesBoard::class)->shares($this->siteId);
+        return $this->siteId === null ? [] : app(SuggestionBoard::class)->decided($this->siteId);
     }
 
-    /** @return array{queued: int, sent: int, failed: int, sent_7d: int} */
-    public function getCountsProperty(): array
+    /** @return list<array<string, mixed>> */
+    public function getChannelsProperty(): array
     {
-        return $this->siteId === null ? ['queued' => 0, 'sent' => 0, 'failed' => 0, 'sent_7d' => 0] : app(SharesBoard::class)->counts($this->siteId);
+        return $this->siteId === null ? [] : app(SuggestionBoard::class)->channels($this->siteId);
     }
 
-    /** @return array{jobs: array<string, string>, posts: array<string, string>} */
-    public function getShareableProperty(): array
+    /** @return array<string, string> */
+    public function getPickableProperty(): array
     {
-        return $this->siteId === null ? ['jobs' => [], 'posts' => []] : app(SharesBoard::class)->shareable($this->siteId);
+        return $this->siteId === null ? [] : app(SuggestionBoard::class)->pickable($this->siteId);
     }
 
-    /** @return list<array{content_id: string, title: string, question: string, answer: string}> */
-    public function getGbpQaProperty(): array
+    public function approve(string $suggestionId): void
     {
-        return $this->siteId === null ? [] : app(SharesBoard::class)->gbpQa($this->siteId);
-    }
-
-    public function addChannel(): void
-    {
-        if ($this->siteId === null) {
+        $suggestion = $this->suggestion($suggestionId);
+        if ($suggestion === null) {
             return;
         }
-        $network = SocialNetwork::tryFrom($this->newNetwork);
-        $channelId = trim($this->newChannelId);
-        if ($network === null || $channelId === '') {
-            Notification::make()->warning()->title('Network and the provider channel id are required')->send();
+        $networks = array_keys(array_filter($this->picks[$suggestionId] ?? []));
+        if ($networks === []) {
+            Notification::make()->warning()->title('Tick at least one platform')->send();
 
             return;
         }
-        if ($network->perLocation() && ($this->newLocationId === null || $this->newLocationId === '')) {
-            Notification::make()->warning()->title('A GBP channel belongs to a physical location — pick one')->send();
+        $rows = app(SuggestionBoard::class)->approve($suggestion, $networks);
+        unset($this->picks[$suggestionId]);
+        if ($rows === []) {
+            Notification::make()->warning()->title('Nothing queued')->body('No enabled channel takes this share on the ticked platforms.')->send();
 
             return;
         }
-        SocialChannel::withoutGlobalScope(SiteScope::class)->updateOrCreate(
-            ['site_id' => $this->siteId, 'network' => $network->value, 'provider_channel_id' => $channelId],
-            ['location_id' => $network->perLocation() ? $this->newLocationId : ($this->newLocationId ?: null), 'label' => trim($this->newLabel) ?: null, 'enabled' => true],
-        );
-        $this->newChannelId = '';
-        $this->newLabel = '';
-        Notification::make()->success()->title('Channel saved')->send();
+        Notification::make()->success()->title(sprintf('Queued %d share(s)', count($rows)))->send();
     }
 
-    public function toggleChannel(string $channelId): void
+    public function skip(string $suggestionId): void
     {
-        $channel = $this->channel($channelId);
-        if ($channel !== null) {
-            $channel->forceFill(['enabled' => ! $channel->enabled])->save();
+        $suggestion = $this->suggestion($suggestionId);
+        if ($suggestion !== null) {
+            app(SuggestionBoard::class)->skip($suggestion);
+            unset($this->picks[$suggestionId]);
         }
     }
 
-    public function setChannelCap(string $channelId, ?string $cap): void
+    /** The operator's own pick: a published post onto the board as a suggestion. */
+    public function suggestPost(): void
     {
-        $channel = $this->channel($channelId);
-        if ($channel !== null) {
-            $value = $cap === null || trim($cap) === '' ? null : max(0, (int) $cap);
-            $channel->forceFill(['max_per_day' => $value === 0 ? null : $value])->save();
-        }
-    }
-
-    public function removeChannel(string $channelId): void
-    {
-        $this->channel($channelId)?->delete();
-    }
-
-    public function retry(string $postId): void
-    {
-        if ($this->siteId === null) {
+        if ($this->siteId === null || $this->pickPostId === null || $this->pickPostId === '') {
             return;
         }
-        $post = SocialPost::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->find($postId);
-        if ($post !== null) {
-            app(SocialSharer::class)->retry($post);
-            Notification::make()->success()->title('Queued again')->send();
-        }
-    }
-
-    public function shareJob(): void
-    {
-        if ($this->siteId === null || $this->shareJobId === null || $this->shareJobId === '') {
-            return;
-        }
-        $job = Job::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->with(['site', 'city', 'jobTypes'])->find($this->shareJobId);
-        if ($job === null) {
-            return;
-        }
-        $rows = app(SocialSharer::class)->shareJob($job, SocialTrigger::Manual);
-        $this->shareJobId = null;
-        $this->notifyQueued(count($rows));
-    }
-
-    public function sharePost(): void
-    {
-        if ($this->siteId === null || $this->sharePostId === null || $this->sharePostId === '') {
-            return;
-        }
-        $post = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->with(['site', 'silo', 'renderJobs'])->find($this->sharePostId);
+        $post = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->with('site')->find($this->pickPostId);
+        $this->pickPostId = null;
         if ($post === null) {
             return;
         }
-        $rows = app(SocialSharer::class)->sharePost($post, SocialTrigger::Manual);
-        $this->sharePostId = null;
-        $this->notifyQueued(count($rows));
-    }
-
-    private function notifyQueued(int $count): void
-    {
-        if ($count === 0) {
-            Notification::make()->warning()->title('Nothing queued')->body('No enabled channel takes this share — add or enable a channel first.')->send();
+        $made = app(SuggestionBoard::class)->suggest($post, SocialTrigger::Manual, 'Picked by hand');
+        if ($made === null) {
+            Notification::make()->warning()->title('Not added')->body('This post already has an open suggestion, or the site has no channels yet.')->send();
 
             return;
         }
-        Notification::make()->success()->title("Queued {$count} share(s)")->body('They post on the worker; this page shows each one as it lands.')->send();
+        Notification::make()->success()->title('Added to the board')->send();
     }
 
-    private function channel(string $channelId): ?SocialChannel
+    public function syncChannels(): void
+    {
+        if ($this->siteId === null) {
+            return;
+        }
+        $site = app(ActiveTenant::class)->site();
+        if ($site === null) {
+            return;
+        }
+        try {
+            $r = app(ChannelSync::class)->sync($site);
+        } catch (Throwable $e) {
+            Notification::make()->danger()->title('Sync failed')->body($e->getMessage())->send();
+
+            return;
+        }
+        Notification::make()->success()->title(sprintf('%d profile(s) synced', $r['synced']))
+            ->body($r['unmatched'] !== [] ? 'Unmatched GBP: '.implode(', ', $r['unmatched']) : null)->send();
+    }
+
+    private function suggestion(string $id): ?SocialSuggestion
     {
         if ($this->siteId === null) {
             return null;
         }
 
-        return SocialChannel::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->find($channelId);
+        return SocialSuggestion::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->find($id);
     }
 }

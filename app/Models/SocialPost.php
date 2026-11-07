@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property string $id
  * @property string $site_id
  * @property string $social_channel_id
+ * @property string|null $social_suggestion_id
  * @property string $subject_type job | post
  * @property string $subject_id
  * @property SocialNetwork $network

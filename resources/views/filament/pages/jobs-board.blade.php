@@ -363,7 +363,7 @@
                 </x-lp.empty>
             @else
                 <table class="jb-table">
-                    <thead><tr><th>Job</th><th>Where</th><th>Storefront</th><th>WP post</th><th>Status</th><th></th></tr></thead>
+                    <thead><tr><th>Job</th><th>Where</th><th>Storefront</th><th>WP post</th><th>Shared</th><th>Status</th><th></th></tr></thead>
                     <tbody>
                         @foreach ($rows as $j)
                             <tr wire:key="p-{{ $j['id'] }}">
@@ -376,6 +376,13 @@
                                 <td>{{ $j['place'] }}</td>
                                 <td>{{ $j['storefront'] ?? '—' }}</td>
                                 <td>{{ $j['wp_post_id'] ? '#'.$j['wp_post_id'] : '—' }}</td>
+                                <td>
+                                    @forelse ($j['shares'] ?? [] as $net => $st)
+                                        <x-lp.chip :tone="$st === 'sent' ? 'good' : ($st === 'failed' ? 'bad' : 'info')">{{ strtoupper($net === 'gbp' ? 'GBP' : $net) }} {{ $st === 'sent' ? '✓' : $st }}</x-lp.chip>
+                                    @empty
+                                        <span class="jb-meta">—</span>
+                                    @endforelse
+                                </td>
                                 <td><x-lp.chip :tone="$tone($j['status'])">{{ $j['status_label'] }}</x-lp.chip></td>
                                 <td>
                                     <div class="jb-act">
