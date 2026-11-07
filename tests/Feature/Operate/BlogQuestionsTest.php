@@ -67,3 +67,18 @@ it('shows the refresh diff on the Operate review card', function () {
         ->assertSee('A few hundred to a few thousand dollars.')
         ->assertSee('Sump Pump Renovation Cost');
 });
+
+it('the "Questions lane" filter choice narrows Candidates to the lane\'s candidates and Review to its refreshes', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Candidate, 'source_name' => 'questions', 'draft_trigger' => DraftTrigger::Question, 'title' => 'Ejector pump replacement cost', 'body' => null, 'meta' => ['question' => ['query' => 'q', 'phrasings' => [], 'impressions' => 85, 'clicks' => 0, 'position' => 26.2]]]);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Candidate, 'source_name' => 'youtube', 'title' => 'Basement waterproofing done right', 'body' => null]);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::NeedsReview, 'slug' => 'r', 'title' => 'Refreshed cost post', 'body' => '<p>x</p>',
+        'meta' => ['question_refresh' => ['query' => 'sump pump installation cost', 'refreshed_at' => now()->toIso8601String(), 'answer' => 'A.', 'faq' => [], 'proposal' => ['before' => [], 'after' => [], 'changed' => []]]]]);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::NeedsReview, 'slug' => 'n', 'title' => 'Ordinary news draft', 'body' => '<p>x</p>']);
+
+    Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)->set('siloFilter', OperateBlog::QUESTIONS_FILTER)
+        ->assertOk()
+        ->assertSee('Ejector pump replacement cost')->assertDontSee('Basement waterproofing done right')
+        ->set('tab', 'review')
+        ->assertSee('Refreshed cost post')->assertDontSee('Ordinary news draft');
+});

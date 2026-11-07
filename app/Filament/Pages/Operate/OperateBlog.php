@@ -100,7 +100,9 @@ class OperateBlog extends OperatePage
     /** @return list<array<string, mixed>> */
     public function getCandidatesProperty(): array
     {
-        return app(BlogBoard::class)->candidates($this->siteFilter, $this->filterSilo());
+        $rows = app(BlogBoard::class)->candidates($this->siteFilter, $this->filterSilo());
+
+        return $this->questionsOnly() ? array_values(array_filter($rows, fn (array $r): bool => ($r['source'] ?? null) === 'questions')) : $rows;
     }
 
     /** @return list<array<string, mixed>> */
@@ -124,7 +126,9 @@ class OperateBlog extends OperatePage
     /** @return list<array<string, mixed>> */
     public function getReviewProperty(): array
     {
-        return app(BlogBoard::class)->review($this->siteFilter, $this->filterSilo());
+        $rows = app(BlogBoard::class)->review($this->siteFilter, $this->filterSilo());
+
+        return $this->questionsOnly() ? array_values(array_filter($rows, fn (array $r): bool => ($r['source'] ?? null) === 'questions' || ! empty($r['refresh']))) : $rows;
     }
 
     /** Approved posts queued to publish (approved → rendering → pushing), not yet live. @return list<array<string, mixed>> */
@@ -536,9 +540,17 @@ class OperateBlog extends OperatePage
             ->body("'{$content->title}' was removed from WordPress and moved back to Candidates — regenerate/re-review it, then publish so its silo category re-resolves.")->send();
     }
 
+    /** The filter's "Questions lane" choice: the lane's candidates and refreshes only, every silo. */
+    public const QUESTIONS_FILTER = 'questions';
+
+    private function questionsOnly(): bool
+    {
+        return $this->siloFilter === self::QUESTIONS_FILTER;
+    }
+
     private function filterSilo(): ?string
     {
-        return $this->siloFilter !== null && $this->siloFilter !== '' ? $this->siloFilter : null;
+        return $this->siloFilter !== null && $this->siloFilter !== '' && ! $this->questionsOnly() ? $this->siloFilter : null;
     }
 
     private function ownedPost(string $contentId): ?Content
