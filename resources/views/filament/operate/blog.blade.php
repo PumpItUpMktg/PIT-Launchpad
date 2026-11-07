@@ -113,6 +113,35 @@
 
         {{-- ─── Candidates ─── --}}
         @if ($tab === 'candidates')
+            @php $marks = $this->questionRefreshMarks; $refreshing = collect($marks)->contains(fn ($m) => $m['state'] === 'refreshing'); @endphp
+            @if ($marks !== [])
+                {{-- The questions lane's refresh suggestions: posts that already answer a question searchers ask but
+                     rank below the top slots. Refresh, not a second post. Polls while one is in flight. --}}
+                <div class="ob-card" style="margin-bottom:12px" @if ($refreshing) wire:poll.visible.10s @endif>
+                    <div class="ob-chips"><span class="ob-chip kw">Refresh suggested</span><span class="ob-muted">{{ count($marks) }} {{ \Illuminate\Support\Str::plural('post', count($marks)) }} · from the Search Console questions lane · Refresh adds a direct answer at the top, a Q&A section with FAQ schema at the end, and a title proposal — into Review, nothing publishes until approved</span></div>
+                    @foreach ($marks as $m)
+                        <div style="display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:8px 0;border-top:1px solid rgba(148,163,184,.25)" wire:key="obq-{{ $m['id'] }}">
+                            <strong>“{{ $m['query'] }}”</strong>
+                            <span class="ob-muted">asked {{ number_format($m['impressions']) }}×@if ($m['position'] !== null) · pos {{ number_format($m['position'], 1) }}@endif</span>
+                            @if ($m['also'] !== [])<span class="ob-muted" title="{{ implode(' · ', $m['also']) }}">+{{ count($m['also']) }} more {{ \Illuminate\Support\Str::plural('question', count($m['also'])) }}</span>@endif
+                            <span class="ob-muted">→ @if ($m['url'])<a href="{{ $m['url'] }}" target="_blank" rel="noopener" style="text-decoration:underline">{{ $m['title'] }} ↗</a>@else{{ $m['title'] }}@endif</span>
+                            @if ($m['silo'])<span class="ob-chip">{{ $m['silo'] }}</span>@endif
+                            @if (! $siteFilter && $m['tenant'])<span class="ob-chip warn">{{ $m['tenant'] }}</span>@endif
+                            @if ($m['state'] === 'refreshing')
+                                <span class="ob-chip" style="background:rgba(79,70,229,.12);color:#6366f1">✍ refreshing…</span>
+                            @elseif ($m['state'] === 'refreshed')
+                                <span class="ob-chip">refreshed {{ $m['refreshed_at'] }}</span>
+                            @else
+                                @if ($m['state'] === 'failed')<span class="ob-chip danger" title="{{ $m['error'] }}">refresh failed</span>@endif
+                                <button class="ob-btn primary" wire:click="refreshForQuestion('{{ $m['id'] }}')" wire:loading.attr="disabled" wire:target="refreshForQuestion('{{ $m['id'] }}')">
+                                    <span wire:loading.remove wire:target="refreshForQuestion('{{ $m['id'] }}')">{{ $m['state'] === 'failed' ? 'Retry refresh' : 'Refresh' }}</span>
+                                    <span wire:loading wire:target="refreshForQuestion('{{ $m['id'] }}')"><span class="ob-spinner"></span> Queuing…</span>
+                                </button>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            @endif
             <div class="ob-grid">
                 @forelse ($this->candidates as $c)
                     <div class="ob-card" wire:key="obc-{{ $c['id'] }}">
@@ -125,6 +154,7 @@
                                 <span class="ob-chip">{{ $c['source'] }}</span>
                             @endif
                             @if ($c['silo'])<span class="ob-chip">{{ $c['silo'] }}</span>@endif
+                            @if (! empty($c['question']))<span class="ob-chip kw" title="{{ implode(' · ', $c['question']['phrasings']) }}">asked {{ number_format($c['question']['impressions']) }}×@if ($c['question']['position'] !== null) · pos {{ number_format($c['question']['position'], 1) }}@endif</span>@endif
                             @if (! $siteFilter && $c['tenant'])<span class="ob-chip warn">{{ $c['tenant'] }}</span>@endif
                         </div>
                         <h3>{{ $c['title'] }}</h3>
@@ -178,7 +208,20 @@
                         @elseif ($d['state'] === 'draft_failed')
                             <div class="ob-muted" style="color:#dc2626">{{ $d['draft_error'] ?: 'The draft attempt failed.' }}</div>
                         @else
-                            <div class="ob-excerpt">{{ $d['excerpt'] !== '' ? $d['excerpt'] : 'No body yet — generate the draft to review it.' }}</div>
+                            @if (! empty($d['refresh']))
+                                @php $rf = $d['refresh']; @endphp
+                                <div class="ob-excerpt" style="border-left:3px solid #6366f1;padding-left:10px">
+                                    <strong>Refreshed for “{{ $rf['query'] }}”</strong> — direct answer added at the top{{ $rf['faq_count'] > 0 ? ', '.$rf['faq_count'].' Q&A '.\Illuminate\Support\Str::plural('pair', $rf['faq_count']).' with FAQ schema at the end' : '' }}.
+                                    <div style="margin-top:4px">{{ $rf['answer'] }}</div>
+                                    @forelse ($rf['changes'] as $ch)
+                                        <div style="margin-top:4px"><span class="ob-muted">{{ $ch['field'] }}:</span> <s class="ob-muted">{{ $ch['before'] }}</s> → <strong>{{ $ch['after'] }}</strong></div>
+                                    @empty
+                                        <div class="ob-muted" style="margin-top:4px">Title and SEO fields unchanged.</div>
+                                    @endforelse
+                                </div>
+                            @else
+                                <div class="ob-excerpt">{{ $d['excerpt'] !== '' ? $d['excerpt'] : 'No body yet — generate the draft to review it.' }}</div>
+                            @endif
                         @endif
                         <div class="ob-actions">
                             @if ($d['state'] === 'writing')
