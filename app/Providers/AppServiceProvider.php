@@ -138,6 +138,8 @@ use App\Reviews\Publish\DbServiceReviewProvider;
 use App\Security\Audit;
 use App\Security\Verification\ConnectionVerifier;
 use App\Security\Verification\WordpressConnectionVerifier;
+use App\Social\Provider\MockSocialProvider;
+use App\Social\Provider\SocialProvider;
 use App\Support\CurrentSite;
 use App\Support\Tenancy\ResetTenantOnJobBoundary;
 use App\TownRank\TownRankPoints;
@@ -286,6 +288,10 @@ class AppServiceProvider extends ServiceProvider
         // trade-specific Air Quality / Pollen, job-capture counts) bind here as keys
         // come online, with no change to the relevance scoring that consumes them.
         $this->app->singleton(LocalSignalProvider::class, MockLocalSignalProvider::class);
+
+        // Social shares: the posting transport. Mock (records, never posts) until the SoMePoster adapter
+        // lands; tests read the mock's `published` list.
+        $this->app->singleton(SocialProvider::class, MockSocialProvider::class);
 
         // §5 SERP + local-grid run on the real DataForSEO adapters (Step 2,
         // Adapter 1). They supply NORMALIZED signals only — opportunity scoring

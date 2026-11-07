@@ -88,6 +88,12 @@ return [
 
     // DataForSEO — SERP + keyword data (§5). `mode` selects the standard
     // (task-based, cheaper) vs live (synchronous) request mode.
+    'someposter' => [
+        'api_key' => env('SOMEPOSTER_API_KEY'),
+        'base_url' => env('SOMEPOSTER_BASE_URL', 'https://api.someposter.com'),
+        'timeout' => (int) env('SOMEPOSTER_TIMEOUT', 30),
+    ],
+
     'dataforseo' => [
         'login' => env('DATAFORSEO_LOGIN'),
         'password' => env('DATAFORSEO_PASSWORD'),

@@ -10,11 +10,13 @@ use App\Enums\ContentSource;
 use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\RedirectSource;
+use App\Enums\SocialTrigger;
 use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
 use App\Jobs\PingIndexNow;
 use App\Jobs\PublishContent;
 use App\Jobs\PublishRedirects;
+use App\Jobs\SharePostSocially;
 use App\Locations\LegacyRedirectAuditor;
 use App\Models\Content;
 use App\Models\Redirect;
@@ -173,6 +175,7 @@ class PublishContentService
         }
 
         $wpPostId = (int) ($response['wp_post_id'] ?? 0);
+        $firstPublish = $content->published_at === null;
         $content->forceFill([
             'wp_post_id' => $wpPostId,
             'status' => ContentStatus::Published,
@@ -222,6 +225,18 @@ class PublishContentService
         // swallow-all — never affects this publish. Google doesn't participate (sitemap covers it).
         if ((bool) config('services.indexnow.enabled', true) && (bool) config('services.indexnow.ping_on_publish', true)) {
             PingIndexNow::dispatch($content->id);
+        }
+
+        // Publish-day share of a POST to the site's enabled social channels — on its first publish, and
+        // again when a question refresh lands (the sharer checks the refresh is newer than the last share).
+        // Never for a page; never for a plain re-push.
+        if ($content->kind === ContentKind::Post && (bool) config('launchpad.social.enabled', true)) {
+            $refreshed = is_array($content->meta['question_refresh'] ?? null) && isset($content->meta['question_refresh']['refreshed_at']);
+            if ($firstPublish) {
+                SharePostSocially::dispatch($content->id, SocialTrigger::PostPublished->value);
+            } elseif ($refreshed) {
+                SharePostSocially::dispatch($content->id, SocialTrigger::PostRefreshed->value);
+            }
         }
 
         return PublishResult::published($content, $wpPostId);

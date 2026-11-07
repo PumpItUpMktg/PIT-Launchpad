@@ -7,6 +7,7 @@ use App\Integrations\Wordpress\WordpressClientFactory;
 use App\Integrations\Wordpress\WordpressException;
 use App\Jobs\PingJobIndexNow;
 use App\Jobs\RepushJobPages;
+use App\Jobs\ShareJobSocially;
 use App\Models\Job;
 
 /**
@@ -57,6 +58,12 @@ final class JobPublisher
         // The pages that show this job (its services' pages, the location pages nearby) render at push time,
         // so they are re-pushed — debounced per site, once per batch, after a short delay.
         RepushJobPages::after((string) $job->site_id);
+
+        // Publish-day share: the job goes to its location's GBP and the site's Pages (the approval that
+        // got it here is the approval). Idempotent per channel — a re-push never re-shares.
+        if ((bool) config('launchpad.social.enabled', true)) {
+            ShareJobSocially::dispatch((string) $job->id);
+        }
     }
 
     /**

@@ -875,6 +875,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Social shares (jobs → the location's GBP + the Pages; posts → the Pages)
+    |--------------------------------------------------------------------------
+    | Publish-day shares fire from the job / post publishers; re-shares (weather,
+    | upward movement) honour the cooldown. Links are UTM-tagged so GA4 attributes
+    | the click to the network and the share. The transport is the SocialProvider
+    | seam — `mock` until the SoMePoster adapter binds (`someposter`).
+    */
+    'social' => [
+        'enabled' => (bool) env('LAUNCHPAD_SOCIAL_ENABLED', true),
+        'provider' => env('LAUNCHPAD_SOCIAL_PROVIDER', 'mock'),
+        'utm' => (bool) env('LAUNCHPAD_SOCIAL_UTM', true),
+        'utm_medium' => 'social',
+        'excerpt_chars' => (int) env('LAUNCHPAD_SOCIAL_EXCERPT_CHARS', 320),
+        'reshare_cooldown_days' => (int) env('LAUNCHPAD_SOCIAL_RESHARE_COOLDOWN_DAYS', 60),
+        'slot_hour' => (int) env('LAUNCHPAD_SOCIAL_SLOT_HOUR', 14),   // UTC hour a capped channel's overflow posts at
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | GSC time-series retention (rank-source split relay)
     |--------------------------------------------------------------------------
     | Search Console serves a rolling ~16-month window; anything older is gone

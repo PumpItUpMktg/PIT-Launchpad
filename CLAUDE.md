@@ -685,3 +685,34 @@ client-facing surface. View-models under `app/Client/`; widgets under
   primary_color/accent_color); `Conversion` model + table (no attribution column,
   by design); enums `ConversionType` / `ConversionSource`; the `ConversionProvider`
   (GA4/GHL) mock-first seam.
+
+## Social shares (jobs → the serving location's GBP + the Pages; posts → the Pages)
+
+`app/Social/`. The approval that already exists is the approval: a job share queues when the job
+publishes (`JobPublisher` → `ShareJobSocially`), a post share when a post first publishes and again
+when a question refresh lands (`PublishContentService` → `SharePostSocially`, trigger
+`post_published` / `post_refreshed`; never a page, never a plain re-push). Everything else is
+operator-driven from Operate → Shares or a later re-share rule.
+
+- **Channels** (`SocialChannel`): a GBP channel belongs to a physical `Location` (a job posts to the
+  GBP of the location that serves its town — `LocationRouter`: coverage-area GEOID → served_towns →
+  nearest → only), Facebook/Instagram are site-level. `provider_channel_id` is the posting provider's
+  connected-profile id. `max_per_day` is the cadence cap (null = none; overflow lands the next day at
+  `launchpad.social.slot_hour`).
+- **Composition** (`SocialComposer`) is deterministic from what the engine wrote: job → title ("service
+  in town") + excerpt of the enhanced write-up + brand-serving-town line + primary photo + Learn-more
+  link; post → the mined question + the direct answer (`meta.question_refresh.answer`) + title, else
+  title + meta description, + hero image + link. Hashtags (`Hashtags`) from service + town (jobs) or
+  silo + brand (posts) on Facebook/Instagram only — GBP renders them as plain text, so none there.
+  Copy is cut at a sentence inside the network cap; the link always survives. Every link is UTM-tagged
+  (`ShareLink`: source=network, medium=social, campaign=slug, content=trigger) so GA4 attributes clicks.
+- **Sharer** (`SocialSharer`): one `SocialPost` row per enabled channel, idempotent per
+  (channel, subject, trigger) for the publish triggers, `reshare_cooldown_days` for refresh/momentum/
+  weather, manual always goes. `SendSocialPost` (unique per row, one try) pushes through the
+  `SocialProvider` seam → `sent` (provider id + permalink) or `failed` (retry from the panel).
+- **Provider**: `MockSocialProvider` is bound (records, never posts). The SoMePoster adapter binds
+  here once the API key exists (`services.someposter`); direct GBP/Facebook APIs are not built.
+- **GBP Q&A** is a copy step: the Shares panel lists each question post's question + short answer +
+  tagged link to post on the Business Profile by hand until the Q&A API lands.
+- **Not yet**: the re-share rules (weather from the NOAA series, upward movement from Search Console),
+  share markers on the position trend, Instagram image sizing.
