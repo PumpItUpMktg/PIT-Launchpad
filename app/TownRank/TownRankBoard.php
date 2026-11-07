@@ -127,7 +127,7 @@ final class TownRankBoard
      *     outlines: list<array{geoid: string, label: string, paths: list<string>}>,
      *     progress: array{collected: int, points: int, remaining: int, eta_seconds: int|null, eta: string|null}|null,
      *     uncollected: int|null,
-     *     summary: array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int},
+     *     summary: array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int, pack_measured: int, pack_shown: int, pack_in: int, pack_gained: int, pack_lost: int},
      *     has_previous: bool,
      *     markers: list<array{id: string, x: float, y: float, rank: int|null, prev_rank: int|null, change: string|null, color: string, delta_color: string, label: string, population: int, page: bool}>,
      *     rows: list<array<string, mixed>>
@@ -174,7 +174,7 @@ final class TownRankBoard
      *
      * @return list<array{
      *     keyword_id: string, query: string, priority: int|null, silo_id: string|null, silo: string|null, scanned_at: string|null, pending: bool, collect_first: bool, towns: int, thumbnail_mode: string, has_previous: bool,
-     *     modes: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int}|null>,
+     *     modes: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, pending: int, up: int, down: int, new: int, lost: int, same: int, pack_measured: int, pack_shown: int, pack_in: int, pack_gained: int, pack_lost: int}|null>,
      *     progress: array<string, array{collected: int, points: int, remaining: int, eta_seconds: int|null, eta: string|null}|null>,
      *     uncollected: array<string, int|null>,
      *     visibility: array<string, array{score: int|null, previous: int|null, delta: int|null, baseline_scans: int, towns: int, page1_towns: int, top3_towns: int}|null>,
@@ -394,6 +394,11 @@ final class TownRankBoard
                 'prev_rank' => $row["{$prefix}_prev_rank"] !== null ? (int) $row["{$prefix}_prev_rank"] : null,
                 'change' => is_string($row["{$prefix}_change"]) ? $row["{$prefix}_change"] : null,
                 'competitors' => $competitors,
+                // The LOCAL PACK on that page: the business's slot, whether a pack showed, and the cards.
+                'pack_rank' => $row["{$prefix}_pack_rank"],
+                'pack_shown' => $row["{$prefix}_pack_shown"],
+                'pack_change' => $row["{$prefix}_pack_change"],
+                'pack' => $row["{$prefix}_pack_top"],
                 // When THIS town was read, not when the scan was started: a scan collects incrementally,
                 // so a rank on screen can be hours older than the scan it belongs to.
                 'measured_at' => $point?->collected_at?->toIso8601String(),

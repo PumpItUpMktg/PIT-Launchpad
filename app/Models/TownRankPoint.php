@@ -28,6 +28,8 @@ use Illuminate\Support\Facades\DB;
  * @property int|null $rank
  * @property string|null $ranking_url
  * @property list<array{position: int, url: string, domain: string, title?: string, website_name?: string, breadcrumb?: string, masked?: bool}>|null $top_results
+ * @property int|null $pack_rank the business's slot in the local pack (1–3), null = not in it (or no pack / not measured)
+ * @property list<array{position: int, title: string, domain: string, url: string, rating: float|null, votes: int|null}>|null $pack_results the pack cards the page showed; null = not measured (a scan before the pack lane), [] = no pack on that page
  * @property string|null $provider_task_id
  * @property int $read_attempts reads that produced no answer; at the ceiling the point is closed unreadable
  * @property string|null $read_error why it could never be read — set means "no data", never "not found"
@@ -50,10 +52,13 @@ class TownRankPoint extends Model
     {
         $json = DB::connection()->getDriverName() === 'pgsql' ? 'top_results::text' : 'top_results';
 
+        $pack = DB::connection()->getDriverName() === 'pgsql' ? 'pack_results::text' : 'pack_results';
+
         return $query->select([
             'id', 'site_id', 'scan_id', 'coverage_area_id', 'geo_id', 'label', 'state', 'lat', 'lng', 'query',
-            'rank', 'ranking_url', 'collected_at', 'read_error', 'read_attempts', 'provider_task_id',
+            'rank', 'ranking_url', 'pack_rank', 'collected_at', 'read_error', 'read_attempts', 'provider_task_id',
             DB::raw("CASE WHEN top_results IS NULL OR {$json} IN ('[]', 'null') THEN 1 ELSE 0 END AS no_results"),
+            DB::raw("CASE WHEN pack_results IS NULL THEN NULL WHEN {$pack} IN ('[]', 'null') THEN 0 ELSE 1 END AS pack_shown"),
         ]);
     }
 
@@ -67,6 +72,24 @@ class TownRankPoint extends Model
         return ($this->top_results ?? []) === [];
     }
 
+    /**
+     * Whether the page this point read showed a local pack: true / false, or null when the point was
+     * collected before the pack lane existed (not measured). Reads the light flag or the stored cards.
+     */
+    public function packShown(): ?bool
+    {
+        if (array_key_exists('pack_shown', $this->getAttributes())) {
+            $flag = $this->getAttributes()['pack_shown'];
+
+            return $flag === null ? null : (int) $flag === 1;
+        }
+        if ($this->pack_results === null) {
+            return null;
+        }
+
+        return $this->pack_results !== [];
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
@@ -75,6 +98,8 @@ class TownRankPoint extends Model
             'lng' => 'decimal:7',
             'rank' => 'integer',
             'top_results' => 'array',
+            'pack_rank' => 'integer',
+            'pack_results' => 'array',
             'read_attempts' => 'integer',
             'collected_at' => 'datetime',
         ];

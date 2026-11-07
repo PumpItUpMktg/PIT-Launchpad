@@ -194,3 +194,48 @@ it('a page younger than the age floor at the latest scan is set aside even when 
         ->expectsOutputToContain('▲ up 0 · ▼ down 0 · new 0 · lost 2 · unchanged 0')
         ->assertExitCode(0);
 });
+
+it('counts the local pack per mode — measured, shown, in it — with gained / lost against the baseline, and reads the same through the wall\'s light query', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.com']);
+    $loc = Location::factory()->create(['site_id' => $site->id, 'lat' => 40.0, 'lng' => -74.0]);
+    $areas = [];
+    foreach (['A', 'B', 'C', 'D'] as $i => $name) {
+        $areas[$name] = CoverageArea::factory()->create(['site_id' => $site->id, 'name' => $name, 'population' => 1000 - $i, 'lat' => 40.0 + $i / 100, 'lng' => -74.0, 'source_location_ids' => [$loc->id]])->id;
+    }
+    $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service']);
+    $us = ['position' => 1, 'title' => 'SPG', 'domain' => 'spg.com', 'url' => 'https://spg.com/', 'rating' => 4.9, 'votes' => 10];
+    $them = ['position' => 2, 'title' => 'Rival', 'domain' => 'rival.com', 'url' => 'https://rival.com/', 'rating' => 4.1, 'votes' => 3];
+
+    $prev = reportScan($site, $kw, 'local', 'complete', '2026-09-01 10:00:00', [$areas['A'] => 5, $areas['B'] => 5, $areas['C'] => 5, $areas['D'] => 5]);
+    $now = reportScan($site, $kw, 'local', 'complete', '2026-09-08 10:00:00', [$areas['A'] => 5, $areas['B'] => 5, $areas['C'] => 5, $areas['D'] => 5]);
+    $set = function (TownRankScan $scan, string $area, ?int $rank, ?array $pack): void {
+        TownRankPoint::withoutGlobalScopes()->where('scan_id', $scan->id)->where('coverage_area_id', $area)->update(['pack_rank' => $rank, 'pack_results' => $pack === null ? null : json_encode($pack)]);
+    };
+    // A: in the pack both times. B: gained it. C: lost it. D: measured, no pack on the page.
+    $set($prev, $areas['A'], 1, [$us, $them]);
+    $set($now, $areas['A'], 2, [[...$them, 'position' => 1], [...$us, 'position' => 2]]);
+    $set($prev, $areas['B'], null, [$them]);
+    $set($now, $areas['B'], 1, [$us, $them]);
+    $set($prev, $areas['C'], 1, [$us]);
+    $set($now, $areas['C'], null, [$them]);
+    $set($prev, $areas['D'], null, []);
+    $set($now, $areas['D'], null, []);
+
+    $report = app(TownRankReport::class);
+    foreach ([true, false] as $withTopResults) {
+        $data = $report->forKeyword($site, $kw, withTopResults: $withTopResults);
+        $rows = collect($data['rows'])->keyBy('coverage_area_id');
+        expect($data['summary']['local'])->toMatchArray(['pack_measured' => 4, 'pack_shown' => 3, 'pack_in' => 2, 'pack_gained' => 1, 'pack_lost' => 1])
+            ->and($rows[$areas['A']]['local_pack_rank'])->toBe(2)->and($rows[$areas['A']]['local_pack_change'])->toBe('same')
+            ->and($rows[$areas['B']]['local_pack_change'])->toBe('gained')
+            ->and($rows[$areas['C']]['local_pack_rank'])->toBeNull()->and($rows[$areas['C']]['local_pack_change'])->toBe('lost')
+            ->and($rows[$areas['D']]['local_pack_shown'])->toBeFalse()
+            ->and($rows[$areas['A']]['local_pack_top'])->toBe($withTopResults ? ['1 Rival (4.1★ · 3)', '2 SPG (4.9★ · 10)'] : []);
+    }
+
+    // A point from before the pack lane is "not measured": no counts, no movement.
+    $set($now, $areas['A'], null, null);
+    $data = $report->forKeyword($site, $kw);
+    expect(collect($data['rows'])->keyBy('coverage_area_id')[$areas['A']]['local_pack_shown'])->toBeNull()
+        ->and($data['summary']['local']['pack_measured'])->toBe(3);
+});

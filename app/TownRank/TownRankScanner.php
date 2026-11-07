@@ -173,7 +173,7 @@ final class TownRankScanner
                     continue;
                 }
 
-                [$items, $error] = $this->readTask($taskId);
+                [$items, $error, $pack] = $this->readTask($taskId);
                 $spent++;
                 if ($items === null) {
                     $skipped++;
@@ -181,7 +181,7 @@ final class TownRankScanner
 
                     continue;
                 }
-                $point->forceFill([...$this->extract($items, $host, $site?->brand_name), 'collected_at' => Carbon::now(), 'read_error' => null])->save();
+                $point->forceFill([...$this->extract($items, $host, $site?->brand_name, $pack), 'collected_at' => Carbon::now(), 'read_error' => null])->save();
             }
         }
         if ($skipped > 0) {
@@ -239,7 +239,7 @@ final class TownRankScanner
 
                 continue;
             }
-            $point->forceFill([...$this->extract($read['items'], $host, $site?->brand_name), 'collected_at' => Carbon::now(), 'read_error' => null])->save();
+            $point->forceFill([...$this->extract($read['items'], $host, $site?->brand_name, $read['pack']), 'collected_at' => Carbon::now(), 'read_error' => null])->save();
         }
 
         if ($notReady > 0 || $failed > 0) {
@@ -255,26 +255,28 @@ final class TownRankScanner
      * One direct task read: the parsed items, or null with the reason, or "pending" when DataForSEO has not
      * finished the task. Fatal (auth / quota) failures propagate.
      *
-     * @return array{items: list<array{position: int, url: string, domain: string, title: string}>|null, error: string|null, pending: bool}
+     * @return array{items: list<array{position: int, url: string, domain: string, title: string}>|null, pack: list<array{position: int, title: string, domain: string, url: string, rating: float|null, votes: int|null}>|null, error: string|null, pending: bool}
      */
     private function readTaskDirect(string $taskId): array
     {
         try {
-            return ['items' => DataForSeoClient::parseOrganic($this->client->taskGet(self::ORGANIC_GET, $taskId)), 'error' => null, 'pending' => false];
+            $result = $this->client->taskGet(self::ORGANIC_GET, $taskId);
+
+            return ['items' => DataForSeoClient::parseOrganic($result), 'pack' => DataForSeoClient::parsePack($result), 'error' => null, 'pending' => false];
         } catch (DataForSeoException $e) {
             if ($e->statusCode === DataForSeoException::NO_SEARCH_RESULTS) {
-                return ['items' => [], 'error' => null, 'pending' => false];
+                return ['items' => [], 'pack' => [], 'error' => null, 'pending' => false];
             }
             if ($e->isTaskPending()) {
-                return ['items' => null, 'error' => null, 'pending' => true];
+                return ['items' => null, 'pack' => null, 'error' => null, 'pending' => true];
             }
             if ($e->fatal) {
                 throw $e;
             }
 
-            return ['items' => null, 'error' => $e->getMessage(), 'pending' => false];
+            return ['items' => null, 'pack' => null, 'error' => $e->getMessage(), 'pending' => false];
         } catch (Throwable $e) {
-            return ['items' => null, 'error' => $e->getMessage(), 'pending' => false];
+            return ['items' => null, 'pack' => null, 'error' => $e->getMessage(), 'pending' => false];
         }
     }
 
@@ -298,14 +300,14 @@ final class TownRankScanner
             if ($deadline !== null && microtime(true) >= $deadline) {
                 break;
             }
-            [$items] = $this->readTask((string) $point->provider_task_id);
+            [$items, , $pack] = $this->readTask((string) $point->provider_task_id);
             $out['read']++;
             if ($items === null) {
                 $out['skipped']++;
 
                 continue;
             }
-            $fields = $this->extract($items, $host, $site?->brand_name);
+            $fields = $this->extract($items, $host, $site?->brand_name, $pack);
             $point->forceFill([...$fields, 'collected_at' => Carbon::now(), 'read_error' => null])->save();
             $out[$fields['rank'] !== null ? 'ranked' : 'not_found']++;
         }
@@ -371,23 +373,25 @@ final class TownRankScanner
      * empty list, a real answer); null plus a reason when the read did not produce an answer (rate-limited,
      * still in queue, transport, a task the vendor rejects). A fatal auth/quota error propagates.
      *
-     * @return array{0: list<array{position: int, url: string, domain: string}>|null, 1: string|null}
+     * @return array{0: list<array{position: int, url: string, domain: string}>|null, 1: string|null, 2: list<array{position: int, title: string, domain: string, url: string, rating: float|null, votes: int|null}>|null}
      */
     private function readTask(string $taskId): array
     {
         try {
-            return [DataForSeoClient::parseOrganic($this->client->taskGet(self::ORGANIC_GET, $taskId)), null];
+            $result = $this->client->taskGet(self::ORGANIC_GET, $taskId);
+
+            return [DataForSeoClient::parseOrganic($result), null, DataForSeoClient::parsePack($result)];
         } catch (DataForSeoException $e) {
             if ($e->statusCode === DataForSeoException::NO_SEARCH_RESULTS) {
-                return [[], null];   // Google returned an empty page for this query: genuinely not found
+                return [[], null, []];   // Google returned an empty page for this query: genuinely not found
             }
             if ($e->fatal) {
                 throw $e;            // auth / quota: stop the run, nothing here is collectable
             }
 
-            return [null, $e->getMessage()];
+            return [null, $e->getMessage(), null];
         } catch (Throwable $e) {
-            return [null, $e->getMessage()];
+            return [null, $e->getMessage(), null];
         }
     }
 
@@ -475,9 +479,10 @@ final class TownRankScanner
      * The site's rank + ranking URL at a town (first result on the site's own host) and the top results.
      *
      * @param  list<array{position: int, url: string, domain: string, title?: string, website_name?: string, breadcrumb?: string, masked?: bool}>  $items
-     * @return array{rank: int|null, ranking_url: string|null, top_results: list<array{position: int, url: string, domain: string}>}
+     * @param  list<array{position: int, title: string, domain: string, url: string, rating: float|null, votes: int|null}>|null  $pack  the page's local-pack cards (null = not read)
+     * @return array{rank: int|null, ranking_url: string|null, top_results: list<array<string, mixed>>, pack_rank: int|null, pack_results: list<array<string, mixed>>|null}
      */
-    private function extract(array $items, ?string $host, ?string $brand = null): array
+    private function extract(array $items, ?string $host, ?string $brand = null, ?array $pack = null): array
     {
         usort($items, fn (array $a, array $b): int => $a['position'] <=> $b['position']);
 
@@ -515,7 +520,46 @@ final class TownRankScanner
             'rank' => $rank,
             'ranking_url' => $url,
             'top_results' => array_slice($items, 0, self::TOP_RESULTS),
+            'pack_rank' => $pack === null ? null : self::packRank($pack, $host, $brand),
+            'pack_results' => $pack,
         ];
+    }
+
+    /**
+     * The business's slot in the local pack: the card whose website is the site's host, else (a listing
+     * with no website shows no domain) the card named exactly as the brand, else a card named "Brand …"
+     * — a multi-office business is listed as "Brand - Town" / "Brand Doylestown"; a different business that
+     * merely starts with the same words is the risk that rule takes, so it runs only with no domain to go on.
+     *
+     * @param  list<array{position: int, title: string, domain: string, url: string, rating: float|null, votes: int|null}>  $pack
+     */
+    public static function packRank(array $pack, ?string $host, ?string $brand): ?int
+    {
+        if ($host !== null) {
+            foreach ($pack as $card) {
+                $cardHost = $card['domain'] !== '' ? $card['domain'] : (string) (parse_url($card['url'], PHP_URL_HOST) ?: '');
+                if ($cardHost !== '' && self::sameHost($cardHost, $host)) {
+                    return $card['position'];
+                }
+            }
+        }
+        $brandKey = $brand !== null ? self::nameKey($brand) : '';
+        if ($brandKey === '') {
+            return null;
+        }
+        foreach ($pack as $card) {
+            if (self::nameKey($card['title']) === $brandKey) {
+                return $card['position'];
+            }
+        }
+        foreach ($pack as $card) {
+            $key = self::nameKey($card['title']);
+            if ($card['domain'] === '' && $key !== $brandKey && str_starts_with($key, $brandKey)) {
+                return $card['position'];
+            }
+        }
+
+        return null;
     }
 
     /** The site's bare host ("spg.com" from "https://www.spg.com/"), null when the site has no domain. */
