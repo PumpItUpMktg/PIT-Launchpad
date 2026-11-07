@@ -19,15 +19,15 @@ it('is a four-column header of exactly 28 items in the settled group order', fun
     expect(collect($structure)->pluck('group')->all())->toBe(['Build', 'Territory', 'Results', 'System']);
 
     $counts = collect($structure)->mapWithKeys(fn (array $c): array => [$c['group'] => count($c['items'])]);
-    expect($counts->all())->toBe(['Build' => 7, 'Territory' => 7, 'Results' => 7, 'System' => 9])
-        ->and($counts->sum())->toBe(30);
+    expect($counts->all())->toBe(['Build' => 8, 'Territory' => 7, 'Results' => 7, 'System' => 9])
+        ->and($counts->sum())->toBe(31);
 });
 
 it('places every item in its settled group and vocabulary', function () {
     $byGroup = collect(app(ConsoleNav::class)->structure())
         ->mapWithKeys(fn (array $c): array => [$c['group'] => collect($c['items'])->pluck('label')->all()]);
 
-    expect($byGroup['Build'])->toBe(['Dashboard', 'Setup', 'Posts', 'Pages', 'Jobs', 'Reviews', 'Live'])
+    expect($byGroup['Build'])->toBe(['Dashboard', 'Setup', 'Posts', 'Pages', 'Jobs', 'Reviews', 'Live', 'Shares'])
         ->and($byGroup['Territory'])->toBe(['Markets', 'Towns', 'Citations', 'Links', 'Silos', 'Keywords', 'Internal links'])
         ->and($byGroup['Results'])->toBe(['Rankings', 'Town rank', 'Service areas', 'Indexing', 'Geo grid', 'Coverage', 'AI visibility'])
         ->and($byGroup['System'])->toBe(['Connections', 'Lead forms', 'Feeds', 'Brand', 'Voice', 'Users', 'Queue', 'Recover', 'Corrections']);
@@ -57,7 +57,7 @@ it('has no remaining gap items — all 27 surfaces are live', function () {
     // Every one of the 27 items resolves to a real /admin URL (Dashboard lands at '/admin' with no
     // trailing path, so match '/admin', not '/admin/').
     $items = collect(app(ConsoleNav::class)->columns())->flatMap(fn (array $c) => $c['items']);
-    expect($items)->toHaveCount(30);
+    expect($items)->toHaveCount(31);
     foreach ($items as $item) {
         expect($item['soon'])->toBeFalse()
             ->and($item['url'])->toBeString()
@@ -82,6 +82,6 @@ it('renders the four-column header — group titles and 28 live links, no greyed
     // it goes without wire:navigate — a SPA swap would pull another panel's document into this one.
     expect($html)->toContain('>Corrections<')->toContain('/console/corrections');
     expect(substr_count($html, 'class="lp-cn-soon"'))->toBe(0)
-        ->and(substr_count($html, 'wire:navigate'))->toBe(29)      // 29 in-panel links
-        ->and(substr_count($html, '<a href='))->toBe(30);          // plus the cross-panel one
+        ->and(substr_count($html, 'wire:navigate'))->toBe(30)      // 30 in-panel links
+        ->and(substr_count($html, '<a href='))->toBe(31);          // plus the cross-panel one
 });
