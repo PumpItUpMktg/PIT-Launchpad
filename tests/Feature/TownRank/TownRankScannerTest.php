@@ -40,6 +40,10 @@ function fakeOrganicQueue(int $count, int $readyCount, array $items): void
 function organicItems(): array
 {
     return [
+        // The local pack sits above the organic links: the business is card #2 of three.
+        ['type' => 'local_pack', 'rank_absolute' => 1, 'title' => 'Rival Plumbing', 'domain' => 'rival.com', 'url' => 'https://rival.com/', 'rating' => ['value' => 4.6, 'votes_count' => 80]],
+        ['type' => 'local_pack', 'rank_absolute' => 2, 'title' => 'SPG', 'domain' => 'spg.com', 'url' => 'https://www.spg.com/', 'rating' => ['value' => 4.9, 'votes_count' => 212]],
+        ['type' => 'local_pack', 'rank_absolute' => 3, 'title' => 'Town Drains', 'domain' => '', 'url' => ''],
         ['type' => 'organic', 'rank_absolute' => 1, 'url' => 'https://rival.com/sump', 'domain' => 'rival.com'],
         ['type' => 'paid', 'rank_absolute' => 2, 'url' => 'https://ad.com', 'domain' => 'ad.com'],          // ignored by the parser
         ['type' => 'organic', 'rank_absolute' => 3, 'url' => 'https://www.spg.com/hackettstown-nj/', 'domain' => 'www.spg.com'],
@@ -101,7 +105,22 @@ it('collects ready results, ranks the site by its own host (www-insensitive, fir
         ->and($point->ranking_url)->toBe('https://www.spg.com/hackettstown-nj/')
         ->and($point->top_results)->toHaveCount(3)           // organic only — the paid item is dropped
         ->and($point->top_results[0]['domain'])->toBe('rival.com')
-        ->and($point->collected_at)->not->toBeNull();
+        ->and($point->collected_at)->not->toBeNull()
+        // The local pack lane: the cards the page showed, and the business's slot in them (by website).
+        ->and($point->pack_rank)->toBe(2)
+        ->and(array_column($point->pack_results, 'title'))->toBe(['Rival Plumbing', 'SPG', 'Town Drains'])
+        ->and($point->packShown())->toBeTrue();
+});
+
+it('places the business in the pack by its website, else by its exact name, else by a "Brand …" listing with no website — never a rival that merely starts the same', function () {
+    $cards = fn (array $titles, array $domains = []): array => array_values(array_map(fn (int $i, string $t): array => ['position' => $i + 1, 'title' => $t, 'domain' => $domains[$i] ?? '', 'url' => '', 'rating' => null, 'votes' => null], array_keys($titles), $titles));
+
+    expect(TownRankScanner::packRank($cards(['Rival Plumbing', 'Acme Pumps'], ['rival.com', 'www.acme.com']), 'acme.com', 'Acme Pumps'))->toBe(2)
+        ->and(TownRankScanner::packRank($cards(['Rival Plumbing', 'Acme Pumps']), 'acme.com', 'Acme Pumps'))->toBe(2)              // no websites: exact name
+        ->and(TownRankScanner::packRank($cards(['Acme Pumps - Doylestown', 'Rival']), 'acme.com', 'Acme Pumps'))->toBe(1)         // a "Brand - Town" listing with no site
+        ->and(TownRankScanner::packRank($cards(['Acme Pumps of Texas'], ['acmetexas.com']), 'acme.com', 'Acme Pumps'))->toBeNull() // starts the same, but HAS a site — not us
+        ->and(TownRankScanner::packRank($cards(['Rival Plumbing', 'Other']), 'acme.com', 'Acme Pumps'))->toBeNull()
+        ->and(TownRankScanner::packRank([], 'acme.com', 'Acme Pumps'))->toBeNull();
 });
 
 it('leaves not-ready towns pending, within the budget, and completes on a later call', function () {

@@ -557,6 +557,43 @@ class DataForSeoClient
         return $out;
     }
 
+    /**
+     * The LOCAL PACK cards on the page — DataForSEO's `local_pack` items, one per card, in page order:
+     * the business name, its website (domain/url, often empty for a listing with no site) and rating.
+     * `position` is the card's slot in the pack (1–3), not its place on the page.
+     *
+     * @param  array<int, mixed>  $result
+     * @return list<array{position: int, title: string, domain: string, url: string, rating: float|null, votes: int|null}>
+     */
+    public static function parsePack(array $result): array
+    {
+        $items = $result[0]['items'] ?? [];
+        $cards = [];
+        foreach ($items as $item) {
+            if (! is_array($item) || ($item['type'] ?? '') !== 'local_pack') {
+                continue;
+            }
+            $rating = is_array($item['rating'] ?? null) ? $item['rating'] : [];
+            $cards[] = [
+                'order' => (int) ($item['rank_absolute'] ?? $item['rank_group'] ?? 0),
+                'title' => (string) ($item['title'] ?? ''),
+                'domain' => strtolower((string) ($item['domain'] ?? '')),
+                'url' => (string) ($item['url'] ?? ''),
+                'rating' => isset($rating['value']) && is_numeric($rating['value']) ? (float) $rating['value'] : null,
+                'votes' => isset($rating['votes_count']) && is_numeric($rating['votes_count']) ? (int) $rating['votes_count'] : null,
+            ];
+        }
+        usort($cards, fn (array $a, array $b): int => $a['order'] <=> $b['order']);
+
+        $out = [];
+        foreach ($cards as $i => $card) {
+            unset($card['order']);
+            $out[] = ['position' => $i + 1, ...$card];
+        }
+
+        return $out;
+    }
+
     /** A Google click-through wrapper in place of the result's own URL (the destination is encrypted). */
     public static function isMaskedUrl(string $url, string $domain): bool
     {

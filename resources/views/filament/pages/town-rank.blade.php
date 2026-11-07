@@ -212,6 +212,9 @@
                                                 <span>not found <b style="color:#9ca3af">{{ $s['not_found'] }}</b></span>
                                                 @if ($s['up'] + $s['down'] > 0)<span><b style="color:#15803d">▲{{ $s['up'] }}</b> <b style="color:#c0392b">▼{{ $s['down'] }}</b></span>@endif
                                             @endif
+                                            @if ($s !== null && ($s['pack_measured'] ?? 0) > 0)
+                                                <span title="The local (map) pack on the search page — where a local business is mostly seen; the organic buckets never counted it">pack <b style="color:#2563eb">{{ $s['pack_in'] }}</b>/{{ $s['pack_shown'] }}@if ($s['pack_gained'] + $s['pack_lost'] > 0) <b style="color:#15803d">▲{{ $s['pack_gained'] }}</b> <b style="color:#c0392b">▼{{ $s['pack_lost'] }}</b>@endif</span>
+                                            @endif
                                         </div>
                                     @endforeach
                                 @endif
@@ -271,6 +274,9 @@
                 <div class="t-bucket"><div class="n" style="color:#ca8a04">{{ $s['page2'] }}</div><div class="lab">Page 2</div></div>
                 <div class="t-bucket"><div class="n" style="color:#c2410c">{{ $s['beyond'] }}</div><div class="lab">Beyond</div></div>
                 <div class="t-bucket"><div class="n" style="color:#9ca3af">{{ $s['not_found'] }}</div><div class="lab">Not found{{ $s['pending'] > 0 ? ' · '.$s['pending'].' pending' : '' }}</div></div>
+                @if (($s['pack_measured'] ?? 0) > 0)
+                    <div class="t-bucket" title="The local (map) pack on the search page: in it at N of the towns whose page showed one"><div class="n" style="color:#2563eb">{{ $s['pack_in'] }}<span style="font-size:12px;color:#6b7280">/{{ $s['pack_shown'] }}</span></div><div class="lab">In the local pack{{ $s['pack_gained'] + $s['pack_lost'] > 0 ? ' · ▲'.$s['pack_gained'].' ▼'.$s['pack_lost'] : '' }}</div></div>
+                @endif
             </div>
             <div class="t-note">
                 “{{ $board['keyword'] }}” · {{ $isLocal ? 'searched from each town' : 'town search: “'.$board['keyword'].' Town ST”' }} · {{ $board['scan']['points'] }} towns · {{ $board['scan']['status'] }}{{ $board['scan']['status'] === 'pending' ? ' — collecting '.number_format($board['scan']['collected']).' / '.number_format($board['scan']['points']) : '' }} {{ $board['scan']['scanned_at'] ? \Illuminate\Support\Carbon::parse($board['scan']['scanned_at'])->diffForHumans() : '' }}
@@ -320,6 +326,11 @@
                     <div class="t-krow"><span>Town search</span><b>{{ $rankCell($town['town_query']['rank'], $town['town_query']['state']) ?: '—' }}@if ($town['town_query']['change'] !== null) <span style="color:{{ $arrowColor($town['town_query']['change']) }}">{{ $arrow($town['town_query']['change']) }}{{ $town['town_query']['prev_rank'] !== null ? ' was #'.$town['town_query']['prev_rank'] : '' }}</span>@endif</b></div>
                     <div class="t-krow"><span>Searched from town</span><b>{{ $rankCell($town['local']['rank'], $town['local']['state']) ?: '—' }}@if ($town['local']['change'] !== null) <span style="color:{{ $arrowColor($town['local']['change']) }}">{{ $arrow($town['local']['change']) }}{{ $town['local']['prev_rank'] !== null ? ' was #'.$town['local']['prev_rank'] : '' }}</span>@endif</b></div>
                     <div class="t-krow"><span>Map pack</span><b>{{ $town['map_rank'] !== null ? '#'.$town['map_rank'] : ($town['map_scanned'] ? 'not found' : '—') }}</b></div>
+                    @php($lp = $town[$isLocal ? 'local' : 'town_query'])
+                    <div class="t-krow"><span>Local pack ({{ $isLocal ? 'from town' : 'town search' }})</span><b>@if ($lp['pack_shown'] === null) — @elseif (! $lp['pack_shown']) no pack shown @elseif ($lp['pack_rank'] !== null) #{{ $lp['pack_rank'] }} of {{ count($lp['pack']) }} @else not in it ({{ count($lp['pack']) }} cards) @endif</b></div>
+                    @if ($lp['pack_shown'] && $lp['pack'] !== [])
+                        <div class="t-comp">{{ implode(' · ', $lp['pack']) }}</div>
+                    @endif
 
                     <h4 class="t-h">What to do</h4>
                     @foreach ($town['actions'] as $a)
@@ -355,7 +366,7 @@
         <div class="t-tablewrap">
             <input type="text" class="t-filter" wire:model.live.debounce.300ms="filter" placeholder="Filter towns…" aria-label="Filter towns">
             <table class="t-table">
-                <thead><tr><th>Town</th><th>Pop</th><th>Page</th><th>Town search</th><th>From town</th><th>Map pack</th>@if ($board['has_previous'])<th>Δ {{ $isLocal ? 'from town' : 'town search' }}</th>@endif</tr></thead>
+                <thead><tr><th>Town</th><th>Pop</th><th>Page</th><th>Town search</th><th>From town</th><th title="The local (map) pack on the search page, in the selected mode">Local pack</th><th>Map pack</th>@if ($board['has_previous'])<th>Δ {{ $isLocal ? 'from town' : 'town search' }}</th>@endif</tr></thead>
                 <tbody>
                     @foreach ($rows as $row)
                         <tr class="row {{ $row['coverage_area_id'] === $townId ? 'sel' : '' }}" wire:key="tr-{{ $row['coverage_area_id'] }}" wire:click="selectTown('{{ $row['coverage_area_id'] }}')">
@@ -364,6 +375,7 @@
                             <td>{{ $row['page_url'] !== null ? '✓' : '—' }}</td>
                             <td class="t-num">{{ $rankCell($row['town_rank'], (string) $row['town_state']) }}</td>
                             <td class="t-num">{{ $rankCell($row['local_rank'], (string) $row['local_state']) }}</td>
+                            <td class="t-num" style="color:#2563eb">{{ $row[$prefix.'_pack_shown'] === null ? '—' : ($row[$prefix.'_pack_rank'] !== null ? '#'.$row[$prefix.'_pack_rank'] : ($row[$prefix.'_pack_shown'] ? '·' : '—')) }}</td>
                             <td class="t-num">{{ $row['map_rank'] !== null ? '#'.$row['map_rank'] : '—' }}</td>
                             @if ($board['has_previous'])
                                 @php($chg = $row[$prefix.'_change'])

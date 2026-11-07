@@ -131,8 +131,9 @@ it('joins the latest scan per mode onto every covered town with the map-pack ran
     [$site, $keyword, $loc, $hack, $mans] = cmdSite();
 
     $local = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $keyword->id, 'mode' => 'local', 'status' => 'complete', 'points_count' => 2, 'found_count' => 1, 'scanned_at' => now()]);
-    TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $local->id, 'coverage_area_id' => $hack->id, 'label' => 'Hackettstown', 'state' => 'NJ', 'lat' => 40.854, 'lng' => -74.829, 'query' => 'sump pump repair', 'rank' => 2, 'ranking_url' => 'https://spg.com/hackettstown-nj/', 'collected_at' => now()]);
-    TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $local->id, 'coverage_area_id' => $mans->id, 'label' => 'Mansfield', 'state' => 'NJ', 'lat' => 40.80, 'lng' => -74.85, 'query' => 'sump pump repair', 'rank' => null, 'collected_at' => now()]);
+    TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $local->id, 'coverage_area_id' => $hack->id, 'label' => 'Hackettstown', 'state' => 'NJ', 'lat' => 40.854, 'lng' => -74.829, 'query' => 'sump pump repair', 'rank' => 2, 'ranking_url' => 'https://spg.com/hackettstown-nj/', 'collected_at' => now(),
+        'pack_rank' => 1, 'pack_results' => [['position' => 1, 'title' => 'SPG', 'domain' => 'spg.com', 'url' => 'https://spg.com/', 'rating' => 4.9, 'votes' => 50], ['position' => 2, 'title' => 'Rival', 'domain' => 'rival.com', 'url' => '', 'rating' => null, 'votes' => null]]]);
+    TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $local->id, 'coverage_area_id' => $mans->id, 'label' => 'Mansfield', 'state' => 'NJ', 'lat' => 40.80, 'lng' => -74.85, 'query' => 'sump pump repair', 'rank' => null, 'collected_at' => now(), 'pack_rank' => null, 'pack_results' => []]);
     $gg = GeoGridScan::create(['site_id' => $site->id, 'location_id' => $loc->id, 'keyword_id' => $keyword->id, 'provider' => 'dataforseo', 'mode' => 'coverage', 'grid_size' => 2, 'spacing_miles' => 0, 'center_lat' => 40.85, 'center_lng' => -74.83, 'zoom' => 13, 'depth_cap' => 20, 'status' => 'complete', 'scanned_at' => now()]);
     GeoGridPoint::create(['site_id' => $site->id, 'scan_id' => $gg->id, 'row' => 0, 'col' => 0, 'lat' => 40.854, 'lng' => -74.829, 'rank' => 1, 'coverage_area_id' => $hack->id, 'label' => 'Hackettstown']);
 
@@ -146,8 +147,13 @@ it('joins the latest scan per mode onto every covered town with the map-pack ran
         ->and($report['rows'][1]['local_state'])->toBe('not_found')
         ->and($report['rows'][1]['map_rank'])->toBeNull();
 
+    expect($report['summary']['local'])->toMatchArray(['pack_measured' => 2, 'pack_shown' => 1, 'pack_in' => 1])
+        ->and($report['rows'][0]['local_pack_rank'])->toBe(1)
+        ->and($report['rows'][1]['local_pack_shown'])->toBeFalse();
+
     $this->artisan('launchpad:town-rank', ['site' => $site->id, '--town' => 'hackett'])
         ->expectsOutputToContain('top-3 1')
+        ->expectsOutputToContain('local pack: in it at 1 of the 1 towns that showed one (2 measured)')
         ->expectsOutputToContain('Hackettstown, NJ')
         ->doesntExpectOutputToContain('Mansfield')
         ->assertExitCode(0);

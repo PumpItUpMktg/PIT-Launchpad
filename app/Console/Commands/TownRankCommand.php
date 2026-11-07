@@ -215,7 +215,7 @@ class TownRankCommand extends Command
     }
 
     /**
-     * @param  array{keyword: string, scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null>, rows: list<array<string, mixed>>, summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, unreadable: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>}  $data
+     * @param  array{keyword: string, scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null>, rows: list<array<string, mixed>>, summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, unreadable: int, pending: int, up: int, down: int, new: int, lost: int, same: int, pack_measured: int, pack_shown: int, pack_in: int, pack_gained: int, pack_lost: int}>}  $data
      * @param  list<string>  $modes
      */
     private function printReport(array $data, array $modes): void
@@ -239,6 +239,14 @@ class TownRankCommand extends Command
                 ($s['unreadable'] > 0 ? " · unreadable {$s['unreadable']}" : '').($s['pending'] > 0 ? " · pending {$s['pending']}" : ''),
                 $scan['previous_scanned_at'] !== null ? sprintf(' · vs %s: ▲%d ▼%d new %d lost %d', $scan['previous_scanned_at'], $s['up'], $s['down'], $s['new'], $s['lost']) : '',
             ));
+            if ($s['pack_measured'] > 0) {
+                // The map pack is where a local business is mostly seen; the organic buckets above never counted it.
+                $this->line(sprintf(
+                    '    local pack: in it at %d of the %d towns that showed one (%d measured)%s',
+                    $s['pack_in'], $s['pack_shown'], $s['pack_measured'],
+                    $scan['previous_scanned_at'] !== null && ($s['pack_gained'] + $s['pack_lost']) > 0 ? sprintf(' · gained %d · lost %d', $s['pack_gained'], $s['pack_lost']) : '',
+                ));
+            }
         }
 
         $filter = mb_strtolower(trim((string) $this->option('town')));

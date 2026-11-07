@@ -28,7 +28,7 @@ final class TownRankReport
      *     keyword: string,
      *     scans: array<string, array{id: string, status: string, scanned_at: string|null, points: int, collected: int, found: int, previous_scanned_at: string|null}|null>,
      *     rows: list<array{coverage_area_id: string, label: string, state: string|null, population: int, page_url: string|null, page_match: string|null, page_published_at: string|null, local_rank: int|null, local_url: string|null, local_state: string, local_prev_rank: int|null, local_change: string|null, town_rank: int|null, town_url: string|null, town_state: string, town_prev_rank: int|null, town_change: string|null, local_page_too_new: bool, town_page_too_new: bool, local_top: list<string>, town_top: list<string>, map_rank: int|null, map_measured_at: Carbon|null}>,
-     *     summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, unreadable: int, pending: int, up: int, down: int, new: int, lost: int, same: int}>
+     *     summary: array<string, array{top3: int, page1: int, page2: int, beyond: int, not_found: int, unreadable: int, pending: int, up: int, down: int, new: int, lost: int, same: int, pack_measured: int, pack_shown: int, pack_in: int, pack_gained: int, pack_lost: int}>
      * }
      */
     /**
@@ -81,7 +81,10 @@ final class TownRankReport
         $rows = [];
         $summary = [];
         foreach (TownRankScan::MODES as $mode) {
-            $summary[$mode] = ['top3' => 0, 'page1' => 0, 'page2' => 0, 'beyond' => 0, 'not_found' => 0, 'unreadable' => 0, 'pending' => 0, 'up' => 0, 'down' => 0, 'new' => 0, 'lost' => 0, 'same' => 0];
+            $summary[$mode] = ['top3' => 0, 'page1' => 0, 'page2' => 0, 'beyond' => 0, 'not_found' => 0, 'unreadable' => 0, 'pending' => 0, 'up' => 0, 'down' => 0, 'new' => 0, 'lost' => 0, 'same' => 0,
+                // The LOCAL PACK lane: towns measured for a pack, towns whose page showed one, towns where the
+                // business is in it, and the pack movement against the baseline (gained / lost a pack slot).
+                'pack_measured' => 0, 'pack_shown' => 0, 'pack_in' => 0, 'pack_gained' => 0, 'pack_lost' => 0];
         }
 
         foreach ($towns as $town) {
@@ -115,6 +118,42 @@ final class TownRankReport
                 $comparable = $hasPrevious && ! $tooNew && ! in_array($state, ['pending', 'unscanned', 'unreadable'], true) && ! $prevUnreadable;
                 $change = $comparable ? self::changeOf($rank, $prevRank) : null;
                 $row["{$prefix}_page_too_new"] = $tooNew;
+
+                // The local pack at this town: the business's slot (1–3), whether a pack showed at all (null =
+                // the point predates the pack lane), the cards for the detail, and the movement vs the baseline.
+                $packShown = $point?->packShown();
+                $packRank = $point !== null && $packShown === true ? $point->pack_rank : null;
+                $prevPackShown = $prevPoint?->packShown();
+                $prevPackRank = $prevPoint !== null && $prevPackShown === true ? $prevPoint->pack_rank : null;
+                $packChange = $packShown !== null && $prevPackShown !== null && $comparable
+                    ? match (true) {
+                        $packRank !== null && $prevPackRank === null => 'gained',
+                        $packRank === null && $prevPackRank !== null => 'lost',
+                        default => 'same',
+                    }
+                : null;
+                $row["{$prefix}_pack_rank"] = $packRank;
+                $row["{$prefix}_pack_shown"] = $packShown;
+                $row["{$prefix}_pack_prev_rank"] = $prevPackRank;
+                $row["{$prefix}_pack_change"] = $packChange;
+                $row["{$prefix}_pack_top"] = array_map(
+                    fn (array $c): string => $c['position'].' '.($c['title'] !== '' ? $c['title'] : $c['domain']).($c['rating'] !== null ? ' ('.number_format((float) $c['rating'], 1).'★'.($c['votes'] !== null ? ' · '.$c['votes'] : '').')' : ''),
+                    is_array($point?->pack_results) ? $point->pack_results : [],
+                );
+                if ($scans[$mode] !== null && $packShown !== null && $state !== 'pending') {
+                    $summary[$mode]['pack_measured']++;
+                    if ($packShown) {
+                        $summary[$mode]['pack_shown']++;
+                    }
+                    if ($packRank !== null) {
+                        $summary[$mode]['pack_in']++;
+                    }
+                }
+                if ($packChange === 'gained') {
+                    $summary[$mode]['pack_gained']++;
+                } elseif ($packChange === 'lost') {
+                    $summary[$mode]['pack_lost']++;
+                }
 
                 $row["{$prefix}_rank"] = $rank;
                 $row["{$prefix}_url"] = $point?->ranking_url;

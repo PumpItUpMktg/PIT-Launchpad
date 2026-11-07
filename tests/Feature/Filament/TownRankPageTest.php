@@ -166,14 +166,24 @@ it('shows how much of a collecting scan is left, and flags one that closed witho
     $hack = CoverageArea::withoutGlobalScopes()->where('site_id', $site->id)->where('name', 'Hackettstown')->sole();
     $mans = CoverageArea::withoutGlobalScopes()->where('site_id', $site->id)->where('name', 'Mansfield')->sole();
     TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'coverage_area_id' => $hack->id, 'label' => 'Hackettstown',
-        'state' => 'NJ', 'lat' => 40.85, 'lng' => -74.83, 'query' => 'q', 'rank' => 2, 'collected_at' => now()]);
+        'state' => 'NJ', 'lat' => 40.85, 'lng' => -74.83, 'query' => 'q', 'rank' => 2, 'collected_at' => now(),
+        'pack_rank' => 2, 'pack_results' => [['position' => 1, 'title' => 'Rival', 'domain' => 'rival.com', 'url' => '', 'rating' => 4.1, 'votes' => 3], ['position' => 2, 'title' => 'SPG', 'domain' => 'spg.com', 'url' => '', 'rating' => 4.9, 'votes' => 10]]]);
     TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $scan->id, 'coverage_area_id' => $mans->id, 'label' => 'Mansfield',
         'state' => 'NJ', 'lat' => 40.80, 'lng' => -74.83, 'query' => 'q', 'provider_task_id' => 'task-1']);
 
-    // Collecting: the wall says what is left and the floor on the wait, not just "collecting".
+    // Collecting: the wall says what is left and the floor on the wait, not just "collecting" — and the
+    // pack count the collected towns have shown so far.
     Livewire::test(TownRankPage::class)->set('siteId', $site->id)
         ->assertSee('collecting 1 / 2 towns')
-        ->assertSee('1 left, at least under a minute');
+        ->assertSee('1 left, at least under a minute')
+        ->assertSee('pack');
+
+    // The keyword board: the local-pack bucket, the per-town detail with the cards, the table column.
+    Livewire::test(TownRankPage::class)->set('siteId', $site->id)->call('openKeyword', $kw->id)->call('setMode', 'town_query')->call('selectTown', $hack->id)
+        ->assertSee('In the local pack')
+        ->assertSee('Local pack (town search)')
+        ->assertSee('#2 of 2')
+        ->assertSee('1 Rival (4.1★ · 3)');
 
     // Closed without it: the count it never got, and no estimate. (The collector asks for a wall rebuild
     // when it closes a scan; this test closes it by hand, so it asks by hand.)

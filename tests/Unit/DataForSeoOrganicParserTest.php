@@ -31,3 +31,20 @@ test('the organic parser sees through Google\'s encrypted redirect wrapper via t
         ->and(DataForSeoClient::isMaskedUrl('https://www.google.com/url?q=x', 'google.com'))->toBeTrue()
         ->and(DataForSeoClient::isMaskedUrl('https://google.com/maps/place/x', 'google.com'))->toBeFalse();
 });
+
+it('reads the local-pack cards in page order with their slot, website and rating, and nothing else', function () {
+    $pack = DataForSeoClient::parsePack([['items' => [
+        ['type' => 'organic', 'rank_absolute' => 1, 'url' => 'https://rival.com/sump', 'domain' => 'rival.com'],
+        ['type' => 'local_pack', 'rank_absolute' => 3, 'title' => 'Sump Pump Gurus', 'domain' => 'sumppumpgurus.com', 'url' => 'https://sumppumpgurus.com/', 'rating' => ['value' => 4.9, 'votes_count' => 212]],
+        ['type' => 'local_pack', 'rank_absolute' => 2, 'title' => 'Rival Plumbing', 'domain' => 'rival.com', 'url' => 'https://rival.com/', 'rating' => ['value' => 4.6, 'votes_count' => 80]],
+        ['type' => 'local_pack', 'rank_absolute' => 4, 'title' => 'No Site Drains', 'rating' => []],
+        ['type' => 'map', 'rank_absolute' => 2],
+    ]]]);
+
+    expect(array_map(fn (array $c): array => [$c['position'], $c['title'], $c['domain'], $c['rating'], $c['votes']], $pack))->toBe([
+        [1, 'Rival Plumbing', 'rival.com', 4.6, 80],
+        [2, 'Sump Pump Gurus', 'sumppumpgurus.com', 4.9, 212],
+        [3, 'No Site Drains', '', null, null],
+    ]);
+    expect(DataForSeoClient::parsePack([['items' => [['type' => 'organic', 'rank_absolute' => 1, 'url' => 'https://a.com', 'domain' => 'a.com']]]]))->toBe([]);
+});
