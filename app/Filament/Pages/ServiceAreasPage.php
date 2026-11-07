@@ -16,6 +16,7 @@ use App\Models\Site;
 use App\Operator\ActiveTenant;
 use App\TownPages\PrioritySectionStatus;
 use App\TownRank\ServiceAreas;
+use App\TownRank\ServiceAreaView;
 use App\TownRank\TownRankBoard;
 use BackedEnum;
 use Filament\Notifications\Notification;
@@ -153,6 +154,9 @@ class ServiceAreasPage extends Page
         }
         DraftPrioritySections::enqueue($page, repush: true);
         app(ActivityRecorder::class)->record((string) $site->id, ActivityRecorder::PRIORITY_PUSH, "Priority sections queued for {$page->title} ({$status['draft']} keyword(s))", ['towns' => 1], (string) $page->title, Auth::id(), clientVisible: true);
+        if ($this->locationId !== null && ($site = $this->site()) !== null) {
+            ServiceAreaView::refresh($site, $this->locationId);
+        }
         Notification::make()->success()
             ->title("Drafting {$page->title}")
             ->body(sprintf('%d lagging keyword(s) draft on the worker%s, then the page pushes. It reads "queued" on the map until then.', $status['draft'], $status['keep'] !== [] ? sprintf('; %d ranking keyword(s) kept as they are', count($status['keep'])) : ''))
@@ -189,6 +193,9 @@ class ServiceAreasPage extends Page
         }
         if ($queued > 0) {
             app(ActivityRecorder::class)->record((string) $site->id, ActivityRecorder::PRIORITY_PUSH, sprintf('Priority sections queued for %d lagging town(s) for “%s” in %s', $queued, $card['query'], $area['location']['name']), ['towns' => $queued], (string) $card['query'], Auth::id(), clientVisible: true);
+        }
+        if ($this->locationId !== null && ($site = $this->site()) !== null) {
+            ServiceAreaView::refresh($site, $this->locationId);
         }
         Notification::make()->success()
             ->title("Queued {$queued} town(s) for “{$card['query']}”")
@@ -266,6 +273,7 @@ class ServiceAreasPage extends Page
             return;
         }
 
+        ServiceAreaView::refresh($site, (string) $this->locationId);
         Notification::make()->success()
             ->title(sprintf('Posting %s GBP report(s) · %s requests (~$%s)', number_format($result['queued']), number_format($result['requests']), number_format($result['cost'], 2)))
             ->body('One Maps search per town per keyword; each card fills in as results land.')->send();
@@ -292,6 +300,7 @@ class ServiceAreasPage extends Page
 
         RunCoverageScan::dispatch((string) $location->id, (string) $keyword->id);
         Log::info('Service areas: GBP report queued.', ['site_id' => $site->id, 'location_id' => $location->id, 'keyword_id' => $keyword->id, 'query' => (string) $keyword->query]);
+        ServiceAreaView::refresh($site, (string) $location->id);
         Notification::make()->success()
             ->title(sprintf('Posting the GBP report for “%s” in %s', $keyword->query, $location->name))
             ->body('One Maps search per town from the town’s coordinates; the card fills in as results land.')->send();
@@ -305,7 +314,10 @@ class ServiceAreasPage extends Page
         return $site !== null ? app(ServiceAreas::class)->areas($site) : [];
     }
 
-    /** The selected area's page; null on the list, or when the id isn't one of this site's locations. */
+    /**
+     * The selected area's page as the worker last built it ({@see ServiceAreaView}); null on the list, and
+     * while the first build is still running (the view says "building" when an area is selected).
+     */
     public function getAreaProperty(): ?array
     {
         $site = $this->site();
@@ -313,7 +325,18 @@ class ServiceAreasPage extends Page
             return null;
         }
 
-        return app(ServiceAreas::class)->area($site, $this->locationId);
+        return ServiceAreaView::ensureFresh($site, $this->locationId)['area'] ?? null;
+    }
+
+    /** When the shown area was built, for the page's "built N ago" line. */
+    public function getAreaBuiltAtProperty(): ?string
+    {
+        $site = $this->site();
+        if ($site === null || $this->locationId === null) {
+            return null;
+        }
+
+        return ServiceAreaView::get($site, $this->locationId)['built_at'] ?? null;
     }
 
     private function site(): ?Site

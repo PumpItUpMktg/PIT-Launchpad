@@ -15,6 +15,7 @@ use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
 use App\Models\User;
 use App\Operate\PagesBoard;
+use App\TownRank\ServiceAreaView;
 use App\TownRank\TownRankPoints;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
@@ -88,6 +89,7 @@ it('offers the same build on the Service Areas polygon map, and builds from ther
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     $f = buildPageSite();
     $location = Location::withoutGlobalScopes()->where('site_id', $f['site']->id)->sole();
+    ServiceAreaView::build($f['site'], (string) $location->id);   // the area is built on the worker (faked here)
 
     Livewire::test(ServiceAreasPage::class)->set('siteId', $f['site']->id)
         ->call('openArea', (string) $location->id)

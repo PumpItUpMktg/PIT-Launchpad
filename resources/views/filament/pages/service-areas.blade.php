@@ -119,7 +119,7 @@
 </style>
 
 <div class="sva">
-    @if ($area === null)
+    @if ($locationId === null)
         {{-- Area list: one card per service area (location + the counties it serves). --}}
         @if ($areas === [])
             <div class="s-empty">No service areas yet. A location with a home county (or assigned counties) becomes one.</div>
@@ -147,11 +147,14 @@
                 @endforeach
             </div>
         @endif
+    @elseif ($area === null)
+        <button type="button" class="s-back" wire:click="closeArea">← All service areas</button>
+        <div class="sub" style="margin:10px 0" wire:poll.10s>Building this area on the worker — the keyword cards appear here in a moment.</div>
     @else
         <button type="button" class="s-back" wire:click="closeArea">← All service areas</button>
         <div class="s-head">
             <h2>{{ $area['location']['name'] }}</h2>
-            <span class="sub">{{ trim($area['location']['city'].($area['location']['state'] !== '' ? ', '.$area['location']['state'] : '')) }} · {{ number_format($area['towns']) }} towns</span>
+            <span class="sub">{{ trim($area['location']['city'].($area['location']['state'] !== '' ? ', '.$area['location']['state'] : '')) }} · {{ number_format($area['towns']) }} towns @if ($this->areaBuiltAt)· built {{ \Illuminate\Support\Carbon::parse($this->areaBuiltAt)->diffForHumans() }}@endif</span>
         </div>
         @php $av = $area['visibility']; @endphp
         @if ($av['score'] !== null)
