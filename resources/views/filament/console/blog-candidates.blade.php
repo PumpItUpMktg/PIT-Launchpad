@@ -73,7 +73,9 @@
                     <span class="n">→ @if ($m['url'])<a href="{{ $m['url'] }}" target="_blank" rel="noopener">{{ $m['title'] }} ↗</a>@else{{ $m['title'] }}@endif</span>
                     @if (! empty($m['silo'])) <span class="bc-chip silo">{{ $m['silo'] }}</span> @endif
                     @if ($m['marked_at']) <span class="n">marked {{ $m['marked_at'] }}</span> @endif
-                    @if ($m['state'] === 'refreshing')
+                    @if ($m['state'] === 'in_review')
+                        <span class="bc-tag">{{ str_replace('_', ' ', $m['status']) }} — in Review</span>
+                    @elseif ($m['state'] === 'refreshing')
                         <span class="bc-tag writing">Refreshing…</span>
                     @elseif ($m['state'] === 'refreshed')
                         <span class="bc-tag">refreshed {{ $m['refreshed_at'] }}</span>

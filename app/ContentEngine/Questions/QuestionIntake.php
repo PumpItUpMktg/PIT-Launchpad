@@ -162,6 +162,7 @@ class QuestionIntake
                 case self::ACTION_MARK:
                     /** @var Content $post */
                     $post = $row['existing'];
+                    $post = $post->fresh() ?? $post;   // the coverage step caches post rows per site; write over the stored meta, never a stale copy
                     $meta = is_array($post->meta) ? $post->meta : [];
                     $mark = [...$facts, 'reason' => $verdict->reason, 'similarity' => $verdict->similarity];
                     // One post, several questions (the cost post carries "sump pump installation cost",
@@ -172,6 +173,11 @@ class QuestionIntake
                     if (is_array($existing) && ($existing['run'] ?? null) === $runId) {
                         $mark = self::mergeMarks($existing, $mark);
                     } else {
+                        // A new run replaces last month's mark — but a Refresh done within the cooldown is
+                        // carried forward (its date, answer, Q&A and proposal), so the board keeps saying
+                        // "refreshed <date>" rather than offering the same post for a second rewrite before
+                        // Google has read the first.
+                        $mark = self::carryRecentRefresh(is_array($existing) ? $existing : null, $mark, $now);
                         $out['posts_marked']++;
                     }
                     $meta['question_refresh'] = $mark;
@@ -210,6 +216,33 @@ class QuestionIntake
         $siloId = $page === null ? null : ($page->matched_silo_id ?? $page->silo_id);
 
         return $siloId !== null ? $silos->firstWhere('id', $siloId) : null;
+    }
+
+    /**
+     * The refresh record of a previous mark, carried onto the new one when it is within the cooldown
+     * (`questions.refresh_cooldown_days`); older refreshes are dropped so the button comes back.
+     *
+     * @param  array<string, mixed>|null  $previous
+     * @param  array<string, mixed>  $mark
+     * @return array<string, mixed>
+     */
+    public static function carryRecentRefresh(?array $previous, array $mark, CarbonImmutable $now): array
+    {
+        $refreshedAt = is_string($previous['refreshed_at'] ?? null) ? $previous['refreshed_at'] : null;
+        if ($refreshedAt === null) {
+            return $mark;
+        }
+        $cooldown = max(0, (int) config('launchpad.questions.refresh_cooldown_days', 30));
+        if (CarbonImmutable::parse($refreshedAt)->addDays($cooldown)->lt($now)) {
+            return $mark;
+        }
+        foreach (['refreshed_at', 'answer', 'faq', 'proposal'] as $key) {
+            if (array_key_exists($key, $previous)) {
+                $mark[$key] = $previous[$key];
+            }
+        }
+
+        return $mark;
     }
 
     /**

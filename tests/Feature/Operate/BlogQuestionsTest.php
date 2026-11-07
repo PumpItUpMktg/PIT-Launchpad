@@ -26,6 +26,7 @@ it('shows the Refresh suggested panel and the asked chip on the Operate blog boa
         'also' => [['query' => 'how much does it cost to install a sump pump', 'impressions' => 78], ['query' => 'cost to install sump pump', 'impressions' => 58]]];
     $post = Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'cost', 'title' => 'Sump Pump Renovation Cost', 'body' => '<p>x</p>', 'meta' => ['question_refresh' => $mark]]);
     Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'busy', 'title' => 'Busy post', 'body' => '<p>x</p>', 'meta' => ['generating_at' => now()->toIso8601String(), 'question_refresh' => $mark]]);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::NeedsReview, 'slug' => 'reviewing', 'title' => 'Reviewing post', 'body' => '<p>x</p>', 'meta' => ['question_refresh' => [...$mark, 'refreshed_at' => now()->toIso8601String()]]]);
     Content::factory()->post()->create([
         'site_id' => $site->id, 'status' => ContentStatus::Candidate, 'source_name' => 'questions', 'draft_trigger' => DraftTrigger::Question, 'title' => 'Ejector pump replacement cost', 'body' => null,
         'meta' => ['question' => ['query' => 'ejector pump replacement cost', 'phrasings' => ['ejector pump cost'], 'impressions' => 85, 'clicks' => 0, 'position' => 26.2]],
@@ -38,6 +39,7 @@ it('shows the Refresh suggested panel and the asked chip on the Operate blog boa
         ->assertSee('asked 373×')
         ->assertSee('+2 more questions')
         ->assertSee('refreshing…')
+        ->assertSee('needs review — see the Review tab')
         ->assertSee('asked 85×')
         ->assertSeeHtml("refreshForQuestion('".$post->id."')");
 

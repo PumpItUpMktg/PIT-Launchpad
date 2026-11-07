@@ -918,6 +918,9 @@ return [
             'ctr_floor' => (float) env('LAUNCHPAD_QUESTIONS_BOT_CTR_FLOOR', 0.001),
         ],
         // Coverage verdict bounds (position of the URL already ranking for the question).
+        // A post refreshed within this many days keeps its "refreshed" record when the next run re-marks
+        // it — no second Refresh until the first has had time to be read by Google.
+        'refresh_cooldown_days' => (int) env('LAUNCHPAD_QUESTIONS_REFRESH_COOLDOWN_DAYS', 30),
         'covered_max_position' => (float) env('LAUNCHPAD_QUESTIONS_COVERED_MAX_POSITION', 5),
         'refresh_max_position' => (float) env('LAUNCHPAD_QUESTIONS_REFRESH_MAX_POSITION', 30),
         // A live post counts as the question's twin (→ refresh it, not a second post) only on a strong
