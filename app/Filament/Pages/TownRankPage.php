@@ -317,8 +317,15 @@ class TownRankPage extends Page
     public function getWallProperty(): ?array
     {
         $site = $this->site();
+        if ($site === null) {
+            return ['cards' => [], 'built_at' => now()->toIso8601String()];
+        }
+        // Nothing tracked yet: the empty state, straight away — no worker build to wait for.
+        if (app(TownRankBoard::class)->keywords($site) === []) {
+            return ['cards' => [], 'built_at' => now()->toIso8601String()];
+        }
 
-        return $site !== null ? TownRankWall::ensureFresh($site) : ['cards' => [], 'built_at' => now()->toIso8601String()];
+        return TownRankWall::ensureFresh($site);
     }
 
     /** @return list<array<string, mixed>> */

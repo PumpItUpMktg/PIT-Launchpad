@@ -4,6 +4,7 @@ use App\Enums\ContentStatus;
 use App\Enums\PageType;
 use App\Enums\UserRole;
 use App\Filament\Pages\TownRankPage;
+use App\Jobs\BuildTownRankWall;
 use App\Jobs\RunTownRankKeyword;
 use App\Models\Content;
 use App\Models\CoverageArea;
@@ -13,6 +14,7 @@ use App\Models\Site;
 use App\Models\TownRankPoint;
 use App\Models\TownRankScan;
 use App\Models\User;
+use App\TownRank\TownRankWall;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -118,7 +120,12 @@ it('adds a keyword from the wall, shows its card, and queues its ranking report 
         ->assertSee('No keywords tracked for Town Rank yet')
         ->set('newKeyword', 'sump pump repair')
         ->call('addKeyword')
-        ->assertSet('newKeyword', '')
+        ->assertSet('newKeyword', '');
+    // The wall is built on the worker (faked here): adding asked for a build; build it by hand to see the card.
+    Queue::assertPushed(BuildTownRankWall::class);
+    TownRankWall::build($site);
+    $page = Livewire::test(TownRankPage::class)
+        ->set('siteId', $site->id)
         ->assertSee('sump pump repair')
         ->assertSee('Not scanned yet')
         ->assertSee('Run ranking report');
@@ -133,6 +140,7 @@ it('adds a keyword from the wall, shows its card, and queues its ranking report 
     $pending = TownRankScan::create(['site_id' => $site->id, 'keyword_id' => $kw->id, 'mode' => 'local', 'status' => 'pending', 'points_count' => 2, 'scanned_at' => now()]);
     TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $pending->id, 'coverage_area_id' => $hack->id, 'label' => 'Hackettstown', 'lat' => 40.85, 'lng' => -74.83, 'query' => 'q', 'rank' => 3, 'collected_at' => now()]);
     TownRankPoint::create(['site_id' => $site->id, 'scan_id' => $pending->id, 'coverage_area_id' => $mans->id, 'label' => 'Mansfield', 'lat' => 40.80, 'lng' => -74.85, 'query' => 'q', 'rank' => null, 'collected_at' => null]);
+    TownRankWall::build($site);   // the scan was posted by hand (the run job is faked), so the wall is built by hand
     Livewire::test(TownRankPage::class)->set('siteId', $site->id)
         ->assertSee('Collecting…')
         ->assertSee('collecting 1 / 2 towns')
@@ -167,8 +175,10 @@ it('shows how much of a collecting scan is left, and flags one that closed witho
         ->assertSee('collecting 1 / 2 towns')
         ->assertSee('1 left, at least under a minute');
 
-    // Closed without it: the count it never got, and no estimate.
+    // Closed without it: the count it never got, and no estimate. (The collector asks for a wall rebuild
+    // when it closes a scan; this test closes it by hand, so it asks by hand.)
     $scan->forceFill(['status' => 'partial'])->save();
+    TownRankWall::refresh($site);
     Livewire::test(TownRankPage::class)->set('siteId', $site->id)
         ->assertSee('partial: 1 town(s) never collected')
         ->assertDontSee('at least');
