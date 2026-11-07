@@ -20,6 +20,7 @@ use App\Models\TownRankScan;
 use App\Models\User;
 use App\TownPages\PriorityKeywords;
 use App\TownPages\PrioritySectionWriter;
+use App\TownRank\ServiceAreaView;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -99,6 +100,7 @@ it('queues a GBP report (coverage scan) for the area\'s location × keyword from
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown', 'state' => 'NJ', 'geo_id' => '3404128590', 'population' => 10000, 'lat' => 40.85, 'lng' => -74.83, 'source_location_ids' => []]);
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Mansfield', 'state' => 'NJ', 'geo_id' => '3404143440', 'population' => 7000, 'lat' => 40.80, 'lng' => -74.85, 'source_location_ids' => []]);
     $kw = Keyword::factory()->create(['site_id' => $site->id, 'query' => 'sump pump service', 'track_town_rank' => true]);
+    ServiceAreaView::build($site, (string) $loc->id);   // the area is built on the worker (faked here)
 
     $page = Livewire::test(ServiceAreasPage::class)->set('siteId', $site->id)->call('openArea', $loc->id)
         ->assertSee('Run GBP report')
@@ -109,6 +111,7 @@ it('queues a GBP report (coverage scan) for the area\'s location × keyword from
 
     // A coverage scan now collecting: the button reads Collecting… and a second click queues nothing more.
     GeoGridScan::create(['site_id' => $site->id, 'location_id' => $loc->id, 'keyword_id' => $kw->id, 'provider' => 'dataforseo', 'mode' => 'coverage', 'grid_size' => 2, 'spacing_miles' => 0, 'center_lat' => 40.85, 'center_lng' => -74.83, 'zoom' => 13, 'depth_cap' => 20, 'status' => 'pending', 'scanned_at' => now()]);
+    ServiceAreaView::build($site, (string) $loc->id);   // rebuilt on the worker after the scan was queued
     Livewire::test(ServiceAreasPage::class)->set('siteId', $site->id)->call('openArea', $loc->id)
         ->assertSee('Collecting…')
         ->call('runGbp', $kw->id);
@@ -278,6 +281,7 @@ it('a town whose sections are already live for every lagging keyword is "awaitin
         'heading' => 'Backup sump pump installation in Hackettstown', 'body' => 'Hackettstown basements flood from the Musconetcong.', 'faqs' => [],
     ]], [$f['priority']]);
 
+    ServiceAreaView::build($f['site'], (string) $f['loc']->id);   // the area is built on the worker (faked here)
     $test = Livewire::test(ServiceAreasPage::class)
         ->set('siteId', $f['site']->id)
         ->call('openArea', $f['loc']->id)
@@ -298,6 +302,7 @@ it('a town whose last draft failed is counted, named with its error, and retried
     $f = priorityAreaFixture();
     app(PrioritySectionWriter::class)->fail($f['towns']['Hackettstown']['page'], 'Anthropic\\Core\\Exceptions\\APIConnectionException: Anthropic API Connection Error');
 
+    ServiceAreaView::build($f['site'], (string) $f['loc']->id);   // the area is built on the worker (faked here)
     $test = Livewire::test(ServiceAreasPage::class)
         ->set('siteId', $f['site']->id)
         ->call('openArea', $f['loc']->id)
@@ -319,6 +324,7 @@ it('drafts and pushes ONE town from its panel, and the panel reads queued until 
     $f = priorityAreaFixture();
     $hack = $f['towns']['Hackettstown'];
 
+    ServiceAreaView::build($f['site'], (string) $f['loc']->id);   // the area is built on the worker (faked here)
     $test = Livewire::test(ServiceAreasPage::class)
         ->set('siteId', $f['site']->id)
         ->call('openArea', $f['loc']->id)
@@ -346,6 +352,7 @@ it('pushes the lagging towns of a priority card — only those off page 1 with a
     $this->actingAs(User::factory()->create(['role' => UserRole::Operator]));
     $f = priorityAreaFixture();
 
+    ServiceAreaView::build($f['site'], (string) $f['loc']->id);   // the area is built on the worker (faked here)
     Livewire::test(ServiceAreasPage::class)
         ->set('siteId', $f['site']->id)
         ->call('openArea', $f['loc']->id)

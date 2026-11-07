@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Scopes\SiteScope;
 use App\Models\TownRankScan;
+use App\TownRank\ServiceAreaView;
 use App\TownRank\TownRankScanner;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -86,6 +87,7 @@ class CollectTownRankScan implements ShouldBeUnique, ShouldQueue
 
         if ($scan->fresh()?->status !== 'pending') {
             BuildTownRankWall::dispatch((string) $scan->site_id);   // the card flips from "collecting" to its result
+            ServiceAreaView::forgetSite((string) $scan->site_id);    // the service areas rebuild on the new data when next opened
         }
 
         Log::info('Town-rank scan collector: run finished.', [
