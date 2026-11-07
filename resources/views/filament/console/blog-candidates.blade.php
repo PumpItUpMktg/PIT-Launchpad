@@ -69,6 +69,7 @@
                 <div class="bc-asked-row" wire:key="mark-{{ $m['id'] }}">
                     <span class="q">“{{ $m['query'] }}”</span>
                     <span class="n">asked {{ number_format($m['impressions']) }}× @if ($m['position'] !== null)· <span class="p">pos {{ number_format($m['position'], 1) }}</span>@endif</span>
+                    @if ($m['also'] !== []) <span class="n" title="{{ implode(' · ', $m['also']) }}">+{{ count($m['also']) }} more {{ \Illuminate\Support\Str::plural('question', count($m['also'])) }}</span> @endif
                     <span class="n">→ @if ($m['url'])<a href="{{ $m['url'] }}" target="_blank" rel="noopener">{{ $m['title'] }} ↗</a>@else{{ $m['title'] }}@endif</span>
                     @if (! empty($m['silo'])) <span class="bc-chip silo">{{ $m['silo'] }}</span> @endif
                     @if ($m['marked_at']) <span class="n">marked {{ $m['marked_at'] }}</span> @endif

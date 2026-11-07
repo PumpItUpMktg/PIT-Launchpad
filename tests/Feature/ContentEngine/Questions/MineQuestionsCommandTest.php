@@ -49,7 +49,7 @@ it('files the candidates with --execute', function () {
 
     expect(Artisan::call('launchpad:mine-questions', ['--all' => true, '--execute' => true]))->toBe(0);
     $out = Artisan::output();
-    expect($out)->toContain('file [Sump Pumps]')->toContain('filed 1 candidate(s)');
+    expect($out)->toContain('file [Sump Pumps]')->toContain('filed 1 candidate(s) · marked 0 question(s) on 0 post(s)');
 
     $c = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->sole();
     expect($c->title)->toBe('How often should a sump pump run?')->and($c->source_name)->toBe('questions');

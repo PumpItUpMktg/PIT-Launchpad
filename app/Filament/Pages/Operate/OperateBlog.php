@@ -6,10 +6,12 @@ use App\ContentEngine\BlogQueue\BlogTargetQueue;
 use App\ContentEngine\Feeds\BlogPopulator;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentKind;
+use App\Enums\ContentStatus;
 use App\Filament\Resources\ContentReviewResource;
 use App\Jobs\GeneratePost;
 use App\Jobs\PopulateBlog;
 use App\Jobs\PublishContent;
+use App\Jobs\RefreshPostForQuestion;
 use App\Models\BlogTarget;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
@@ -102,6 +104,18 @@ class OperateBlog extends OperatePage
     }
 
     /** @return list<array<string, mixed>> */
+    /**
+     * Published posts the questions lane marked for a refresh (one post, its questions, the demand and
+     * where it ranks) — shown above the candidates so the operator sees "this post already answers a
+     * question people ask and ranks below the fold" without a second candidate on the board.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function getQuestionRefreshMarksProperty(): array
+    {
+        return app(BlogBoard::class)->questionRefreshMarks($this->siteFilter, $this->filterSilo());
+    }
+
     public function getPublishingProperty(): array
     {
         return app(BlogBoard::class)->publishing($this->siteFilter, $this->filterSilo());
@@ -182,6 +196,37 @@ class OperateBlog extends OperatePage
         Notification::make()->success()
             ->title("Drafting '{$content->title}'")
             ->body('Moved to the Review tab as a writing card — copy + image land there when the worker finishes.')
+            ->send();
+    }
+
+    /**
+     * Refresh a marked, live post for the question it already answers: queues the questions lane's Refresh
+     * (one model call on the worker — direct answer at the top, Q&A + FAQ schema at the end, a title/SEO
+     * proposal) and returns; the post lands on the Review tab as needs_review. One post at a time.
+     */
+    public function refreshForQuestion(string $contentId): void
+    {
+        $post = $this->ownedPost($contentId);
+        if ($post === null || ! is_array($post->meta['question_refresh'] ?? null)) {
+            Notification::make()->warning()->title('That post carries no question mark.')->send();
+
+            return;
+        }
+        if ($post->status !== ContentStatus::Published) {
+            Notification::make()->warning()->title('Only a live post can be refreshed — this one is already in the pipeline.')->send();
+
+            return;
+        }
+        if (($post->meta['generating_at'] ?? null) !== null) {
+            Notification::make()->title('Already refreshing.')->send();
+
+            return;
+        }
+
+        RefreshPostForQuestion::enqueue($post, actorId: Auth::id());
+        Notification::make()->success()
+            ->title("Refreshing '{$post->title}'")
+            ->body('A direct answer, a Q&A section and a title proposal are being written — it lands on the Review tab.')
             ->send();
     }
 

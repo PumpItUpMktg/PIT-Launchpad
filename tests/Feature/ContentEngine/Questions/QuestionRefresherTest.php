@@ -125,3 +125,18 @@ it('writes nothing when the response carries no answer, and refuses a page or an
     $page = Content::factory()->page()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'meta' => ['question_refresh' => ['query' => 'q']]]);
     expect(fn () => refresherWith(GOOD_RESPONSE)->refresh($page))->toThrow(InvalidArgumentException::class);
 });
+
+it('tells the model the post\'s other questions so each gets a Q&A pair, and widens the FAQ budget to fit them', function () {
+    $site = Site::factory()->create();
+    $post = markedPost($site, ['meta' => [
+        'question_refresh' => ['query' => 'sump pump installation cost', 'phrasings' => [], 'impressions' => 373, 'clicks' => 0, 'position' => 58.6,
+            'also' => [['query' => 'how much does it cost to install a sump pump', 'impressions' => 78], ['query' => 'cost to install sump pump', 'impressions' => 58]]],
+    ]]);
+    $fake = new FakeClaudeClient('{"answer": "A few hundred to a few thousand dollars.", "faq": [{"question": "How much does it cost to install a sump pump?", "answer": "a"}, {"question": "Cost to install sump pump?", "answer": "b"}, {"question": "q3?", "answer": "c"}, {"question": "q4?", "answer": "d"}, {"question": "q5?", "answer": "e"}], "title": "", "seo_title": "", "meta_description": ""}');
+    app()->instance(ClaudeClient::class, $fake);
+
+    app(QuestionRefresher::class)->refresh($post);
+
+    expect($fake->prompts[0])->toContain('OTHER QUESTIONS THIS POST IS FOUND FOR')->toContain('"how much does it cost to install a sump pump"')
+        ->and(count($post->fresh()->meta['question_refresh']['faq']))->toBe(4); // faq_max 4 vs also+2 = 4 → 4 of the 5 offered
+});

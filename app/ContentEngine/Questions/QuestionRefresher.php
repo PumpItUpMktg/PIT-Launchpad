@@ -55,9 +55,18 @@ class QuestionRefresher
         }
         $question = trim((string) $mark['query']);
         $phrasings = array_values(array_filter(array_map('strval', is_array($mark['phrasings'] ?? null) ? $mark['phrasings'] : []), fn (string $p): bool => trim($p) !== ''));
+        // The post's other questions from the same mining run (one post, several topics): each must get
+        // its own Q&A pair, so the model is told them by name and the FAQ budget grows to fit them.
+        $also = [];
+        foreach (is_array($mark['also'] ?? null) ? $mark['also'] : [] as $other) {
+            $q = trim((string) (is_array($other) ? ($other['query'] ?? '') : ''));
+            if ($q !== '') {
+                $also[] = $q;
+            }
+        }
 
         $site = Site::withoutGlobalScopes()->find($post->site_id);
-        $payload = $this->ask($post, $site, $question, $phrasings);
+        $payload = $this->ask($post, $site, $question, $phrasings, $also);
 
         $before = $this->currentHeadline($post);
         $after = $this->proposedHeadline($payload, $before);
@@ -107,13 +116,14 @@ class QuestionRefresher
      * usable answer — the caller records the failure on the row; nothing is written.
      *
      * @param  list<string>  $phrasings
+     * @param  list<string>  $also  the post's other questions from the same run — each needs a Q&A pair
      * @return array{answer: string, faq: list<array{question: string, answer: string}>, title: string, seo_title: string, meta_description: string}
      */
-    private function ask(Content $post, ?Site $site, string $question, array $phrasings): array
+    private function ask(Content $post, ?Site $site, string $question, array $phrasings, array $also = []): array
     {
         $cfg = (array) config('launchpad.questions.refresh', []);
         $answerMax = (int) ($cfg['answer_max_chars'] ?? 700);
-        $faqMax = (int) ($cfg['faq_max'] ?? 4);
+        $faqMax = min(8, max((int) ($cfg['faq_max'] ?? 4), count($also) + 2));
         $faqAnswerMax = (int) ($cfg['faq_answer_max_chars'] ?? 400);
         $titleMax = (int) ($cfg['title_max_chars'] ?? 70);
         $metaMax = (int) ($cfg['meta_max_chars'] ?? 160);
@@ -128,6 +138,7 @@ class QuestionRefresher
         $bodyText = trim((string) preg_replace('/\s+/', ' ', strip_tags($this->withoutLaneBlocks((string) $post->body))));
         $prompt = "SEARCH QUESTION (the lead phrasing searchers use): \"{$question}\"\n"
             .($phrasings !== [] ? 'ALSO PHRASED: '.implode(' · ', array_map(fn (string $p): string => "\"{$p}\"", array_slice($phrasings, 0, 8)))."\n" : '')
+            .($also !== [] ? 'OTHER QUESTIONS THIS POST IS FOUND FOR (each MUST get its own faq pair): '.implode(' · ', array_map(fn (string $p): string => "\"{$p}\"", $also))."\n" : '')
             .'BRAND: '.trim((string) ($site === null ? '' : $site->brand_name))."\n\n"
             ."CURRENT POST\n- title (H1): {$post->title}\n- seo_title: ".(string) ($seo['title'] ?? $post->title)."\n- meta_description: ".(string) ($seo['meta_description'] ?? '')."\n"
             .'- body (text): '.mb_substr($bodyText, 0, $excerptChars)."\n\n"

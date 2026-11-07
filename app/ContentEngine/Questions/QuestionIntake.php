@@ -138,17 +138,18 @@ class QuestionIntake
      * Perform a plan's writes. Idempotent per topic: re-applying re-stamps numbers, never duplicates.
      *
      * @param  list<array{cluster: QuestionCluster, verdict: QuestionVerdict, silo: Silo|null, action: string, existing: Content|null, routed_via: string|null}>  $plan
-     * @return array{filed: int, marked: int, refreshed: int}
+     * @return array{filed: int, marked: int, posts_marked: int, refreshed: int}
      */
     public function apply(Site $site, QuestionMiningReport $report, array $plan): array
     {
-        $out = ['filed' => 0, 'marked' => 0, 'refreshed' => 0];
+        $out = ['filed' => 0, 'marked' => 0, 'posts_marked' => 0, 'refreshed' => 0];
         $now = CarbonImmutable::now();
+        $runId = (string) Str::ulid();   // the run's identity — two runs in the same second are still two runs
 
         foreach ($plan as $row) {
             $cluster = $row['cluster'];
             $verdict = $row['verdict'];
-            $facts = $this->facts($cluster, $verdict, $report, $now);
+            $facts = [...$this->facts($cluster, $verdict, $report, $now), 'run' => $runId];
 
             switch ($row['action']) {
                 case self::ACTION_FILE:
@@ -162,7 +163,18 @@ class QuestionIntake
                     /** @var Content $post */
                     $post = $row['existing'];
                     $meta = is_array($post->meta) ? $post->meta : [];
-                    $meta['question_refresh'] = [...$facts, 'reason' => $verdict->reason, 'similarity' => $verdict->similarity];
+                    $mark = [...$facts, 'reason' => $verdict->reason, 'similarity' => $verdict->similarity];
+                    // One post, several questions (the cost post carries "sump pump installation cost",
+                    // "how much does it cost to install a sump pump" and "cost to install sump pump"): the
+                    // marks of ONE run merge — the most-asked question leads, the others ride along under
+                    // `also` so the Refresh answers all of them. A mark from an earlier run is replaced.
+                    $existing = $meta['question_refresh'] ?? null;
+                    if (is_array($existing) && ($existing['run'] ?? null) === $runId) {
+                        $mark = self::mergeMarks($existing, $mark);
+                    } else {
+                        $out['posts_marked']++;
+                    }
+                    $meta['question_refresh'] = $mark;
                     $post->forceFill(['meta' => $meta])->save();
                     $out['marked']++;
                     break;
@@ -198,6 +210,32 @@ class QuestionIntake
         $siloId = $page === null ? null : ($page->matched_silo_id ?? $page->silo_id);
 
         return $siloId !== null ? $silos->firstWhere('id', $siloId) : null;
+    }
+
+    /**
+     * Two marks of the same run on one post: the question with more impressions leads; the other joins
+     * `also` (query, phrasings, impressions, clicks, position). `also` is kept in impressions order.
+     *
+     * @param  array<string, mixed>  $existing
+     * @param  array<string, mixed>  $incoming
+     * @return array<string, mixed>
+     */
+    public static function mergeMarks(array $existing, array $incoming): array
+    {
+        $strip = fn (array $m): array => array_intersect_key($m, array_flip(['query', 'phrasings', 'impressions', 'clicks', 'position']));
+        $also = is_array($existing['also'] ?? null) ? $existing['also'] : [];
+        unset($existing['also']);
+
+        if ((int) ($incoming['impressions'] ?? 0) > (int) ($existing['impressions'] ?? 0)) {
+            $also[] = $strip($existing);
+            $lead = $incoming;
+        } else {
+            $also[] = $strip($incoming);
+            $lead = $existing;
+        }
+        usort($also, fn (array $a, array $b): int => (int) ($b['impressions'] ?? 0) <=> (int) ($a['impressions'] ?? 0));
+
+        return [...$lead, 'also' => $also];
     }
 
     /** @return array<string, mixed> the demand facts stored on a candidate or a mark */

@@ -57,7 +57,7 @@ class MineQuestionsCommand extends Command
                 continue;
             }
             $done = $intake->apply($site, $report, $plan);
-            $this->line(sprintf('  <info>Applied</info>: filed %d candidate(s) · marked %d post(s) for refresh · re-stamped %d standing candidate(s).', $done['filed'], $done['marked'], $done['refreshed']));
+            $this->line(sprintf('  <info>Applied</info>: filed %d candidate(s) · marked %d question(s) on %d post(s) for refresh · re-stamped %d standing candidate(s).', $done['filed'], $done['marked'], $done['posts_marked'], $done['refreshed']));
         }
         if (! $execute) {
             $this->comment('Report only — nothing written. Re-run with --execute to file the candidates and mark the refreshes.');

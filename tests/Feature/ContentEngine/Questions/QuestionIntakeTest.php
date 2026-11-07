@@ -56,7 +56,7 @@ it('plans then files a questions candidate pinned to the silo the bucketer route
     $done = $intake->apply($site, $report, $plan);
     $c = Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->sole();
 
-    expect($done)->toBe(['filed' => 1, 'marked' => 0, 'refreshed' => 0])
+    expect($done)->toBe(['filed' => 1, 'marked' => 0, 'posts_marked' => 0, 'refreshed' => 0])
         ->and($c->kind)->toBe(ContentKind::Post)
         ->and($c->status)->toBe(ContentStatus::Candidate)
         ->and($c->source_name)->toBe('questions')
@@ -182,4 +182,35 @@ it('routes a rule-set-silent question through the silo of the page already ranki
     expect($filed)->toHaveCount(1)
         ->and($filed[0]->title)->toBe('How do water powered sump pumps work?')
         ->and($filed[0]->meta['question']['routed_via'])->toBe('ranking_page');
+});
+
+it('merges the marks of one run on one post — the most-asked question leads, the others ride along — and counts posts honestly', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://acme.test']);
+    $silo = pumpSilo($site);
+    $post = Content::factory()->post()->create(['site_id' => $site->id, 'matched_silo_id' => $silo->id, 'slug' => 'cost-breakdown', 'title' => 'Sump Pump Renovation Cost', 'status' => ContentStatus::Published, 'body' => 'x']);
+    $url = 'https://acme.test/cost-breakdown/';
+    $report = questionReport($site, [
+        questionTopic('sump pump installation cost', 373, $url, 58.6),
+        questionTopic('how much does it cost to install a sump pump', 78, $url, 57.9),
+        questionTopic('cost to install sump pump', 58, $url, 55.9),
+    ]);
+
+    $intake = app(QuestionIntake::class);
+    $done = $intake->apply($site, $report, $intake->plan($site, $report, 15));
+    $mark = $post->fresh()->meta['question_refresh'];
+
+    expect($done['marked'])->toBe(3)->and($done['posts_marked'])->toBe(1)
+        ->and($mark['query'])->toBe('sump pump installation cost')
+        ->and($mark['impressions'])->toBe(373)
+        ->and(array_column($mark['also'], 'query'))->toBe(['how much does it cost to install a sump pump', 'cost to install sump pump'])
+        ->and(app(BlogBoard::class)->questionRefreshMarks($site->id)[0]['also'])->toBe(['how much does it cost to install a sump pump', 'cost to install sump pump']);
+
+    // Order of arrival does not decide the lead: a bigger question marked second takes over.
+    $later = questionReport($site, [
+        questionTopic('cost to install sump pump', 58, $url, 55.9),
+        questionTopic('sump pump installation cost', 373, $url, 58.6),
+    ]);
+    $intake->apply($site, $later, $intake->plan($site, $later, 15));
+    $mark = $post->fresh()->meta['question_refresh'];
+    expect($mark['query'])->toBe('sump pump installation cost')->and(array_column($mark['also'], 'query'))->toBe(['cost to install sump pump']);
 });
