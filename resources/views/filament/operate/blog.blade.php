@@ -53,6 +53,7 @@
             </div>
             <select class="ob-select" wire:model.live="siloFilter">
                 <option value="">All silos</option>
+                <option value="{{ \App\Filament\Pages\Operate\OperateBlog::QUESTIONS_FILTER }}">Questions lane</option>
                 @foreach ($this->siloOptions as $id => $label)
                     <option value="{{ $id }}">{{ $label }}</option>
                 @endforeach
@@ -127,7 +128,9 @@
                             <span class="ob-muted">→ @if ($m['url'])<a href="{{ $m['url'] }}" target="_blank" rel="noopener" style="text-decoration:underline">{{ $m['title'] }} ↗</a>@else{{ $m['title'] }}@endif</span>
                             @if ($m['silo'])<span class="ob-chip">{{ $m['silo'] }}</span>@endif
                             @if (! $siteFilter && $m['tenant'])<span class="ob-chip warn">{{ $m['tenant'] }}</span>@endif
-                            @if ($m['state'] === 'refreshing')
+                            @if ($m['state'] === 'in_review')
+                                <span class="ob-chip kw">{{ str_replace('_', ' ', $m['status']) }} — see the Review tab</span>
+                            @elseif ($m['state'] === 'refreshing')
                                 <span class="ob-chip" style="background:rgba(79,70,229,.12);color:#6366f1">✍ refreshing…</span>
                             @elseif ($m['state'] === 'refreshed')
                                 <span class="ob-chip">refreshed {{ $m['refreshed_at'] }}</span>

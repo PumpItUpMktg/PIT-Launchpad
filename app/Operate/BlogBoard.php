@@ -596,15 +596,21 @@ class BlogBoard
      *
      * Each row carries the Refresh action's state: `idle` (button), `refreshing` (the job is queued or
      * running — the row's generating marker; a published post's generationState() reads "drafted", so
-     * the marker is read directly), `failed` (the recorded cause, re-triggerable), `refreshed` (done this
-     * cycle and back live after review — no button until the next mining run re-marks it).
+     * the marker is read directly), `in_review` (the refresh landed; the post is in the pipeline — no
+     * button), `failed` (the recorded cause, re-triggerable), `refreshed` (back live after review — no
+     * button until the cooldown lapses and a mining run re-marks it).
      *
-     * @return list<array{id: string, title: string, url: string|null, query: string, phrasings: list<string>, also: list<string>, impressions: int, clicks: int, position: float|null, reason: string, marked_at: string|null, silo: string|null, tenant: string|null, state: string, error: string|null, refreshed_at: string|null}>
+     * @return list<array{id: string, title: string, url: string|null, query: string, phrasings: list<string>, also: list<string>, impressions: int, clicks: int, position: float|null, reason: string, marked_at: string|null, silo: string|null, tenant: string|null, state: string, status: string, error: string|null, refreshed_at: string|null}>
      */
     public function questionRefreshMarks(?string $siteId = null, ?string $siloId = null): array
     {
         return $this->posts($siteId, $siloId)
-            ->where('status', ContentStatus::Published->value)
+            // Live posts, and the ones a Refresh moved into the pipeline (review / approved / publishing) —
+            // those stay on the panel as "in review" rather than vanishing the moment the button is clicked.
+            ->whereIn('status', [
+                ContentStatus::Published->value, ContentStatus::NeedsReview->value, ContentStatus::InReview->value,
+                ContentStatus::Approved->value, ContentStatus::Rendering->value, ContentStatus::Publishing->value,
+            ])
             ->with(['site', 'matchedSilo'])
             ->get()
             ->filter(fn (Content $c): bool => is_array($c->meta['question_refresh'] ?? null))
@@ -627,11 +633,13 @@ class BlogBoard
                     'silo' => $c->matchedSilo?->name,
                     'tenant' => $c->site?->brand_name,
                     'state' => match (true) {
+                        $c->status !== ContentStatus::Published => 'in_review',
                         ($c->meta['generating_at'] ?? null) !== null => 'refreshing',
                         $c->draftError() !== null => 'failed',
                         isset($m['refreshed_at']) => 'refreshed',
                         default => 'idle',
                     },
+                    'status' => $c->status->value,
                     'error' => $c->draftError(),
                     'refreshed_at' => isset($m['refreshed_at']) ? substr((string) $m['refreshed_at'], 0, 10) : null,
                 ];

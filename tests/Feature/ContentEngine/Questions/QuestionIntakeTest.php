@@ -214,3 +214,41 @@ it('merges the marks of one run on one post — the most-asked question leads, t
     $mark = $post->fresh()->meta['question_refresh'];
     expect($mark['query'])->toBe('sump pump installation cost')->and(array_column($mark['also'], 'query'))->toBe(['cost to install sump pump']);
 });
+
+it('carries a refresh done within the cooldown onto next month\'s mark, and drops an old one so the button returns', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://acme.test']);
+    $silo = pumpSilo($site);
+    $url = 'https://acme.test/cost-breakdown/';
+    $post = Content::factory()->post()->create(['site_id' => $site->id, 'matched_silo_id' => $silo->id, 'slug' => 'cost-breakdown', 'title' => 'Sump Pump Installation Cost', 'status' => ContentStatus::Published, 'body' => 'x',
+        'meta' => ['question_refresh' => ['query' => 'sump pump installation cost', 'impressions' => 300, 'run' => 'old-run', 'mined_at' => '2026-10-04T04:30:00+00:00',
+            'refreshed_at' => now()->subDays(10)->toIso8601String(), 'answer' => 'A few hundred to a few thousand.', 'faq' => [['question' => 'q?', 'answer' => 'a']], 'proposal' => ['before' => [], 'after' => [], 'changed' => []]]]]);
+    $report = questionReport($site, [questionTopic('sump pump installation cost', 373, $url, 40.0)]);
+    $intake = app(QuestionIntake::class);
+
+    $intake->apply($site, $report, $intake->plan($site, $report, 15));
+    $mark = $post->fresh()->meta['question_refresh'];
+    expect($mark['impressions'])->toBe(373)                         // the new run's numbers …
+        ->and($mark['refreshed_at'])->not->toBeNull()                 // … with this month's refresh still on record
+        ->and($mark['answer'])->toBe('A few hundred to a few thousand.')
+        ->and(app(BlogBoard::class)->questionRefreshMarks($site->id)[0]['state'])->toBe('refreshed');
+
+    $post->forceFill(['meta' => ['question_refresh' => [...$mark, 'refreshed_at' => now()->subDays(45)->toIso8601String()]]])->save();
+    $intake->apply($site, $report, $intake->plan($site, $report, 15));
+    expect($post->fresh()->meta['question_refresh'])->not->toHaveKey('refreshed_at')
+        ->and(app(BlogBoard::class)->questionRefreshMarks($site->id)[0]['state'])->toBe('idle');
+});
+
+it('keeps a post the Refresh moved into the pipeline on the panel as in review', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://acme.test']);
+    Content::factory()->post()->create(['site_id' => $site->id, 'slug' => 'r', 'title' => 'In review post', 'status' => ContentStatus::NeedsReview, 'body' => 'x',
+        'meta' => ['question_refresh' => ['query' => 'how long do sump pumps last', 'impressions' => 142, 'refreshed_at' => now()->toIso8601String()]]]);
+    Content::factory()->post()->create(['site_id' => $site->id, 'slug' => 'c', 'title' => 'Candidate post', 'status' => ContentStatus::Candidate, 'body' => null,
+        'meta' => ['question_refresh' => ['query' => 'never shown', 'impressions' => 1]]]);
+
+    $marks = app(BlogBoard::class)->questionRefreshMarks($site->id);
+
+    expect($marks)->toHaveCount(1)
+        ->and($marks[0]['title'])->toBe('In review post')
+        ->and($marks[0]['state'])->toBe('in_review')
+        ->and($marks[0]['status'])->toBe('needs_review');
+});
