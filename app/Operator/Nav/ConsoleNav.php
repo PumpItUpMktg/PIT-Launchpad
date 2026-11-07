@@ -18,6 +18,7 @@ use App\Filament\Pages\Operate\InternalLinks;
 use App\Filament\Pages\Operate\OperateBlog;
 use App\Filament\Pages\Operate\OperateLive;
 use App\Filament\Pages\Operate\OperatePages;
+use App\Filament\Pages\Operate\OperateShares;
 use App\Filament\Pages\Operate\RebuildReadiness;
 use App\Filament\Pages\Operate\TenantDashboard;
 use App\Filament\Pages\QueueBoard;
@@ -67,6 +68,7 @@ class ConsoleNav
                 ['label' => 'Jobs', 'surface' => JobsBoard::class, 'soon' => false],
                 ['label' => 'Reviews', 'surface' => ReviewCaptureResource::class, 'soon' => false],
                 ['label' => 'Live', 'surface' => OperateLive::class, 'soon' => false],
+                ['label' => 'Shares', 'surface' => OperateShares::class, 'soon' => false],
             ]],
             ['group' => 'Territory', 'items' => [
                 // UI "Market" = the GBP-anchored service area (Location model): "Markets" is the wall of
