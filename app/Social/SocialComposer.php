@@ -45,7 +45,7 @@ final class SocialComposer
         return $this->assemble(implode("\n\n", $lines), $hashtags, $photo, $link, $network, 'See the job');
     }
 
-    public function post(Content $post, SocialNetwork $network, SocialTrigger $trigger): SocialCopy
+    public function post(Content $post, SocialNetwork $network, SocialTrigger $trigger, ?string $lead = null): SocialCopy
     {
         $site = $post->site;
         $meta = is_array($post->meta) ? $post->meta : [];
@@ -54,20 +54,23 @@ final class SocialComposer
         $seo = is_array($meta['seo'] ?? null) ? $meta['seo'] : [];
         $description = trim((string) ($seo['meta_description'] ?? $meta['description'] ?? ''));
         $question = trim((string) ($mark['question'] ?? ''));
-        $lead = $answer !== '' ? $answer : ($description !== '' ? $description : $this->excerpt((string) $post->body, (int) config('launchpad.social.excerpt_chars', 320)));
+        $value = $answer !== '' ? $answer : ($description !== '' ? $description : $this->excerpt((string) $post->body, (int) config('launchpad.social.excerpt_chars', 320)));
         $title = trim((string) $post->title);
         $rawLink = PublicUrl::forContent($site?->domain_url, $post);
         $link = $rawLink !== null ? ShareLink::tag($rawLink, $network, (string) $post->slug, $trigger->value) : null;
         $hashtags = $network->usesHashtags() ? Hashtags::from([$post->silo?->name, $site?->brand_name]) : [];
         $lines = array_filter([
-            $question !== '' && strcasecmp($question, $title) !== 0 ? ucfirst($question).'?' : null,
             $title,
-            $lead,
+            $value,
         ]);
         // A question's own phrasing leads when we have one ("how much does a sump pump cost?"), then the
         // title, then the direct answer — the answer is the value, the link is the click.
         if ($question !== '') {
-            $lines = array_filter([ucfirst(rtrim($question, '?')).'?', $lead, $title !== '' ? "Full answer: {$title}" : null]);
+            $lines = array_filter([ucfirst(rtrim($question, '?')).'?', $value, $title !== '' ? "Full answer: {$title}" : null]);
+        }
+        // A rule's own opening line (the rain rule's storm line) goes first.
+        if ($lead !== null && trim($lead) !== '') {
+            array_unshift($lines, trim($lead));
         }
 
         return $this->assemble(implode("\n\n", $lines), $hashtags, $this->postImage($post), $link, $network, 'Read the answer');

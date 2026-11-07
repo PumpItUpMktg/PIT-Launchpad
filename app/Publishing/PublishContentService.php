@@ -17,6 +17,7 @@ use App\Jobs\PingIndexNow;
 use App\Jobs\PublishContent;
 use App\Jobs\PublishRedirects;
 use App\Jobs\SharePostSocially;
+use App\Jobs\SuggestPostShare;
 use App\Locations\LegacyRedirectAuditor;
 use App\Models\Content;
 use App\Models\Redirect;
@@ -227,15 +228,16 @@ class PublishContentService
             PingIndexNow::dispatch($content->id);
         }
 
-        // Publish-day share of a POST to the site's enabled social channels — on its first publish, and
-        // again when a question refresh lands (the sharer checks the refresh is newer than the last share).
+        // Social: a POST's first publish shares on its own (the approval that got it here is the approval);
+        // a re-push carrying a question refresh goes to the re-share board as a suggestion for the operator.
         // Never for a page; never for a plain re-push.
         if ($content->kind === ContentKind::Post && (bool) config('launchpad.social.enabled', true)) {
             $refreshed = is_array($content->meta['question_refresh'] ?? null) && isset($content->meta['question_refresh']['refreshed_at']);
             if ($firstPublish) {
                 SharePostSocially::dispatch($content->id, SocialTrigger::PostPublished->value);
             } elseif ($refreshed) {
-                SharePostSocially::dispatch($content->id, SocialTrigger::PostRefreshed->value);
+                $question = (string) ($content->meta['question_refresh']['question'] ?? '');
+                SuggestPostShare::dispatch($content->id, SocialTrigger::PostRefreshed->value, $question !== '' ? "Refreshed to answer “{$question}”" : 'Refreshed for a search question');
             }
         }
 

@@ -10,6 +10,7 @@ use App\JobCapture\Review\JobStorefrontResolver;
 use App\Models\Job;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
+use App\Models\SocialPost;
 use App\Operator\ActiveTenant;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -61,12 +62,14 @@ class JobPortfolio
             ->map(fn (Job $j): array => $this->queueRow($j))
             ->values()->all();
 
-        $published = $this->scoped($siteId)
+        $publishedJobs = $this->scoped($siteId)
             ->where('status', JobStatus::Published->value)
             ->with(['city', 'county', 'jobTypes'])
             ->orderByDesc('performed_at')->orderByDesc('created_at')
-            ->get()
-            ->map(fn (Job $j): array => $this->publishedRow($j, $storefronts))
+            ->get();
+        $shares = $this->shares($siteId, $publishedJobs->pluck('id')->map(fn ($id): string => (string) $id)->all());
+        $published = $publishedJobs
+            ->map(fn (Job $j): array => [...$this->publishedRow($j, $storefronts), 'shares' => $shares[(string) $j->id] ?? []])
             ->all();
 
         $pipeline = $this->scoped($siteId)
@@ -162,7 +165,31 @@ class JobPortfolio
             'wp_post_id' => $job->wp_post_id,
             'error' => $job->last_publish_error !== null ? (string) $job->last_publish_error : null,
             'performed_at' => $job->performed_at?->toFormattedDateString(),
+            'shares' => [],
         ];
+    }
+
+    /**
+     * Where each published job was shared — network → status (sent / queued / failed), the automatic
+     * publish-day shares. One query for the whole list.
+     *
+     * @param  list<string>  $jobIds
+     * @return array<string, array<string, string>>
+     */
+    private function shares(string $siteId, array $jobIds): array
+    {
+        if ($jobIds === []) {
+            return [];
+        }
+        $out = [];
+        $rows = SocialPost::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)->where('subject_type', SocialPost::SUBJECT_JOB)->whereIn('subject_id', $jobIds)
+            ->orderBy('created_at')->get(['subject_id', 'network', 'status']);
+        foreach ($rows as $row) {
+            $out[(string) $row->subject_id][$row->network->value] = $row->status->value;
+        }
+
+        return $out;
     }
 
     private function title(Job $job): string
