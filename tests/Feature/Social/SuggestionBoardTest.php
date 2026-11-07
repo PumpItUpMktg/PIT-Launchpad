@@ -20,19 +20,19 @@ use App\Social\SuggestionBoard;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
 
-function boardSite(): Site
+function sgBoardSite(): Site
 {
     return Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
 }
 
-function boardChannel(Site $site, SocialNetwork $network, ?Location $location = null): SocialChannel
+function sgBoardChannel(Site $site, SocialNetwork $network, ?Location $location = null): SocialChannel
 {
     return SocialChannel::withoutGlobalScopes()->create([
         'site_id' => $site->id, 'location_id' => $location?->id, 'network' => $network, 'provider_channel_id' => $network->value.'-'.($location?->id ?? 'site'),
     ]);
 }
 
-function boardPost(Site $site, string $slug = 'cost-post', array $meta = []): Content
+function sgBoardPost(Site $site, string $slug = 'cost-post', array $meta = []): Content
 {
     return Content::factory()->create([
         'site_id' => $site->id, 'kind' => ContentKind::Post, 'status' => ContentStatus::Published, 'title' => 'Cost Post '.$slug, 'slug' => $slug,
@@ -42,15 +42,15 @@ function boardPost(Site $site, string $slug = 'cost-post', array $meta = []): Co
 
 it('suggests once per post with the site\'s networks pre-ticked and the GBP locations resolved from the post; approve queues the ticked platforms only; skip closes it', function () {
     Queue::fake();
-    $site = boardSite();
+    $site = sgBoardSite();
     $north = Location::factory()->create(['site_id' => $site->id, 'name' => 'North']);
     $south = Location::factory()->create(['site_id' => $site->id, 'name' => 'South']);
     CoverageArea::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown', 'source_location_ids' => [$north->id]]);
-    $northGbp = boardChannel($site, SocialNetwork::Gbp, $north);
-    boardChannel($site, SocialNetwork::Gbp, $south);
-    $fb = boardChannel($site, SocialNetwork::Facebook);
-    boardChannel($site, SocialNetwork::Instagram);
-    $post = boardPost($site);
+    $northGbp = sgBoardChannel($site, SocialNetwork::Gbp, $north);
+    sgBoardChannel($site, SocialNetwork::Gbp, $south);
+    $fb = sgBoardChannel($site, SocialNetwork::Facebook);
+    sgBoardChannel($site, SocialNetwork::Instagram);
+    $post = sgBoardPost($site);
     ContentTown::create(['content_id' => $post->id, 'site_id' => $site->id, 'town' => 'hackettstown', 'town_display' => 'Hackettstown']);
     $board = app(SuggestionBoard::class);
 
@@ -81,12 +81,12 @@ it('suggests once per post with the site\'s networks pre-ticked and the GBP loca
 });
 
 it('the suggest job carries the refresh snapshot, and a site with no channels gets no suggestion', function () {
-    $site = boardSite();
-    $post = boardPost($site, 'q-post', ['question_refresh' => ['question' => 'why pumps run', 'answer' => 'floats', 'also' => [['question' => 'x'], ['question' => 'y']], 'refreshed_at' => now()->toIso8601String()]]);
+    $site = sgBoardSite();
+    $post = sgBoardPost($site, 'q-post', ['question_refresh' => ['question' => 'why pumps run', 'answer' => 'floats', 'also' => [['question' => 'x'], ['question' => 'y']], 'refreshed_at' => now()->toIso8601String()]]);
     (new SuggestPostShare($post->id, 'post_refreshed', 'Refreshed'))->handle(app(SuggestionBoard::class));
     expect(SocialSuggestion::withoutGlobalScopes()->count())->toBe(0);
 
-    boardChannel($site, SocialNetwork::Facebook);
+    sgBoardChannel($site, SocialNetwork::Facebook);
     (new SuggestPostShare($post->id, 'post_refreshed', 'Refreshed'))->handle(app(SuggestionBoard::class));
     $s = SocialSuggestion::withoutGlobalScopes()->firstOrFail();
     expect($s->snapshot)->toMatchArray(['question' => 'why pumps run', 'also' => 2]);
@@ -94,9 +94,9 @@ it('the suggest job carries the refresh snapshot, and a site with no channels ge
 
 it('a rule\'s automatic share is recorded as an auto row the board shows, with its posts', function () {
     Queue::fake();
-    $site = boardSite();
-    $fb = boardChannel($site, SocialNetwork::Facebook);
-    $post = boardPost($site);
+    $site = sgBoardSite();
+    $fb = sgBoardChannel($site, SocialNetwork::Facebook);
+    $post = sgBoardPost($site);
     $board = app(SuggestionBoard::class);
 
     $auto = $board->recordAuto($post, SocialTrigger::Weather, 'Heavy rain: 1.4 in.', ['lead' => 'Storms are here.'], [SocialNetwork::Facebook], null);
