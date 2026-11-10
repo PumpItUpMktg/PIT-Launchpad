@@ -1,6 +1,7 @@
 <?php
 
 use App\Integrations\Places\MockPlacesProvider;
+use App\Integrations\Places\PlacesProvider;
 use App\Jobs\ResolveCompetitorPlaces;
 use App\Models\CompetitorPlace;
 use App\TownRank\CompetitorPlaceResolver;
@@ -78,6 +79,7 @@ it('splits each lost town by whether the pack winner sits closer to it than we d
 
 it('the resolver answers known coordinates, queues the unknown ids once, and stores what Places returns', function () {
     Queue::fake();
+    app()->bind(PlacesProvider::class, MockPlacesProvider::class);
     CompetitorPlace::create(['place_id' => 'known', 'name' => 'Known Co', 'lat' => 40.9, 'lng' => -74.9, 'resolved_at' => Carbon::now()]);
     CompetitorPlace::create(['place_id' => 'failed-recent', 'failed_at' => Carbon::now()->subDays(2)]);
     CompetitorPlace::create(['place_id' => 'failed-old', 'failed_at' => Carbon::now()->subDays(60)]);

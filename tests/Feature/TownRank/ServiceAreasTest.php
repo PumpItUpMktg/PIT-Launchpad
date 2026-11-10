@@ -112,7 +112,7 @@ it('builds an area page: one card per keyword with the website map sliced to the
     $metrics = collect($card['metrics'])->keyBy('key');
     expect($metrics['web_page1_share']['value'])->toBe('50%')
         ->and($metrics['web_top3_share']['value'])->toBe('50%')
-        ->and($metrics['gbp_top3_share']['value'])->toBe('50%')
+        ->and($metrics['gbp_score']['value'])->toContain('/ 100')   // the GBP is scored by reach now (its own test below)
         ->and($metrics['score']['value'])->toBe('59 / 100');
 });
 
@@ -128,7 +128,7 @@ it('leaves the GBP map null where no coverage scan exists for that location, and
         ->and($byQuery['sump pump service']['gbp'])->toBeNull()                    // the coverage scan was Warren's
         ->and($byQuery['mold remediation']['web'])->toBeNull()
         ->and($byQuery['mold remediation']['gbp'])->toBeNull()
-        ->and(collect($byQuery['mold remediation']['metrics'])->pluck('value')->all())->toBe([null, null, null, null]);
+        ->and(collect($byQuery['mold remediation']['metrics'])->pluck('value')->all())->toBe([null, null, null, null, null]);
 
     expect(app(ServiceAreas::class)->area($f['site'], 'not-a-location'))->toBeNull();
 });
