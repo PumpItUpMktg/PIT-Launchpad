@@ -554,7 +554,7 @@ final class ServiceAreas
             /** @var GeoGridPoint $point */
             $competitors = [];
             foreach (is_array($point->competitors) ? $point->competitors : [] as $c) {
-                $competitors[] = ['name' => (string) ($c['name'] ?? ''), 'place_id' => isset($c['place_id']) && is_string($c['place_id']) ? $c['place_id'] : null, 'rank' => isset($c['rank']) ? (int) $c['rank'] : null];
+                $competitors[] = ['name' => $c['name'], 'place_id' => $c['place_id'], 'rank' => $c['rank']];
             }
             $out[] = [
                 'id' => $id,

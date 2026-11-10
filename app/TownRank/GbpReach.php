@@ -68,7 +68,7 @@ final class GbpReach
         foreach ($measured as $r) {
             $cumPop += $r['weight'];
             $cumIn += self::inPack($r['rank']) ? $r['weight'] : 0;
-            if ($cumPop > 0 && $cumIn / $cumPop >= 0.5 && self::inPack($r['rank'])) {
+            if ($cumIn / $cumPop >= 0.5 && self::inPack($r['rank'])) {
                 $reach = round($r['distance'], 1);
             }
         }

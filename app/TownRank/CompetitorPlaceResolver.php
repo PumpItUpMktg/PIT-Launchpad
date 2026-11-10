@@ -22,7 +22,7 @@ final class CompetitorPlaceResolver
      */
     public function coords(array $placeIds, bool $queueMissing = true): array
     {
-        $ids = array_values(array_unique(array_filter($placeIds, fn ($id): bool => is_string($id) && $id !== '')));
+        $ids = array_values(array_unique(array_filter($placeIds, fn (string $id): bool => $id !== '')));
         if ($ids === []) {
             return [];
         }
