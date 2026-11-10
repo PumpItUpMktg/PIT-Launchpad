@@ -4,6 +4,7 @@ use App\GeoGrid\CountyOutlines;
 use App\Integrations\Census\County;
 use App\Integrations\Census\MockMunicipalityGazetteer;
 use App\Integrations\Census\MunicipalityGazetteer;
+use App\Models\CompetitorPlace;
 use App\Models\CoverageArea;
 use App\Models\GeoGridPoint;
 use App\Models\GeoGridScan;
@@ -17,6 +18,7 @@ use App\TownRank\ServiceAreas;
 use App\TownRank\TownRankPoints;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 
 /**
  * Two service areas on one site: Warren County NJ (Hackettstown + Mansfield) and Northampton County PA
@@ -348,10 +350,10 @@ it('scores every office of the list, and the area with its counties, from ONE po
 });
 
 it('scores the GBP by reach: bands by distance from the listing, the reach radius and ring, the proximity score, and the lost towns split by the winner\'s distance', function () {
-    \Illuminate\Support\Facades\Queue::fake();
+    Queue::fake();
     $f = serviceAreaSite();
     // Rival Pumps sits 1 mi from Mansfield; we are ~3.6 mi from it → Mansfield is lost to a closer GBP.
-    \App\Models\CompetitorPlace::create(['place_id' => 'rival-1', 'name' => 'Rival Pumps', 'lat' => 40.80, 'lng' => -74.87, 'resolved_at' => now()]);
+    CompetitorPlace::create(['place_id' => 'rival-1', 'name' => 'Rival Pumps', 'lat' => 40.80, 'lng' => -74.87, 'resolved_at' => now()]);
 
     $card = app(ServiceAreas::class)->area($f['site'], $f['warren']->id)['cards'][0];
     $reach = $card['gbp']['reach'];

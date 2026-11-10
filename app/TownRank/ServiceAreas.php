@@ -5,6 +5,7 @@ namespace App\TownRank;
 use App\GeoGrid\CoverageGrid;
 use App\GeoGrid\GeoGridPalette;
 use App\GeoGrid\TownAreaMap;
+use App\Models\GeoGridPoint;
 use App\Models\GeoGridScan;
 use App\Models\Keyword;
 use App\Models\Location;
@@ -12,7 +13,6 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\TownRankScan;
 use App\TownPages\PrioritySectionStatus;
-use App\Models\GeoGridPoint;
 
 /**
  * The per-service-area read-model (§ Town Rank): one "area" per physical location, defined by the counties
