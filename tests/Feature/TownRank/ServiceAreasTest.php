@@ -50,7 +50,7 @@ function serviceAreaSite(): array
 
     $gg = GeoGridScan::create(['site_id' => $site->id, 'location_id' => $warren->id, 'keyword_id' => $keyword->id, 'provider' => 'dataforseo', 'mode' => 'coverage', 'grid_size' => 2, 'spacing_miles' => 0, 'center_lat' => 40.85, 'center_lng' => -74.83, 'zoom' => 13, 'depth_cap' => 20, 'status' => 'complete', 'scanned_at' => now()]);
     GeoGridPoint::create(['site_id' => $site->id, 'scan_id' => $gg->id, 'row' => 0, 'col' => 0, 'lat' => 40.85, 'lng' => -74.83, 'rank' => 1, 'coverage_area_id' => $hack->id, 'label' => 'Hackettstown', 'collected_at' => now()]);
-    GeoGridPoint::create(['site_id' => $site->id, 'scan_id' => $gg->id, 'row' => 0, 'col' => 1, 'lat' => 40.80, 'lng' => -74.85, 'rank' => null, 'coverage_area_id' => $mans->id, 'label' => 'Mansfield', 'collected_at' => now()]);
+    GeoGridPoint::create(['site_id' => $site->id, 'scan_id' => $gg->id, 'row' => 0, 'col' => 1, 'lat' => 40.80, 'lng' => -74.85, 'rank' => null, 'coverage_area_id' => $mans->id, 'label' => 'Mansfield', 'collected_at' => now(), 'competitors' => [['name' => 'Rival Pumps', 'place_id' => 'rival-1', 'rank' => 1, 'domain' => 'rival.example']]]);
 
     return compact('site', 'warren', 'northampton', 'keyword', 'hack', 'mans', 'beth');
 }
@@ -345,4 +345,29 @@ it('scores every office of the list, and the area with its counties, from ONE po
     expect($area['visibility']['score'])->toBe(59)
         ->and($area['county_visibility'][0]['score'])->toBe(59)
         ->and($pointQueries)->toBeLessThanOrEqual(2);
+});
+
+it('scores the GBP by reach: bands by distance from the listing, the reach radius and ring, the proximity score, and the lost towns split by the winner\'s distance', function () {
+    \Illuminate\Support\Facades\Queue::fake();
+    $f = serviceAreaSite();
+    // Rival Pumps sits 1 mi from Mansfield; we are ~3.6 mi from it → Mansfield is lost to a closer GBP.
+    \App\Models\CompetitorPlace::create(['place_id' => 'rival-1', 'name' => 'Rival Pumps', 'lat' => 40.80, 'lng' => -74.87, 'resolved_at' => now()]);
+
+    $card = app(ServiceAreas::class)->area($f['site'], $f['warren']->id)['cards'][0];
+    $reach = $card['gbp']['reach'];
+
+    expect($reach['measured'])->toBe(2)
+        ->and($reach['bands'][0])->toMatchArray(['label' => '0–5 mi', 'towns' => 2, 'in_pack' => 1, 'share' => 59])   // Hackettstown 10k of 17k
+        ->and($reach['reach_miles'])->toBe(0.0)   // the listing sits in Hackettstown itself; Mansfield (3.6 mi) drops the share to 59% — still ≥ ½, but it is not in the pack
+        ->and($reach['score'])->toBeGreaterThan(50)
+        ->and($reach['competitors'])->toMatchArray(['lost' => 1, 'closer' => 1, 'farther' => 0, 'unknown' => 0])
+        ->and($reach['competitors']['closer_towns'][0])->toMatchArray(['town' => 'Mansfield', 'by' => 'Rival Pumps'])
+        ->and($reach['ring'])->toHaveKeys(['cx', 'cy', 'r'])
+        ->and($reach['score_delta'])->toBeNull();   // one scan, no movement yet
+
+    $metrics = collect($card['metrics'])->keyBy('key');
+    expect($metrics->has('gbp_top3_share'))->toBeFalse()
+        ->and($metrics['gbp_reach']['value'])->toBe('0 mi')
+        ->and($metrics['gbp_score']['value'])->toContain('/ 100')
+        ->and($metrics['gbp_score']['note'])->toContain('8 mi out counts half');
 });

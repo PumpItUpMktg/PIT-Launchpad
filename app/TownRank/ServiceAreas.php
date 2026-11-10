@@ -12,6 +12,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Site;
 use App\Models\TownRankScan;
 use App\TownPages\PrioritySectionStatus;
+use App\Models\GeoGridPoint;
 
 /**
  * The per-service-area read-model (§ Town Rank): one "area" per physical location, defined by the counties
@@ -34,6 +35,7 @@ final class ServiceAreas
         private readonly TownAreaMap $map,
         private readonly TownVisibility $visibility,
         private readonly PrioritySectionStatus $sectionStatus,
+        private readonly CompetitorPlaceResolver $competitorPlaces,
     ) {}
 
     /**
@@ -422,15 +424,18 @@ final class ServiceAreas
      */
     private function gbpMap(Location $location, Keyword $keyword, array $siteTowns, array $coords, callable $project): ?array
     {
-        $scan = GeoGridScan::withoutGlobalScope(SiteScope::class)
+        $scans = GeoGridScan::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $location->site_id)->where('location_id', $location->id)->where('keyword_id', $keyword->id)
             ->where('mode', 'coverage')
             ->orderByDesc('scanned_at')
             ->with('points')
-            ->first();
+            ->limit(2)
+            ->get();
+        $scan = $scans->first();
         if ($scan === null) {
             return null;
         }
+        $previous = $scans->count() > 1 ? $scans->last() : null;
 
         $summary = ['top3' => 0, 'top7' => 0, 'top10' => 0, 'beyond' => 0, 'absent' => 0, 'unreadable' => 0, 'pending' => 0];
         $markers = [];
@@ -475,7 +480,95 @@ final class ServiceAreas
             'uncollected' => $scan->status === 'partial' ? max(0, $points - $collected) : null,
             'summary' => $summary,
             'markers' => $markers,
+            'reach' => $this->reach($location, $scan, $previous, $siteTowns, $coords, $project),
         ];
+    }
+
+    /**
+     * GBP reach for a coverage scan ({@see GbpReach}): pack presence by distance from the listing, the
+     * reach radius, the proximity-weighted score, the addressable share, and each lost town split by
+     * whether the pack's winner sits closer to it than we do. The previous scan gives the movement. The
+     * reach ring is projected onto the map frame. Null when the listing has no coordinates.
+     *
+     * @param  array<string, array<string, mixed>>  $siteTowns
+     * @param  array<string, array{lat: float, lng: float}>  $coords
+     * @param  callable(float, float): array{float, float}  $project
+     * @return array<string, mixed>|null
+     */
+    private function reach(Location $location, GeoGridScan $scan, ?GeoGridScan $previous, array $siteTowns, array $coords, callable $project): ?array
+    {
+        if ($location->lat === null || $location->lng === null) {
+            return null;
+        }
+        $centerLat = (float) $location->lat;
+        $centerLng = (float) $location->lng;
+        $decay = $location->coverage_radius !== null && $location->coverage_radius > 0
+            ? (float) $location->coverage_radius
+            : (float) config('launchpad.town_rank.gbp_reach.decay_miles', 8);
+        $bands = (array) config('launchpad.town_rank.gbp_reach.bands', [5, 10, 15]);
+
+        $towns = $this->reachTowns($scan, $siteTowns, $coords);
+        $competitors = $this->competitorPlaces->coords(GbpReach::competitorIds($towns));
+        $now = GbpReach::compute($towns, $centerLat, $centerLng, $decay, $competitors, $bands);
+        $then = $previous !== null ? GbpReach::compute($this->reachTowns($previous, $siteTowns, $coords), $centerLat, $centerLng, $decay, $competitors, $bands) : null;
+
+        // The reach ring on the map: the centre projected, the radius as the projected distance of a point
+        // `reach` miles east of it.
+        $ring = null;
+        if ($now['reach_miles'] !== null) {
+            [$cx, $cy] = $project($centerLat, $centerLng);
+            $eastLng = $centerLng + $now['reach_miles'] / (69.172 * max(0.1, cos(deg2rad($centerLat))));
+            [$ex, $ey] = $project($centerLat, $eastLng);
+            $ring = ['cx' => $cx, 'cy' => $cy, 'r' => round(sqrt(($ex - $cx) ** 2 + ($ey - $cy) ** 2), 1)];
+        }
+
+        return [
+            ...$now,
+            'previous_score' => $then['score'] ?? null,
+            'score_delta' => $now['score'] !== null && ($then['score'] ?? null) !== null ? $now['score'] - $then['score'] : null,
+            'previous_reach_miles' => $then['reach_miles'] ?? null,
+            'reach_delta' => $now['reach_miles'] !== null && ($then['reach_miles'] ?? null) !== null ? round($now['reach_miles'] - $then['reach_miles'], 1) : null,
+            'ring' => $ring,
+            'unresolved' => $now['competitors']['unknown'],
+        ];
+    }
+
+    /**
+     * The scan's towns as the reach computation wants them: population and coordinates from the area
+     * frame, the pack rank and the competitors from the point. A point still collecting is unmeasured.
+     *
+     * @param  array<string, array<string, mixed>>  $siteTowns
+     * @param  array<string, array{lat: float, lng: float}>  $coords
+     * @return list<array{id: string, name: string, population: int, lat: float, lng: float, rank: int|null, measured: bool, competitors: list<array{name: string, place_id: string|null, rank: int|null}>}>
+     */
+    private function reachTowns(GeoGridScan $scan, array $siteTowns, array $coords): array
+    {
+        $out = [];
+        $linked = TownPointLinks::byTown(array_values($siteTowns), $scan->points);
+        foreach ($linked as $id => $point) {
+            $id = (string) $id;
+            if (! isset($coords[$id])) {
+                continue;
+            }
+            $town = $siteTowns[$id] ?? [];
+            /** @var GeoGridPoint $point */
+            $competitors = [];
+            foreach (is_array($point->competitors) ? $point->competitors : [] as $c) {
+                $competitors[] = ['name' => (string) ($c['name'] ?? ''), 'place_id' => isset($c['place_id']) && is_string($c['place_id']) ? $c['place_id'] : null, 'rank' => isset($c['rank']) ? (int) $c['rank'] : null];
+            }
+            $out[] = [
+                'id' => $id,
+                'name' => (string) ($town['name'] ?? $point->label ?? ''),
+                'population' => (int) ($town['population'] ?? 0),
+                'lat' => (float) $coords[$id]['lat'],
+                'lng' => (float) $coords[$id]['lng'],
+                'rank' => $point->rank,
+                'measured' => $point->collected_at !== null && $point->read_error === null,
+                'competitors' => $competitors,
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -498,12 +591,23 @@ final class ServiceAreas
         };
         $share = fn (int $n): ?string => $towns > 0 ? sprintf('%d%%', (int) round($n / $towns * 100)) : null;
         $webSummary = is_array($web['summary'] ?? null) ? $web['summary'] : [];
-        $gbpSummary = is_array($gbp['summary'] ?? null) ? $gbp['summary'] : [];
+        $reach = is_array($gbp['reach'] ?? null) ? $gbp['reach'] : null;
 
         return [
             ['key' => 'web_page1_share', 'label' => 'Website page-1 share', 'value' => $web === null ? null : $share((int) ($webSummary['top3'] ?? 0) + (int) ($webSummary['page1'] ?? 0)), 'note' => 'towns where the site ranks 1–10 (provisional)'],
             ['key' => 'web_top3_share', 'label' => 'Website top-3 share', 'value' => $web === null ? null : $share((int) ($webSummary['top3'] ?? 0)), 'note' => 'towns where the site ranks 1–3 (provisional)'],
-            ['key' => 'gbp_top3_share', 'label' => 'GBP top-3 share', 'value' => $gbp === null ? null : $share((int) ($gbpSummary['top3'] ?? 0)), 'note' => 'towns where the GBP is in the map pack (provisional)'],
+            ['key' => 'gbp_reach', 'label' => 'GBP reach', 'value' => $reach === null || $reach['reach_miles'] === null ? null : $reach['reach_miles'].' mi'.match (true) {
+                $reach['reach_delta'] === null => '',
+                $reach['reach_delta'] > 0 => ' ▲'.$reach['reach_delta'],
+                $reach['reach_delta'] < 0 => ' ▼'.abs($reach['reach_delta']),
+                default => ' =',
+            }, 'note' => 'how far out the GBP is still in the map pack for half the people measured'.($reach !== null && $reach['addressable'] !== null ? sprintf(' · %d%% of the area\'s people inside', $reach['addressable']) : '')],
+            ['key' => 'gbp_score', 'label' => 'GBP proximity score', 'value' => $reach === null || $reach['score'] === null ? null : $reach['score'].' / 100'.match (true) {
+                $reach['score_delta'] === null => '',
+                $reach['score_delta'] > 0 => ' ▲'.$reach['score_delta'],
+                $reach['score_delta'] < 0 => ' ▼'.abs($reach['score_delta']),
+                default => ' =',
+            }, 'note' => $reach === null ? 'pack presence weighted by population and distance from the listing' : sprintf('pack presence weighted by population and distance from the listing (a town %s mi out counts half)', rtrim(rtrim(number_format($reach['decay_miles'], 1), '0'), '.'))],
             ['key' => 'score', 'label' => 'Town Visibility', 'value' => $visibility, 'note' => 'population-weighted share of these towns where the site ranks (top-3 full, page 1 most, page 2 a little)'.($score !== null && $score['baseline_scans'] >= 2 ? ' · movement vs the last two scans' : ($score !== null && $score['baseline_scans'] === 1 ? ' · movement since the last scan' : ''))],
         ];
     }

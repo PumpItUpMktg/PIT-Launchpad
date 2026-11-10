@@ -112,6 +112,16 @@
     .sva .s-run { font-size:12px; border:1px solid #2563eb; color:#2563eb; background:transparent; border-radius:8px; padding:5px 10px; cursor:pointer; }
     .sva .s-run:disabled { opacity:.55; cursor:default; }
     .sva .s-metrics { border:1px dashed var(--s-line); border-radius:12px; padding:10px 12px; background:var(--s-surface2); }
+    .sva .s-reach { fill:none; stroke:#2563eb; stroke-width:0.6; stroke-dasharray:1.6 1.2; opacity:0.9; }
+    .sva .s-reach-c { fill:#2563eb; }
+    .sva .s-reach-box { margin-top:8px; border:1px solid var(--s-line); border-radius:10px; padding:8px 10px; background:var(--s-surface2); font-size:12px; }
+    .sva .s-reach-head { font-size:12.5px; margin-bottom:4px; }
+    .sva .s-bands { width:100%; border-collapse:collapse; font-size:11.5px; }
+    .sva .s-bands td { padding:2px 4px; color:var(--s-faint); white-space:nowrap; }
+    .sva .s-bands td:first-child { color:var(--s-text,inherit); font-weight:700; }
+    .sva .s-bands td.s-bar { width:40%; }
+    .sva .s-bands td.s-bar i { display:block; height:6px; border-radius:3px; background:#15803d; min-width:0; }
+    .sva .s-ft { display:inline-block; margin:2px 6px 0 0; padding:1px 6px; border-radius:6px; background:#fef3c7; color:#92400e; font-size:11px; }
     .sva .s-metric { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--s-line); }
     .sva .s-metric:last-child { border-bottom:none; }
     .sva .s-metric b { font-variant-numeric:tabular-nums; white-space:nowrap; }
@@ -336,6 +346,11 @@
                                                     <path class="s-county" d="{{ $d }}" pointer-events="none"><title>{{ $o['label'] }}</title></path>
                                                 @endforeach
                                             @endforeach
+                                            @if (($card['gbp']['reach']['ring'] ?? null) !== null)
+                                                {{-- The reach ring: how far out the GBP is still in the pack for half the people measured. --}}
+                                                <circle class="s-reach" cx="{{ $card['gbp']['reach']['ring']['cx'] }}" cy="{{ $card['gbp']['reach']['ring']['cy'] }}" r="{{ $card['gbp']['reach']['ring']['r'] }}" pointer-events="none"><title>GBP reach {{ $card['gbp']['reach']['reach_miles'] }} mi</title></circle>
+                                                <circle class="s-reach-c" cx="{{ $card['gbp']['reach']['ring']['cx'] }}" cy="{{ $card['gbp']['reach']['ring']['cy'] }}" r="0.9" pointer-events="none" />
+                                            @endif
                                             {{-- The map-pack position itself, over each town it was found in. Drawn last so the
                                                  county line never crosses a numeral; a town we're absent from carries no number. --}}
                                             @foreach ($card['gbp']['markers'] as $m)
@@ -363,6 +378,33 @@
                                             · <span style="color:#b45309">{{ number_format($card['gbp']['uncollected']) }} town(s) never collected</span>
                                         @endif
                                     </div>
+                                    @php($rc = $card['gbp']['reach'] ?? null)
+                                    @if ($rc !== null && $rc['measured'] > 0)
+                                        <div class="s-reach-box">
+                                            <div class="s-reach-head">
+                                                @if ($rc['reach_miles'] !== null)
+                                                    Reach <b>{{ $rc['reach_miles'] }} mi</b>@if ($rc['reach_delta'] !== null && $rc['reach_delta'] != 0) <b style="color:{{ $rc['reach_delta'] > 0 ? '#15803d' : '#c0392b' }}">{{ $rc['reach_delta'] > 0 ? '▲' : '▼' }}{{ abs($rc['reach_delta']) }}</b>@endif
+                                                    @if ($rc['addressable'] !== null) · <b>{{ $rc['addressable'] }}%</b> of the area's people inside @endif
+                                                @else
+                                                    <b>No reach yet</b> — not in the pack for half the people at any distance
+                                                @endif
+                                            </div>
+                                            <table class="s-bands">
+                                                @foreach ($rc['bands'] as $b)
+                                                    <tr><td>{{ $b['label'] }}</td><td>{{ $b['in_pack'] }} of {{ $b['towns'] }} in the pack</td><td><b>{{ $b['share'] !== null ? $b['share'].'%' : '—' }}</b></td><td class="s-bar"><i style="width:{{ $b['share'] ?? 0 }}%"></i></td></tr>
+                                                @endforeach
+                                            </table>
+                                            @php($lc = $rc['competitors'])
+                                            @if ($lc['lost'] > 0)
+                                                <div class="sub" style="margin-top:6px">
+                                                    Lost {{ $lc['lost'] }} town(s): <b>{{ $lc['closer'] }}</b> to a closer GBP · <b style="color:{{ $lc['farther'] > 0 ? '#b45309' : 'inherit' }}">{{ $lc['farther'] }}</b> to a farther one@if ($lc['unknown'] > 0) · {{ $lc['unknown'] }} not placed yet@endif
+                                                </div>
+                                                @if ($lc['farther_towns'] !== [])
+                                                    <div class="sub">Worth a look (they rank from farther away than us): @foreach ($lc['farther_towns'] as $ft)<span class="s-ft">{{ $ft['town'] }} — {{ $ft['by'] }} at {{ $ft['their_miles'] }} mi vs our {{ $ft['our_miles'] }}</span>@endforeach</div>
+                                                @endif
+                                            @endif
+                                        </div>
+                                    @endif
                                 @endif
                                 @php($gr = $card['gbp_run'])
                                 <div class="s-runrow">
