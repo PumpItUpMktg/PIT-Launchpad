@@ -29,10 +29,38 @@ use Illuminate\Support\Facades\DB;
  * keeping the row a live hub is pinned to (else the one with more pages, then the richer NAP, then the
  * older row).
  *
+ * `$keep` overrides the survivor rule for an operator who has decided: 'newest' / 'oldest' keeps that row
+ * of every pair by created_at (pages and history still fold onto it). Besides Content pins, a fold carries
+ * the duplicate's HISTORY to the survivor — grid scans, the scan plan (when the survivor has none), GBP
+ * profile/reviews, reviews, social channels, outreach, link plans, shared-phone ownership, citation
+ * attributions and coverage-area sources — so nothing the duplicate learned is orphaned on a hidden row.
+ * Its own citation rows (statuses / runs / NAP profile) stay with it: the survivor has its own.
+ *
  * Dry-run computes the plan without touching anything; apply runs it in one transaction per merge.
  */
 class LocationNapReconciler
 {
+    public const KEEP_NEWEST = 'newest';
+
+    public const KEEP_OLDEST = 'oldest';
+
+    /**
+     * Plain location references a fold re-points from the duplicate to the survivor: table => column.
+     * (coverage_scan_plans is handled apart — one per location; coverage_areas carries a json list.)
+     */
+    private const HISTORY_REFERENCES = [
+        'geo_grid_scans' => 'location_id',
+        'gbp_profiles' => 'location_id',
+        'gbp_reviews' => 'location_id',
+        'reviews' => 'location_id',
+        'social_channels' => 'location_id',
+        'outreach_kits' => 'location_id',
+        'outreach_emails' => 'location_id',
+        'link_plans' => 'market_location_id',
+        'tenant_shared_phones' => 'owning_location_id',
+        'citation_statuses' => 'attributed_location_id',
+    ];
+
     /** GBP/geo fields the survivor inherits from the duplicate when the survivor's own value is empty. */
     private const BACKFILL_FIELDS = [
         'place_id', 'gbp_url', 'lat', 'lng', 'address_components', 'hours', 'phone', 'address', 'email',
@@ -43,8 +71,12 @@ class LocationNapReconciler
     /**
      * @return list<LocationMerge>
      */
-    public function reconcile(Site $site, bool $apply): array
+    public function reconcile(Site $site, bool $apply, ?string $keep = null): array
     {
+        if ($keep !== null && ! in_array($keep, [self::KEEP_NEWEST, self::KEEP_OLDEST], true)) {
+            throw new \InvalidArgumentException("keep must be 'newest' or 'oldest', got [{$keep}].");
+        }
+
         $locations = Location::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->get();
@@ -70,6 +102,7 @@ class LocationNapReconciler
             // richer enriched row. The other is the duplicate that gets folded in.
             $survivor = $this->hasLiveHub($bareRow) ? $bareRow : $enrichedRow;
             $dupe = $survivor->is($bareRow) ? $enrichedRow : $bareRow;
+            [$survivor, $dupe] = $this->preferred($survivor, $dupe, $keep);
 
             $merges[] = $this->fold($survivor, $dupe, $matchedOn, $apply);
         }
@@ -81,6 +114,7 @@ class LocationNapReconciler
         // three or more is ambiguous and left for a person.
         foreach ($this->sameKindPairs($locations->reject(fn (Location $l): bool => isset($claimed[$l->id]))) as [$a, $b, $matchedOn]) {
             [$survivor, $dupe] = $this->rankSurvivor($a, $b);
+            [$survivor, $dupe] = $this->preferred($survivor, $dupe, $keep);
             $merges[] = $this->fold($survivor, $dupe, $matchedOn, $apply);
         }
 
@@ -92,9 +126,9 @@ class LocationNapReconciler
     {
         $backfilled = $this->backfillFields($survivor, $dupe);
 
-        $repointed = $apply
-            ? $this->apply($survivor, $dupe, $backfilled)
-            : $this->countPins($dupe);
+        [$repointed, $history] = $apply
+            ? $this->apply($survivor, $dupe)
+            : [$this->countPins($dupe), $this->countHistory($survivor, $dupe)];
 
         return new LocationMerge(
             survivorId: $survivor->id,
@@ -104,6 +138,7 @@ class LocationNapReconciler
             matchedOn: $matchedOn,
             backfilled: array_keys($backfilled),
             contentRepointed: $repointed,
+            historyRepointed: $history,
         );
     }
 
@@ -169,6 +204,24 @@ class LocationNapReconciler
     }
 
     /**
+     * The operator's override: with `$keep`, the newest (or oldest) row of the pair survives whatever the
+     * ranking said; a tie on created_at keeps the ranked choice.
+     *
+     * @return array{0: Location, 1: Location} [survivor, dupe]
+     */
+    private function preferred(Location $survivor, Location $dupe, ?string $keep): array
+    {
+        if ($keep === null) {
+            return [$survivor, $dupe];
+        }
+        $s = (int) ($survivor->created_at?->getTimestamp() ?? 0);
+        $d = (int) ($dupe->created_at?->getTimestamp() ?? 0);
+        $swap = $keep === self::KEEP_NEWEST ? $d > $s : $d < $s;
+
+        return $swap ? [$dupe, $survivor] : [$survivor, $dupe];
+    }
+
+    /**
      * The single enriched sibling for a bare row, or null. Phone-equality (digits) wins; else a
      * normalized address match corroborated by name-token overlap. Ambiguous (2+ candidates) → null.
      *
@@ -228,14 +281,15 @@ class LocationNapReconciler
     }
 
     /**
-     * Persist a merge in one transaction: save the back-filled survivor, re-point every Content pin,
-     * and tombstone the duplicate (clearing its place_id so no duplicate place_id survives).
+     * Persist a merge in one transaction: save the back-filled survivor, re-point every Content pin and
+     * the duplicate's history, and tombstone the duplicate (clearing its place_id so no duplicate
+     * place_id survives).
      *
-     * @param  array<string, mixed>  $backfilled
+     * @return array{0: int, 1: int} [content pins re-pointed, history rows re-pointed]
      */
-    private function apply(Location $survivor, Location $dupe, array $backfilled): int
+    private function apply(Location $survivor, Location $dupe): array
     {
-        return DB::transaction(function () use ($survivor, $dupe): int {
+        return DB::transaction(function () use ($survivor, $dupe): array {
             if ($survivor->isDirty()) {
                 $survivor->save();
             }
@@ -248,10 +302,79 @@ class LocationNapReconciler
                 ->where('parent_location_id', $dupe->id)
                 ->update(['parent_location_id' => $survivor->id]);
 
+            $history = $this->repointHistory($survivor, $dupe);
+
             $dupe->forceFill(['merged_into_id' => $survivor->id, 'place_id' => null])->save();
 
-            return $repointed;
+            return [$repointed, $history];
         });
+    }
+
+    /**
+     * Carry the duplicate's history to the survivor: every plain reference, the scan plan when the
+     * survivor has none of its own (one per location), and the coverage areas that list the duplicate
+     * as a source. Returns the number of rows changed.
+     */
+    private function repointHistory(Location $survivor, Location $dupe): int
+    {
+        $n = 0;
+        foreach (self::HISTORY_REFERENCES as $table => $column) {
+            $n += DB::table($table)->where($column, $dupe->id)->update([$column => $survivor->id]);
+        }
+
+        $survivorHasPlan = DB::table('coverage_scan_plans')->where('location_id', $survivor->id)->exists();
+        $n += $survivorHasPlan
+            ? 0
+            : DB::table('coverage_scan_plans')->where('location_id', $dupe->id)->update(['location_id' => $survivor->id]);
+
+        foreach ($this->coverageAreasSourcing($dupe) as $row) {
+            $ids = array_values(array_unique(array_map(
+                fn ($id): string => (string) $id === $dupe->id ? $survivor->id : (string) $id,
+                $this->decodeIds($row->source_location_ids),
+            )));
+            $n += DB::table('coverage_areas')->where('id', $row->id)->update(['source_location_ids' => json_encode($ids)]);
+        }
+
+        return $n;
+    }
+
+    /** What repointHistory() WOULD change — the dry-run figure. */
+    private function countHistory(Location $survivor, Location $dupe): int
+    {
+        $n = 0;
+        foreach (self::HISTORY_REFERENCES as $table => $column) {
+            $n += DB::table($table)->where($column, $dupe->id)->count();
+        }
+        if (! DB::table('coverage_scan_plans')->where('location_id', $survivor->id)->exists()) {
+            $n += DB::table('coverage_scan_plans')->where('location_id', $dupe->id)->count();
+        }
+
+        return $n + count($this->coverageAreasSourcing($dupe));
+    }
+
+    /**
+     * Coverage areas on the duplicate's site whose source list names it (decoded in PHP — the json column
+     * has no portable contains() across PostgreSQL and SQLite).
+     *
+     * @return list<object{id: string, source_location_ids: mixed}>
+     */
+    private function coverageAreasSourcing(Location $dupe): array
+    {
+        return DB::table('coverage_areas')
+            ->where('site_id', $dupe->site_id)
+            ->whereNotNull('source_location_ids')
+            ->get(['id', 'source_location_ids'])
+            ->filter(fn (object $row): bool => in_array($dupe->id, $this->decodeIds($row->source_location_ids), true))
+            ->values()
+            ->all();
+    }
+
+    /** @return list<string> */
+    private function decodeIds(mixed $json): array
+    {
+        $ids = is_string($json) ? json_decode($json, true) : $json;
+
+        return is_array($ids) ? array_values(array_map('strval', $ids)) : [];
     }
 
     private function countPins(Location $dupe): int

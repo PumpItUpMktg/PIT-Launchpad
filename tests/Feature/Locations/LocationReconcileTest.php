@@ -8,6 +8,8 @@ use App\Models\Content;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 function bareLocation(Site $site, array $o = []): Location
 {
@@ -189,4 +191,112 @@ it('never pairs rows across tenants — an identical location on another client 
     expect(Location::withoutGlobalScopes()->whereNotNull('merged_into_id')->count())->toBe(0)
         ->and($a->fresh()->site_id)->toBe($siteA->id)
         ->and($b->fresh()->site_id)->toBe($siteB->id);
+});
+
+// ── The Roslyn case: two identical rows, the operator says which survives, and the history follows ──
+
+it('--keep=newest keeps the newer row of a pair even when the older one owns the live hub and the pages', function () {
+    $site = Site::factory()->create();
+    $older = bareLocation($site, ['name' => 'Sump Pump Gurus | Roslyn', 'phone' => '(862) 289-7867', 'address' => '1405 Old Northern Boulevard, Roslyn NY', 'created_at' => now()->subDays(30)]);
+    $newer = bareLocation($site, ['name' => 'Sump Pump Gurus | Roslyn', 'phone' => '862-289-7867', 'address' => '1405 Old Northern Blvd, Roslyn NY', 'created_at' => now()->subDay()]);
+    $hub = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => $older->id, 'status' => ContentStatus::Published, 'wp_post_id' => 77, 'slug' => 'roslyn',
+    ]);
+
+    // The ranking alone keeps the older row (live hub).
+    $plan = app(LocationNapReconciler::class)->reconcile($site, apply: false);
+    expect($plan)->toHaveCount(1)->and($plan[0]->survivorId)->toBe($older->id);
+
+    $merges = app(LocationNapReconciler::class)->reconcile($site, apply: true, keep: LocationNapReconciler::KEEP_NEWEST);
+
+    expect($merges)->toHaveCount(1)
+        ->and($merges[0]->survivorId)->toBe($newer->id)
+        ->and($merges[0]->contentRepointed)->toBe(1)
+        ->and($hub->fresh()->location_id)->toBe($newer->id)                       // the page follows — the URL is unchanged
+        ->and(Location::withoutGlobalScopes()->find($older->id)->merged_into_id)->toBe($newer->id)
+        ->and($newer->fresh()->merged_into_id)->toBeNull();
+
+    expect(fn () => app(LocationNapReconciler::class)->reconcile($site, apply: false, keep: 'middle'))->toThrow(InvalidArgumentException::class);
+});
+
+it('carries the duplicate\'s history to the survivor: grid scans, the scan plan it lacked, channels, and coverage-area sources', function () {
+    $site = Site::factory()->create();
+    $older = bareLocation($site, ['name' => 'Sump Pump Gurus | Roslyn', 'phone' => '(862) 289-7867', 'created_at' => now()->subDays(30)]);
+    $newer = bareLocation($site, ['name' => 'Sump Pump Gurus | Roslyn', 'phone' => '862-289-7867', 'created_at' => now()->subDay()]);
+    $other = bareLocation($site, ['name' => 'Sump Pump Gurus | Montclair', 'phone' => '862-292-0566']);
+    $now = now();
+
+    DB::table('geo_grid_scans')->insert([
+        'id' => (string) Str::ulid(), 'site_id' => $site->id, 'location_id' => $older->id, 'keyword_id' => (string) Str::ulid(),
+        'grid_size' => 7, 'spacing_miles' => 1, 'center_lat' => 40.8, 'center_lng' => -73.65, 'zoom' => 13, 'depth_cap' => 20,
+        'status' => 'done', 'scanned_at' => $now, 'created_at' => $now, 'updated_at' => $now,
+    ]);
+    DB::table('coverage_scan_plans')->insert([
+        'id' => (string) Str::ulid(), 'site_id' => $site->id, 'location_id' => $older->id, 'keyword_ids' => '[]', 'created_at' => $now, 'updated_at' => $now,
+    ]);
+    DB::table('social_channels')->insert([
+        'id' => (string) Str::ulid(), 'site_id' => $site->id, 'location_id' => $older->id, 'network' => 'gbp', 'provider_channel_id' => 'gbp-roslyn', 'created_at' => $now, 'updated_at' => $now,
+    ]);
+    $areaId = (string) Str::ulid();
+    DB::table('coverage_areas')->insert([
+        'id' => $areaId, 'site_id' => $site->id, 'geo_id' => '3661000', 'name' => 'Roslyn', 'source_location_ids' => json_encode([$other->id, $older->id]), 'created_at' => $now, 'updated_at' => $now,
+    ]);
+    $untouched = (string) Str::ulid();
+    DB::table('coverage_areas')->insert([
+        'id' => $untouched, 'site_id' => $site->id, 'geo_id' => '3447500', 'name' => 'Montclair', 'source_location_ids' => json_encode([$other->id]), 'created_at' => $now, 'updated_at' => $now,
+    ]);
+
+    $plan = app(LocationNapReconciler::class)->reconcile($site, apply: false, keep: LocationNapReconciler::KEEP_NEWEST);
+    expect($plan[0]->historyRepointed)->toBe(4)   // scan + plan + channel + one coverage area
+        ->and(DB::table('geo_grid_scans')->where('location_id', $older->id)->count())->toBe(1);   // dry-run wrote nothing
+
+    $merges = app(LocationNapReconciler::class)->reconcile($site, apply: true, keep: LocationNapReconciler::KEEP_NEWEST);
+
+    expect($merges[0]->historyRepointed)->toBe(4)
+        ->and(DB::table('geo_grid_scans')->where('location_id', $newer->id)->count())->toBe(1)
+        ->and(DB::table('coverage_scan_plans')->where('location_id', $newer->id)->count())->toBe(1)
+        ->and(DB::table('social_channels')->where('location_id', $newer->id)->count())->toBe(1)
+        ->and(json_decode(DB::table('coverage_areas')->where('id', $areaId)->value('source_location_ids'), true))->toBe([$other->id, $newer->id])
+        ->and(json_decode(DB::table('coverage_areas')->where('id', $untouched)->value('source_location_ids'), true))->toBe([$other->id])
+        ->and(DB::table('geo_grid_scans')->where('location_id', $older->id)->count())->toBe(0)
+        ->and($merges[0]->summary())->toContain('4 history row(s) carried over');
+});
+
+it('leaves the survivor\'s own scan plan alone when both rows had one (one plan per location)', function () {
+    $site = Site::factory()->create();
+    $older = bareLocation($site, ['name' => 'Sump Pump Gurus | Roslyn', 'phone' => '(862) 289-7867', 'created_at' => now()->subDays(30)]);
+    $newer = bareLocation($site, ['name' => 'Sump Pump Gurus | Roslyn', 'phone' => '862-289-7867', 'created_at' => now()->subDay()]);
+    $now = now();
+    DB::table('coverage_scan_plans')->insert([
+        ['id' => (string) Str::ulid(), 'site_id' => $site->id, 'location_id' => $older->id, 'keyword_ids' => '["a"]', 'created_at' => $now, 'updated_at' => $now],
+        ['id' => (string) Str::ulid(), 'site_id' => $site->id, 'location_id' => $newer->id, 'keyword_ids' => '["b"]', 'created_at' => $now, 'updated_at' => $now],
+    ]);
+
+    $merges = app(LocationNapReconciler::class)->reconcile($site, apply: true, keep: LocationNapReconciler::KEEP_NEWEST);
+
+    expect($merges[0]->historyRepointed)->toBe(0)
+        ->and(DB::table('coverage_scan_plans')->where('location_id', $newer->id)->value('keyword_ids'))->toBe('["b"]')
+        ->and(DB::table('coverage_scan_plans')->where('location_id', $older->id)->count())->toBe(1);   // stays on the tombstone, never collides
+});
+
+it('the command takes --keep=newest|oldest and refuses anything else', function () {
+    $site = Site::factory()->create();
+    bareLocation($site, ['name' => 'Sump Pump Gurus | Roslyn', 'phone' => '(862) 289-7867', 'created_at' => now()->subDays(30)]);
+    $newer = bareLocation($site, ['name' => 'Sump Pump Gurus | Roslyn', 'phone' => '862-289-7867', 'created_at' => now()->subDay()]);
+
+    $this->artisan('launchpad:reconcile-locations', ['--site' => $site->id, '--keep' => 'middle'])
+        ->expectsOutputToContain("--keep must be 'newest' or 'oldest'.")
+        ->assertFailed();
+
+    $this->artisan('launchpad:reconcile-locations', ['--site' => $site->id, '--keep' => 'newest'])
+        ->expectsOutputToContain('Survivor override: the newest row of every pair is kept.')
+        ->expectsOutputToContain('would fold "Sump Pump Gurus | Roslyn" ('.$newer->id.')')
+        ->assertSuccessful();
+
+    expect(Location::withoutGlobalScopes()->whereNotNull('merged_into_id')->count())->toBe(0);   // dry-run
+
+    $this->artisan('launchpad:reconcile-locations', ['--site' => $site->id, '--keep' => 'newest', '--force' => true])->assertSuccessful();
+    expect($newer->fresh()->merged_into_id)->toBeNull()
+        ->and(Location::withoutGlobalScopes()->whereNotNull('merged_into_id')->count())->toBe(1);
 });

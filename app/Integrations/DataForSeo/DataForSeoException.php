@@ -16,6 +16,14 @@ class DataForSeoException extends RuntimeException
         parent::__construct($message);
     }
 
+    /**
+     * "Task completed with partial results" — DataForSEO fetched most of the SERP pages but gave up on some
+     * after its own retries. The task still carries a `result`; the client hands that back as an answer.
+     * Only an EMPTY partial reaches a caller as this exception, and then it is a transient per-task hiccup
+     * (retried once, then skipped), never auth/quota.
+     */
+    public const PARTIAL_RESULTS = 40106;
+
     /** DataForSEO's per-minute rate-limit envelope code — transient, retried with backoff (NOT fatal). */
     public const RATE_LIMITED = 40202;
 
@@ -26,10 +34,10 @@ class DataForSeoException extends RuntimeException
      */
     public const SE_ERROR = 40101;
 
-    /** Whether this is a transient per-request failure worth retrying (rate limit, SE hiccup). */
+    /** Whether this is a transient per-request failure worth retrying (rate limit, SE hiccup, empty partial). */
     public function isTransient(): bool
     {
-        return in_array($this->statusCode, [self::RATE_LIMITED, self::SE_ERROR], true);
+        return in_array($this->statusCode, [self::RATE_LIMITED, self::SE_ERROR, self::PARTIAL_RESULTS], true);
     }
 
     /**
@@ -51,9 +59,10 @@ class DataForSeoException extends RuntimeException
 
     public static function envelope(int $statusCode, string $message): self
     {
-        // 401xx auth, 402xx payment/quota — fatal, surface loudly, do not retry. Two exceptions are
-        // transient: 40202 (rate limit per minute) and 40101 (DataForSEO's own SE fetch failed).
-        $fatal = $statusCode >= 40100 && $statusCode < 40300 && ! in_array($statusCode, [self::RATE_LIMITED, self::SE_ERROR], true);
+        // 401xx auth, 402xx payment/quota — fatal, surface loudly, do not retry. Three exceptions are
+        // transient: 40202 (rate limit per minute), 40101 (DataForSEO's own SE fetch failed) and 40106
+        // (a partial result that came back empty).
+        $fatal = $statusCode >= 40100 && $statusCode < 40300 && ! in_array($statusCode, [self::RATE_LIMITED, self::SE_ERROR, self::PARTIAL_RESULTS], true);
 
         return new self("DataForSEO status_code {$statusCode}: {$message}", $statusCode, $fatal);
     }

@@ -5,7 +5,8 @@ namespace App\Locations\Reconcile;
 /**
  * One planned (or applied) fold of a duplicate physical location into a survivor row: which row wins,
  * which is retired, which GBP fields got back-filled onto the survivor, and how many Content pins were
- * re-pointed. A value object so the dry-run can print exactly what `--force` will do.
+ * re-pointed, and how many history rows (scans, plan, profiles, reviews, channels, coverage sources)
+ * were carried over. A value object so the dry-run can print exactly what `--force` will do.
  */
 final class LocationMerge
 {
@@ -20,6 +21,7 @@ final class LocationMerge
         public readonly string $matchedOn,
         public readonly array $backfilled,
         public readonly int $contentRepointed,
+        public readonly int $historyRepointed = 0,
     ) {}
 
     public function summary(): string
@@ -27,9 +29,9 @@ final class LocationMerge
         $fields = $this->backfilled === [] ? 'no new fields' : implode(', ', $this->backfilled);
 
         return sprintf(
-            '"%s" (%s) ← fold "%s" (%s) · matched on %s · back-fill: %s · %d page(s) re-pointed',
+            '"%s" (%s) ← fold "%s" (%s) · matched on %s · back-fill: %s · %d page(s) re-pointed · %d history row(s) carried over',
             $this->survivorName, $this->survivorId, $this->dupeName, $this->dupeId,
-            $this->matchedOn, $fields, $this->contentRepointed,
+            $this->matchedOn, $fields, $this->contentRepointed, $this->historyRepointed,
         );
     }
 }
