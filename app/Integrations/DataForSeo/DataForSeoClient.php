@@ -657,13 +657,19 @@ class DataForSeoClient
         }
 
         $taskStatus = (int) ($task['status_code'] ?? 0);
+        $result = $task['result'] ?? [];
+        $result = is_array($result) ? $result : [];
+
+        // 40106 "Task completed with partial results": DataForSEO could not fetch every SERP page but did
+        // the rest — what came back is an answer, not a failure. An empty partial is the transient hiccup.
+        if ($taskStatus === DataForSeoException::PARTIAL_RESULTS && $result !== []) {
+            return $result;
+        }
         if ($taskStatus !== 20000) {
             throw DataForSeoException::envelope($taskStatus, (string) ($task['status_message'] ?? 'task error'));
         }
 
-        $result = $task['result'] ?? [];
-
-        return is_array($result) ? $result : [];
+        return $result;
     }
 
     /**
@@ -694,7 +700,8 @@ class DataForSeoClient
      * Issue a request under the DataForSEO rate limit: throttle proactively to stay under the per-minute
      * cap (so a discovery burst never trips it), and — if the cap is hit anyway (e.g. a concurrent run) —
      * back off and retry the transient 40202 instead of crashing the whole run. A 40101 (DataForSEO's own
-     * SE fetch failed) gets one more try. Any other envelope error (auth/quota, fatal) surfaces immediately.
+     * SE fetch failed) or an empty 40106 (partial result with nothing in it) gets one more try. Any other
+     * envelope error (auth/quota, fatal) surfaces immediately.
      *
      * @template T of array
      *
@@ -709,7 +716,7 @@ class DataForSeoClient
             try {
                 return $fn();
             } catch (DataForSeoException $e) {
-                if ($e->statusCode === DataForSeoException::SE_ERROR) {
+                if (in_array($e->statusCode, [DataForSeoException::SE_ERROR, DataForSeoException::PARTIAL_RESULTS], true)) {
                     if ($attempt > self::SE_ERROR_RETRIES) {
                         throw $e;
                     }

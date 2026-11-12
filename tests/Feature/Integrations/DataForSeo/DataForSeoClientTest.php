@@ -279,6 +279,35 @@ it('surfaces a 40101 that persists past its one retry', function () {
     HttpFacade::assertSentCount(2);
 });
 
+it('accepts a 40106 "partial results" task that carries results — what came back is the answer, not a failure', function () {
+    HttpFacade::fake(['*/serp/google/organic/live/advanced' => HttpFacade::response(dfsEnvelope([
+        ['items' => [
+            ['type' => 'organic', 'rank_absolute' => 1, 'url' => 'https://a.com/x', 'domain' => 'a.com'],
+            ['type' => 'organic', 'rank_absolute' => 2, 'url' => 'https://b.com/y', 'domain' => 'b.com'],
+        ]],
+    ], taskStatus: DataForSeoException::PARTIAL_RESULTS))]);
+
+    expect(dfsClient()->liveOrganic('site:a.com "x"', 2840, 'en', 10))->toHaveCount(2);
+    HttpFacade::assertSentCount(1);   // nothing to retry — the task completed
+});
+
+it('treats an EMPTY 40106 partial as a transient hiccup: not fatal, retried once, then surfaced', function () {
+    $e = DataForSeoException::envelope(DataForSeoException::PARTIAL_RESULTS, 'Task completed with partial results.');
+    expect($e->fatal)->toBeFalse()->and($e->isTransient())->toBeTrue();
+
+    HttpFacade::fake([
+        '*/serp/google/organic/live/advanced' => HttpFacade::sequence()
+            ->push(dfsEnvelope([], taskStatus: DataForSeoException::PARTIAL_RESULTS), 200)
+            ->push(dfsEnvelope([['items' => [['type' => 'organic', 'rank_absolute' => 1, 'url' => 'https://a.com/x', 'domain' => 'a.com']]]]), 200),
+    ]);
+    expect(dfsClient()->liveOrganic('site:a.com "x"', 2840, 'en', 10))->toHaveCount(1);
+    HttpFacade::assertSentCount(2);
+
+    HttpFacade::fake(['*' => HttpFacade::response(dfsEnvelope([], taskStatus: DataForSeoException::PARTIAL_RESULTS), 200)]);
+    expect(fn () => dfsClient()->liveOrganic('site:a.com "x"', 2840, 'en', 10))->toThrow(DataForSeoException::class);
+    HttpFacade::assertSentCount(2);
+});
+
 it('reads a backlink summary on the 0-100 rank scale', function () {
     HttpFacade::fake([
         '*/backlinks/summary/live' => HttpFacade::response(dfsEnvelope([

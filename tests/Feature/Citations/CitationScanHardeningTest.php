@@ -11,6 +11,7 @@ use App\Integrations\Citations\HttpListingVerifier;
 use App\Integrations\DataForSeo\DataForSeoClient;
 use App\Integrations\DataForSeo\DataForSeoException;
 use App\Jobs\RunCitationScan;
+use App\Models\CitationFoundDomain;
 use App\Models\CitationScanRun;
 use App\Models\CitationStatus;
 use App\Models\Directory;
@@ -19,6 +20,7 @@ use App\Models\LocationNapProfile;
 use App\Models\Site;
 use App\Support\CurrentSite;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * A DataForSEO double that answers per query (a closure), so brand queries and per-directory `site:` checks
@@ -323,6 +325,34 @@ test('one failed DataForSEO call skips that directory (unchecked, never aged) wh
     expect($run->error)->toBeNull()
         ->and($run->meta['unchecked_directories'])->toBe(1)
         ->and((new TenantCitationBoard)->forSite($this->site)[0]->unchecked)->toBe(1);
+});
+
+test('an empty 40106 partial on one directory skips it (unchecked) instead of failing the scan, and a long listing URL is stored whole', function (): void {
+    $bbb = Directory::factory()->create(['domain' => 'bbb.org', 'scope' => DirectoryScope::National, 'is_active' => true]);
+    $yp = Directory::factory()->create(['domain' => 'yellowpages.com', 'scope' => DirectoryScope::National, 'is_active' => true]);
+    // A tracked listing link: the kind of URL that ran past the old 255-character column and sank the scan.
+    $longUrl = 'https://www.yellowpages.com/clifton-nj/mip/acme-plumbing-1?'.str_repeat('utm_campaign=directory-listing-sync&', 12).'lid=1';
+
+    $scanner = new CitationScanner(dfsAnswering(function (string $q) use ($longUrl): array {
+        if (str_starts_with($q, 'site:bbb.org')) {
+            throw DataForSeoException::envelope(DataForSeoException::PARTIAL_RESULTS, 'Task completed with partial results.');
+        }
+        if (str_starts_with($q, 'site:yellowpages.com')) {
+            return [['position' => 1, 'url' => $longUrl, 'domain' => 'www.yellowpages.com', 'title' => 'ACME Plumbing']];
+        }
+
+        return [];
+    }));
+
+    $written = $scanner->scanLocation($this->location);
+
+    expect(strlen($longUrl))->toBeGreaterThan(255)
+        ->and($written)->toBe(1)
+        ->and($scanner->lastUnchecked())->toBe([$bbb->id])
+        ->and(CitationStatus::query()->where('directory_id', $yp->id)->first()->found_url)->toBe($longUrl)
+        ->and(CitationFoundDomain::query()->where('location_id', $this->location->id)->where('domain', 'www.yellowpages.com')->first()->found_url)->toBe($longUrl)
+        ->and(Schema::getColumnType('citation_statuses', 'found_url'))->toBe('text')
+        ->and(Schema::getColumnType('citation_found_domains', 'found_url'))->toBe('text');
 });
 
 test('a scan where every DataForSEO call fails is a failed run, and an auth/quota error fails it at once', function (): void {
