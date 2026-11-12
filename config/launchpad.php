@@ -488,6 +488,13 @@ return [
         // not placed at the town and comes back national. 1km reads as "standing in the town centre"; their
         // documented floor is ~200m. Raise it to widen what counts as local around each town.
         'coordinate_radius_m' => (int) env('LAUNCHPAD_TOWN_RANK_COORDINATE_RADIUS_M', 1000),
+        // GBP reach (Service areas): pack presence by distance from the listing, the reach radius, and the
+        // proximity-weighted score. `decay_miles` is the fallback when a location has no coverage radius.
+        'gbp_reach' => [
+            'bands' => [5, 10, 15],
+            'decay_miles' => (float) env('LAUNCHPAD_GBP_REACH_DECAY_MILES', 8),
+            'retry_days' => 30,   // a competitor place id Places could not resolve is tried again after this
+        ],
         // Queue for the Run / sweep posting jobs AND the every-minute collector. Blank ⇒ the default queue. Set
         // it (e.g. "high") to give ranking work its own lane ahead of publishing — the worker must then be
         // started `--queue=high,default`, or these silently never run.
