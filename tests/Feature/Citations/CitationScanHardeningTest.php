@@ -350,7 +350,7 @@ test('an empty 40106 partial on one directory skips it (unchecked) instead of fa
         ->and($written)->toBe(1)
         ->and($scanner->lastUnchecked())->toBe([$bbb->id])
         ->and(CitationStatus::query()->where('directory_id', $yp->id)->first()->found_url)->toBe($longUrl)
-        ->and(CitationFoundDomain::query()->where('location_id', $this->location->id)->where('domain', 'www.yellowpages.com')->first()->found_url)->toBe($longUrl)
+        ->and(CitationFoundDomain::query()->where('location_id', $this->location->id)->where('directory_id', $yp->id)->first()?->found_url)->toBe($longUrl)
         ->and(Schema::getColumnType('citation_statuses', 'found_url'))->toBe('text')
         ->and(Schema::getColumnType('citation_found_domains', 'found_url'))->toBe('text');
 });

@@ -291,7 +291,7 @@ it('accepts a 40106 "partial results" task that carries results — what came ba
     HttpFacade::assertSentCount(1);   // nothing to retry — the task completed
 });
 
-it('treats an EMPTY 40106 partial as a transient hiccup: not fatal, retried once, then surfaced', function () {
+it('treats an EMPTY 40106 partial as a transient hiccup: not fatal, retried once', function () {
     $e = DataForSeoException::envelope(DataForSeoException::PARTIAL_RESULTS, 'Task completed with partial results.');
     expect($e->fatal)->toBeFalse()->and($e->isTransient())->toBeTrue();
 
@@ -302,8 +302,11 @@ it('treats an EMPTY 40106 partial as a transient hiccup: not fatal, retried once
     ]);
     expect(dfsClient()->liveOrganic('site:a.com "x"', 2840, 'en', 10))->toHaveCount(1);
     HttpFacade::assertSentCount(2);
+});
 
+it('surfaces an empty 40106 that persists past its one retry', function () {
     HttpFacade::fake(['*' => HttpFacade::response(dfsEnvelope([], taskStatus: DataForSeoException::PARTIAL_RESULTS), 200)]);
+
     expect(fn () => dfsClient()->liveOrganic('site:a.com "x"', 2840, 'en', 10))->toThrow(DataForSeoException::class);
     HttpFacade::assertSentCount(2);
 });
