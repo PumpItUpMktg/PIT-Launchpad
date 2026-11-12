@@ -17,13 +17,15 @@ use Illuminate\Support\Collection;
  *
  * DRY-RUN by default (lists the folds); `--force` applies. `--site=` limits to one tenant; omitted, it
  * sweeps every site. Only high-precision matches are folded (phone, or address+name); anything
- * ambiguous is left untouched for manual review.
+ * ambiguous is left untouched for manual review. `--keep=newest|oldest` overrides which row of a pair
+ * survives when the operator has decided (the Roslyn case: two identical rows, keep the newer).
  */
 class ReconcileLocationsCommand extends Command
 {
     protected $signature = 'launchpad:reconcile-locations
         {--site= : limit to one site id (default: every site)}
-        {--force : actually apply the folds (default is a dry-run listing)}';
+        {--force : actually apply the folds (default is a dry-run listing)}
+        {--keep= : override the survivor rule for every pair: newest | oldest (by created_at)}';
 
     protected $description = 'Fold duplicate physical Location rows (bare intake + GBP-synced) into one so the NAP is complete. Dry-run by default; --force to apply.';
 
@@ -35,10 +37,20 @@ class ReconcileLocationsCommand extends Command
         }
 
         $force = (bool) $this->option('force');
+        $keep = $this->option('keep');
+        $keep = is_string($keep) && $keep !== '' ? $keep : null;
+        if ($keep !== null && ! in_array($keep, [LocationNapReconciler::KEEP_NEWEST, LocationNapReconciler::KEEP_OLDEST], true)) {
+            $this->error("--keep must be 'newest' or 'oldest'.");
+
+            return self::FAILURE;
+        }
+        if ($keep !== null) {
+            $this->info("Survivor override: the {$keep} row of every pair is kept.");
+        }
         $total = 0;
 
         foreach ($sites as $site) {
-            $merges = $reconciler->reconcile($site, apply: $force);
+            $merges = $reconciler->reconcile($site, apply: $force, keep: $keep);
             if ($merges === []) {
                 continue;
             }
