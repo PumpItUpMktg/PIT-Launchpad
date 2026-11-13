@@ -24,7 +24,9 @@ function requestSite(): array
     $site = Site::factory()->create(['brand_name' => 'RQ', 'domain_url' => 'https://rq.example', 'gsc_property' => 'sc-domain:rq.example']);
     $office = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown office', 'served_towns' => []]);
     $verdict = function (Content $page, string $state) use ($site): void {
-        PageIndexState::create(['site_id' => $site->id, 'content_id' => $page->id, 'url' => "https://rq.example/{$page->slug}/", 'url_normalized' => "https://rq.example/{$page->slug}", 'coverage_state' => $state, 'index_verdict' => $state, 'last_inspected_at' => now()->subDay()]);
+        // Google's inspect link is known for the service page only (the sync stores what the API hands out).
+        $link = $page->slug === 'sump-pump-repair' ? 'https://search.google.com/search-console/inspect?resource_id=sc-domain:rq.example&id=tok-repair' : null;
+        PageIndexState::create(['site_id' => $site->id, 'content_id' => $page->id, 'url' => "https://rq.example/{$page->slug}/", 'url_normalized' => "https://rq.example/{$page->slug}", 'coverage_state' => $state, 'index_verdict' => $state, 'last_inspected_at' => now()->subDay(), 'inspection_link' => $link]);
     };
     $page = fn (array $attrs) => Content::factory()->create(array_merge(['site_id' => $site->id, 'kind' => ContentKind::Page, 'status' => ContentStatus::Published, 'wp_post_id' => 1], $attrs));
     $service = $page(['page_type' => PageType::Service, 'title' => 'Sump Pump Repair', 'slug' => 'sump-pump-repair', 'published_at' => now()->subDays(20)]);
@@ -54,7 +56,10 @@ it('lists the day\'s requests in value order — service pages, then towns bigge
     expect(array_column($q['rows'], 'title'))->toBe(['Sump Pump Repair', 'Washington, NJ', 'Allamuchy, NJ', 'Where Sump Water Goes'])
         ->and($q['eligible'])->toBe(4)->and($q['limit'])->toBe(10)->and($q['requested_today'])->toBe(0)
         ->and($q['rows'][1]['kind'])->toBe('town')->and($q['rows'][1]['population'])->toBe(12000)
-        ->and($q['rows'][0]['inspect_url'])->toBe('https://search.google.com/search-console/inspect?resource_id=sc-domain%3Arq.example&id=https%3A%2F%2Frq.example%2Fsump-pump-repair%2F');
+        ->and($q['rows'][0]['inspect_url'])->toBe('https://search.google.com/search-console/inspect?resource_id=sc-domain:rq.example&id=tok-repair')   // Google's own link — never a hand-built one (a URL in `id` is a Google 404)
+        ->and($q['rows'][0]['inspect_direct'])->toBeTrue()
+        ->and($q['rows'][1]['inspect_url'])->toBe('https://search.google.com/search-console?resource_id=sc-domain%3Arq.example')   // no link yet → the property, paste the URL
+        ->and($q['rows'][1]['inspect_direct'])->toBeFalse();
 
     // A smaller limit takes the top of the same order.
     expect(array_column(app(RequestQueue::class)->for($f['site'], 2)['rows'], 'title'))->toBe(['Sump Pump Repair', 'Washington, NJ']);
@@ -90,7 +95,9 @@ it('the board shows Request today with the inspect links and stamps a page from 
     $test = Livewire::test(IndexingBoard::class)
         ->assertSee('Request today')
         ->assertSee('Sump Pump Repair')
-        ->assertSeeHtml('search.google.com/search-console/inspect?resource_id=sc-domain%3Arq.example')
+        ->assertSeeHtml('search.google.com/search-console/inspect?resource_id=sc-domain:rq.example&amp;id=tok-repair')
+        ->assertSee('Inspect in Search Console')
+        ->assertSee('Open Search Console (paste the URL)')
         ->call('markRequested', $f['service']->id);
 
     expect(RequestQueue::requestedAt($f['service']->fresh()))->not->toBeNull();

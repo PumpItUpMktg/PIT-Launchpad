@@ -33,7 +33,7 @@ final class RequestQueue
     ) {}
 
     /**
-     * @return array{limit: int, quota: int, after_days: int, cooldown_days: int, connected: bool, rows: list<array{content_id: string, title: string, kind: string, url: ?string, days_waiting: int, population: int, verdict: ?string, inspect_url: ?string, requested_at: ?string, requests: int}>, eligible: int, requested_today: int}
+     * @return array{limit: int, quota: int, after_days: int, cooldown_days: int, connected: bool, rows: list<array{content_id: string, title: string, kind: string, url: ?string, days_waiting: int, population: int, verdict: ?string, inspect_url: ?string, inspect_direct: bool, requested_at: ?string, requests: int}>, eligible: int, requested_today: int}
      */
     public function for(Site $site, ?int $limit = null): array
     {
@@ -86,7 +86,8 @@ final class RequestQueue
                 'days_waiting' => (int) ($row['days_waiting'] ?? 0),
                 'population' => $pop,
                 'verdict' => $row['verdict'],
-                'inspect_url' => StuckPages::inspectUrl($site, $row['url']),
+                'inspect_url' => StuckPages::inspectUrl($site, $row['inspection_link'] ?? null),
+                'inspect_direct' => ($row['inspection_link'] ?? null) !== null,
                 'requested_at' => $requestedAt?->toIso8601String(),
                 'requests' => $requests,
                 '_sort' => [$tier, -$pop, -(int) ($row['days_waiting'] ?? 0), $row['title']],

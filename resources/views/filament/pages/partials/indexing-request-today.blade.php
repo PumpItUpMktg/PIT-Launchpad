@@ -34,7 +34,7 @@
                             <div class="k">{{ $r['kind'] }}{{ $r['population'] > 0 ? ' · pop '.number_format($r['population']) : '' }} · waiting {{ $r['days_waiting'] }} days{{ $r['requests'] > 0 ? ' · requested '.$r['requests'].'× before' : '' }}</div>
                         </td>
                         <td class="act">
-                            @if ($r['inspect_url'])<a class="primary" href="{{ $r['inspect_url'] }}" target="_blank" rel="noopener">Inspect in Search Console ↗</a>@endif
+                            @if ($r['inspect_url'])<a class="primary" href="{{ $r['inspect_url'] }}" target="_blank" rel="noopener" @if (! $r['inspect_direct']) title="Google has not handed us this page's inspection link yet — paste the page URL into the inspection bar at the top of Search Console" @endif>{{ $r['inspect_direct'] ? 'Inspect in Search Console ↗' : 'Open Search Console (paste the URL) ↗' }}</a>@endif
                             <button type="button" wire:click="markRequested('{{ $r['content_id'] }}')" wire:loading.attr="disabled" wire:target="markRequested" title="Press after you clicked Request indexing in Search Console — it stamps the page and takes it off today's list">Mark requested</button>
                         </td>
                     </tr>

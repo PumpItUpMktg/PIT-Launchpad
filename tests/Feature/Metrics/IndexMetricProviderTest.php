@@ -59,7 +59,7 @@ function fakeInspector(bool $connected = true): IndexInspector
 
 function indexStatus(string $url, IndexCoverageState $state): IndexStatus
 {
-    return new IndexStatus(url: $url, state: $state, coverageState: $state->label(), verdict: $state->indexed() ? 'PASS' : 'NEUTRAL');
+    return new IndexStatus(url: $url, state: $state, coverageState: $state->label(), verdict: $state->indexed() ? 'PASS' : 'NEUTRAL', resultLink: 'https://search.google.com/search-console/inspect?resource_id=sc-domain:x&id=tok-'.md5($url));
 }
 
 function providerWith(IndexInspector $inspector): IndexMetricProvider
@@ -93,7 +93,8 @@ it('persists per-URL verdicts durably and stamps the daily pages-indexed snapsho
     $rowIndexed = PageIndexState::withoutGlobalScopes()->where('content_id', $indexedPage->id)->first();
     expect($rowIndexed->index_verdict)->toBe('PASS')
         ->and($rowIndexed->isIndexed())->toBeTrue()
-        ->and($rowIndexed->url_normalized)->toBe(UrlNormalizer::url($urlIndexed));
+        ->and($rowIndexed->url_normalized)->toBe(UrlNormalizer::url($urlIndexed))
+        ->and($rowIndexed->inspection_link)->toBe('https://search.google.com/search-console/inspect?resource_id=sc-domain:x&id=tok-'.md5($urlIndexed));   // Google's own deep link, kept with the verdict
 
     expect(PageIndexState::withoutGlobalScopes()->where('content_id', $pendingPage->id)->first()->index_verdict)->toBe('crawled_not_indexed');
 

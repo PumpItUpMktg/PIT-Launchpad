@@ -23,6 +23,11 @@ final class IndexStatus
         public readonly ?Carbon $lastCrawledAt = null,
         /** When Google gave this answer — the honest "as of" for a verdict served from cache. */
         public readonly ?Carbon $inspectedAt = null,
+        /**
+         * Google's own deep link to this inspection in the Search Console UI (`inspectionResultLink`). Its
+         * `id` is an opaque token the API hands out — the only link that opens the inspection directly.
+         */
+        public readonly ?string $resultLink = null,
     ) {}
 
     public function indexed(): bool
@@ -39,7 +44,7 @@ final class IndexStatus
     }
 
     /**
-     * @return array{url: string, state: string, label: string, indexed: bool, coverage_state: string, verdict: ?string, google_canonical: ?string, user_canonical: ?string, canonical_mismatch: bool, last_crawled_at: ?string, inspected_at: ?string}
+     * @return array{url: string, state: string, label: string, indexed: bool, coverage_state: string, verdict: ?string, google_canonical: ?string, user_canonical: ?string, canonical_mismatch: bool, last_crawled_at: ?string, inspected_at: ?string, result_link: ?string}
      */
     public function toArray(): array
     {
@@ -55,6 +60,7 @@ final class IndexStatus
             'canonical_mismatch' => $this->canonicalMismatch(),
             'last_crawled_at' => $this->lastCrawledAt?->toIso8601String(),
             'inspected_at' => $this->inspectedAt?->toIso8601String(),
+            'result_link' => $this->resultLink,
         ];
     }
 
@@ -70,6 +76,7 @@ final class IndexStatus
             userCanonical: isset($data['user_canonical']) ? (string) $data['user_canonical'] : null,
             lastCrawledAt: self::time($data['last_crawled_at'] ?? null),
             inspectedAt: self::time($data['inspected_at'] ?? null),
+            resultLink: isset($data['result_link']) && is_string($data['result_link']) && $data['result_link'] !== '' ? $data['result_link'] : null,
         );
     }
 

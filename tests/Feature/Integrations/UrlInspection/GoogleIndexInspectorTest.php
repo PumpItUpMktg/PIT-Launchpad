@@ -22,15 +22,35 @@ function inspectGrant(string $status = 'connected'): void
     ]);
 }
 
-function inspectResponse(string $coverage, string $verdict = 'PASS', ?string $googleCanonical = null): array
+function inspectResponse(string $coverage, string $verdict = 'PASS', ?string $googleCanonical = null, mixed $link = 'https://search.google.com/search-console/inspect?resource_id=sc-domain:spg.example&id=odaUL5Dqq3q8n0EicQzawg'): array
 {
-    return ['inspectionResult' => ['indexStatusResult' => array_filter([
-        'verdict' => $verdict,
-        'coverageState' => $coverage,
-        'googleCanonical' => $googleCanonical,
-        'lastCrawlTime' => '2026-08-01T12:00:00Z',
-    ])]];
+    return ['inspectionResult' => array_filter([
+        'inspectionResultLink' => $link,
+        'indexStatusResult' => array_filter([
+            'verdict' => $verdict,
+            'coverageState' => $coverage,
+            'googleCanonical' => $googleCanonical,
+            'lastCrawlTime' => '2026-08-01T12:00:00Z',
+        ]),
+    ], fn ($v): bool => $v !== null)];
 }
+
+it('keeps Google\'s own inspection deep link (its id is an opaque token) through the cache, and never a non-https one', function () {
+    inspectGrant();
+    $site = Site::factory()->create(['gsc_property' => 'sc-domain:spg.example', 'domain_url' => 'https://spg.example']);
+    HttpFacade::fake([
+        '*/urlInspection/index:inspect' => HttpFacade::sequence()
+            ->push(inspectResponse('Submitted and indexed', 'PASS'))
+            ->push(inspectResponse('Submitted and indexed', 'PASS', null, 'javascript:alert(1)'))
+            ->push(inspectResponse('Submitted and indexed', 'PASS', null, null)),
+    ]);
+
+    $fetched = app(IndexInspector::class)->inspect($site, 'https://spg.example/linked');
+    expect($fetched->resultLink)->toBe('https://search.google.com/search-console/inspect?resource_id=sc-domain:spg.example&id=odaUL5Dqq3q8n0EicQzawg')
+        ->and(app(IndexInspector::class)->cached($site, 'https://spg.example/linked')->resultLink)->toBe($fetched->resultLink)
+        ->and(app(IndexInspector::class)->inspect($site, 'https://spg.example/odd')->resultLink)->toBeNull()
+        ->and(app(IndexInspector::class)->inspect($site, 'https://spg.example/none')->resultLink)->toBeNull();
+});
 
 it('is the bound IndexInspector', function () {
     expect(app(IndexInspector::class))->toBeInstanceOf(GoogleIndexInspector::class);

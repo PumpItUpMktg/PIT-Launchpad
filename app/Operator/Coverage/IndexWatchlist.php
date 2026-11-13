@@ -45,7 +45,7 @@ class IndexWatchlist
      * flags a build/staging host Google will never index ({@see config('launchpad.indexing.test_domain_suffixes')}).
      *
      * @return array{
-     *     rows: list<array{content_id: string, title: string, url: ?string, kind: string, published_at: ?string, inspected_at: ?string, indexed_at: ?string, state: string, reason: ?string, verdict: ?string, days_waiting: ?int, market_id: ?string, indexnow_at: ?string}>,
+     *     rows: list<array{content_id: string, title: string, url: ?string, kind: string, published_at: ?string, inspected_at: ?string, indexed_at: ?string, state: string, reason: ?string, verdict: ?string, inspection_link: ?string, days_waiting: ?int, market_id: ?string, indexnow_at: ?string}>,
      *     waiting: int, inspected: int, landed: int, watch_days: int,
      *     readiness: array{connected: bool, test_domain: bool, host: ?string},
      *     metrics: array{published_week: int, indexed_week: int, not_indexed: int, stuck: int, stuck_days: int}
@@ -85,7 +85,7 @@ class IndexWatchlist
         $verdicts = PageIndexState::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->whereNotNull('content_id')
-            ->get(['content_id', 'index_verdict', 'last_inspected_at', 'indexed_at'])
+            ->get(['content_id', 'index_verdict', 'last_inspected_at', 'indexed_at', 'inspection_link'])
             ->keyBy(fn (PageIndexState $r): string => (string) $r->content_id);
 
         $recent = $this->impressions->recent($site, $pages);
@@ -121,6 +121,8 @@ class IndexWatchlist
                 'state' => 'published',
                 'reason' => null,
                 'verdict' => $inspected ? (string) $verdict->index_verdict : null,
+                // Google's own deep link to the inspection, when the sync has one for this URL.
+                'inspection_link' => $inspected && is_string($verdict->inspection_link) && $verdict->inspection_link !== '' ? $verdict->inspection_link : null,
                 'days_waiting' => $published === null ? null : (int) $published->copy()->startOfDay()->diffInDays($today),
                 'market_id' => $page->parent_location_id === null ? null : (string) $page->parent_location_id,
                 'indexnow_at' => $page->indexnow_submitted_at instanceof Carbon ? $page->indexnow_submitted_at->toDateString() : null,

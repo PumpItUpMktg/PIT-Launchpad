@@ -153,7 +153,7 @@
                                         <span class="k" style="align-self:center">Use “Re-check indexing now” at the top of this page{{ $s['lever'] === \App\Operator\Coverage\StuckPages::PING ? ', then ping IndexNow (launchpad:boost-indexing)' : '' }}.</span>
                                     @endif
                                     @if (($s['inspect_url'] ?? null) !== null && in_array($s['lever'], [\App\Operator\Coverage\StuckPages::REQUEST, \App\Operator\Coverage\StuckPages::PING, \App\Operator\Coverage\StuckPages::DECIDE], true))
-                                        <a href="{{ $s['inspect_url'] }}" target="_blank" rel="noopener">Inspect in Search Console ↗</a>
+                                        <a href="{{ $s['inspect_url'] }}" target="_blank" rel="noopener" @if (! ($s['inspect_direct'] ?? false)) title="Google has not handed us this page's inspection link yet — paste the page URL into the inspection bar at the top of Search Console" @endif>{{ ($s['inspect_direct'] ?? false) ? 'Inspect in Search Console ↗' : 'Open Search Console (paste the URL) ↗' }}</a>
                                         <button type="button" wire:click="markRequested('{{ $row['content_id'] }}')" title="Press after you clicked Request indexing in Search Console — it stamps the page">Mark requested</button>
                                     @endif
                                     @if ($s['url'])<a href="{{ $s['url'] }}" target="_blank" rel="noopener">View page ↗</a>@endif
