@@ -149,7 +149,8 @@ class StuckPages
                 'rework' => $rework[$row['content_id']] ?? null,
                 'stage' => $stage,
                 'stage_label' => self::stageLabel($stage),
-                'inspect_url' => self::inspectUrl($site, $row['url']),
+                'inspect_url' => self::inspectUrl($site, $row['inspection_link'] ?? null),
+                'inspect_direct' => ($row['inspection_link'] ?? null) !== null,
                 'requested_at' => $requested[$row['content_id']] ?? null,
             ];
             $byLever[$lever] = ($byLever[$lever] ?? 0) + 1;
@@ -229,15 +230,23 @@ class StuckPages
         return max(self::decideDays() + 1, (int) config('launchpad.indexing.timeline.budget_days', 90));
     }
 
-    /** The Search Console URL-inspection link for a page (the manual "request indexing"), when the property is known. */
-    public static function inspectUrl(Site $site, ?string $url): ?string
+    /**
+     * Where the operator goes to request indexing. Google's own inspection deep link when the URL Inspection
+     * sync has one (its `id` is an opaque token only the API hands out — a hand-built link with the page URL
+     * in it is a Google 404); otherwise the property in Search Console, where the page URL is pasted into
+     * the inspection bar. Null when no property is picked.
+     */
+    public static function inspectUrl(Site $site, ?string $inspectionLink): ?string
     {
+        if ($inspectionLink !== null && $inspectionLink !== '') {
+            return $inspectionLink;
+        }
         $property = is_string($site->gsc_property) ? trim($site->gsc_property) : '';
-        if ($property === '' || $url === null || $url === '') {
+        if ($property === '') {
             return null;
         }
 
-        return 'https://search.google.com/search-console/inspect?resource_id='.rawurlencode($property).'&id='.rawurlencode($url);
+        return 'https://search.google.com/search-console?resource_id='.rawurlencode($property);
     }
 
     /** @return array{0: string, 1: string} [lever, the sentence] */

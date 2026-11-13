@@ -121,6 +121,7 @@ final class GoogleIndexInspector implements IndexInspector
 
         $coverage = (string) ($r['coverageState'] ?? '');
         $verdict = isset($r['verdict']) ? (string) $r['verdict'] : null;
+        $link = $json['inspectionResult']['inspectionResultLink'] ?? null;
 
         return new IndexStatus(
             url: $url,
@@ -132,6 +133,7 @@ final class GoogleIndexInspector implements IndexInspector
             lastCrawledAt: $this->parseTime($r['lastCrawlTime'] ?? null),
             // Stamped at fetch so a verdict served from cache still says when Google actually answered.
             inspectedAt: Carbon::now(),
+            resultLink: is_string($link) && str_starts_with($link, 'https://') ? $link : null,
         );
     }
 

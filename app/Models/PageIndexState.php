@@ -21,6 +21,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $index_verdict
  * @property string|null $robots_state
  * @property string|null $canonical_url
+ * @property string|null $inspection_link Google's own URL Inspection deep link for this URL (from the API), when the sync has one
  * @property Carbon|null $last_crawled_at
  * @property Carbon|null $last_inspected_at
  * @property Carbon|null $indexed_at when the URL first reached the index (PASS); null while it is not indexed

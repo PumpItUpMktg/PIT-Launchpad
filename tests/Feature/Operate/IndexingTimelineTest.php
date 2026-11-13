@@ -37,7 +37,7 @@ function timelineSite(): array
             'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location, 'status' => ContentStatus::Published,
             'location_id' => null, 'parent_location_id' => $office->id, 'title' => $name, 'slug' => $slug, 'wp_post_id' => 2, 'published_at' => now()->subDays($days),
         ]);
-        PageIndexState::create(['site_id' => $site->id, 'content_id' => $page->id, 'url' => "https://tl.example/{$slug}/", 'url_normalized' => "https://tl.example/{$slug}", 'coverage_state' => IndexCoverageState::DiscoveredNotIndexed->value, 'index_verdict' => IndexCoverageState::DiscoveredNotIndexed->value, 'last_inspected_at' => now()->subDay()]);
+        PageIndexState::create(['site_id' => $site->id, 'content_id' => $page->id, 'url' => "https://tl.example/{$slug}/", 'url_normalized' => "https://tl.example/{$slug}", 'coverage_state' => IndexCoverageState::DiscoveredNotIndexed->value, 'index_verdict' => IndexCoverageState::DiscoveredNotIndexed->value, 'last_inspected_at' => now()->subDay(), 'inspection_link' => "https://search.google.com/search-console/inspect?resource_id=sc-domain:tl.example&id=tok-{$slug}"]);
         app(LinkInjector::class)->appendRelated($hub->fresh(), $name, '/'.$slug);   // linked from the indexed hub
 
         return $page;
@@ -64,7 +64,8 @@ it('places a discovered page on the timeline: waiting under 30 days, then ask, d
         ->and($rows['Washington, NJ']['lever'])->toBe(StuckPages::REQUEST)
         ->and($rows['Washington, NJ']['action'])->toContain('request indexing')->toContain('Do not rewrite it')
         ->and($rows['Washington, NJ']['stage_label'])->toBe('30–60 days — ask Google')
-        ->and($rows['Washington, NJ']['inspect_url'])->toBe('https://search.google.com/search-console/inspect?resource_id=sc-domain%3Atl.example&id=https%3A%2F%2Ftl.example%2Fwashington-nj%2F')
+        ->and($rows['Washington, NJ']['inspect_url'])->toBe('https://search.google.com/search-console/inspect?resource_id=sc-domain:tl.example&id=tok-washington-nj')   // Google's own link, from the sync
+        ->and($rows['Washington, NJ']['inspect_direct'])->toBeTrue()
         ->and($rows['Independence, NJ']['stage'])->toBe(StuckPages::STAGE_DECIDE)
         ->and($rows['Independence, NJ']['lever'])->toBe(StuckPages::DECIDE)
         ->and($rows['Independence, NJ']['action'])->toContain('A town page is never dropped')

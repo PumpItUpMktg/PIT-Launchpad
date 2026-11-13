@@ -91,6 +91,8 @@ class IndexMetricProvider implements MetricProvider
                 // coarse coverage state so the operator can tell crawled-not-indexed from excluded, etc.
                 'index_verdict' => $f['indexed'] ? 'PASS' : (string) $f['state'],
                 'canonical_url' => $f['google_canonical'] !== null ? (string) $f['google_canonical'] : null,
+                // Google's own inspect deep link, kept so the boards open the inspection directly.
+                'inspection_link' => $f['inspection_link'] ?? null,
                 // When Google actually answered — a verdict served from the inspector's cache keeps the
                 // time it was fetched, so the board's "as of" never claims today for a two-week-old answer.
                 'last_inspected_at' => $f['inspected_at'] !== null ? Carbon::parse($f['inspected_at']) : $now,
@@ -103,7 +105,7 @@ class IndexMetricProvider implements MetricProvider
             DB::table('page_index_states')->upsert(
                 $chunk,
                 ['site_id', 'url_normalized'],
-                ['content_id', 'origin', 'coverage_state', 'index_verdict', 'canonical_url', 'last_inspected_at', 'updated_at'],
+                ['content_id', 'origin', 'coverage_state', 'index_verdict', 'canonical_url', 'inspection_link', 'last_inspected_at', 'updated_at'],
             );
         }
 
