@@ -85,7 +85,7 @@ class IndexWatchlist
         $verdicts = PageIndexState::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->whereNotNull('content_id')
-            ->get(['content_id', 'index_verdict', 'last_inspected_at', 'indexed_at'])
+            ->get(['content_id', 'index_verdict', 'last_inspected_at', 'indexed_at', 'inspection_link'])
             ->keyBy(fn (PageIndexState $r): string => (string) $r->content_id);
 
         $recent = $this->impressions->recent($site, $pages);
