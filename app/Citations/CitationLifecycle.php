@@ -23,8 +23,8 @@ use Illuminate\Support\Carbon;
  */
 final class CitationLifecycle
 {
-    /** Record that a VA / operator submitted the listing. Resets the verification clock. */
-    public function submit(CitationStatus $status, CitationSource $source = CitationSource::Va): void
+    /** Record that a VA / operator submitted the listing (with the URL they report, when they have one). Resets the verification clock. */
+    public function submit(CitationStatus $status, CitationSource $source = CitationSource::Va, ?string $liveUrl = null): void
     {
         $from = $status->lifecycle;
         $status->forceFill([
@@ -34,7 +34,7 @@ final class CitationLifecycle
             'verification_cycles' => 0,
         ])->save();
 
-        $this->emit($status, CitationEventType::Submitted, $from, CitationLifecycleState::Submitted);
+        $this->emit($status, CitationEventType::Submitted, $from, CitationLifecycleState::Submitted, $liveUrl !== null ? ['live_url' => $liveUrl] : []);
     }
 
     /** Record that the directory / VA rejected the submission. */

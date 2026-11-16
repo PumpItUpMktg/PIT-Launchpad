@@ -75,6 +75,9 @@
                                     <span style="color:#2563eb">● Submitted {{ $card->submitted }}</span>
                                     <span>● Missing {{ $card->missing }}</span>
                                 </div>
+                                @if ($card->verified + $card->rejected + $card->stalled > 0)
+                                    <div style="font-size:.72rem;color:var(--gray-500);margin-top:.35rem">Submissions: <strong style="color:#16a34a">{{ $card->verified }} landed</strong>{{ $card->rejected > 0 ? ' · '.$card->rejected.' rejected' : '' }}{{ $card->stalled > 0 ? ' · '.$card->stalled.' stalled' : '' }}</div>
+                                @endif
                                 @if ($card->linked + $card->linkedElsewhere > 0)
                                     <div style="font-size:.72rem;color:var(--gray-500);margin-top:.35rem">Backlink index: <strong>{{ $card->linked }}</strong> directories link to this office's page{{ $card->linkedElsewhere > 0 ? ', '.$card->linkedElsewhere.' link to the home page or another page' : '' }}</div>
                                 @endif

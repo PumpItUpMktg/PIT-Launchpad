@@ -3,6 +3,8 @@
 namespace App\Filament\Pages\Citations;
 
 use App\Citations\CitationLifecycle;
+use App\Citations\CitationSheetExport;
+use App\Citations\CitationSubmissions;
 use App\Citations\Ui\LocationWorkspace;
 use App\Citations\Ui\WorkspaceRow;
 use App\Links\OutreachKitDrafter;
@@ -19,6 +21,10 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Livewire\WithFileUploads;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Citations · Location workspace (§ Citations UI, PR C) — the directory-by-directory work surface for one
@@ -30,6 +36,8 @@ use Illuminate\Support\Facades\Auth;
  */
 class CitationsWorkspace extends Page
 {
+    use WithFileUploads;
+
     protected static bool $shouldRegisterNavigation = false; // reached from the tenant board, not the sidebar
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-list-bullet';
@@ -47,6 +55,12 @@ class CitationsWorkspace extends Page
     public bool $showNotRelevant = false;
 
     public ?string $activeDirectoryId = null;
+
+    /** The live listing URL typed next to "Mark submitted" in the drawer (optional). */
+    public string $submitUrl = '';
+
+    /** A filled tracker sheet (the CSV this page downloads) coming back from the VA. */
+    public ?TemporaryUploadedFile $trackerFile = null;
 
     public static function menuTag(): string
     {
@@ -113,6 +127,57 @@ class CitationsWorkspace extends Page
     public function closeRow(): void
     {
         $this->activeDirectoryId = null;
+        $this->submitUrl = '';
+    }
+
+    /**
+     * Record that the open directory's listing was submitted by hand (created or corrected), with the live URL
+     * when the operator has it. The lifecycle flips to submitted; the next scan verifies it.
+     */
+    public function markSubmitted(): void
+    {
+        $location = $this->getLocation();
+        $directory = $this->activeDirectoryId !== null ? Directory::query()->find($this->activeDirectoryId) : null;
+        if ($location === null || $directory === null) {
+            return;
+        }
+        $url = trim($this->submitUrl);
+        app(CitationSubmissions::class)->markSubmitted($location, $directory->id, $url !== '' ? $url : null);
+        $this->submitUrl = '';
+        Notification::make()->success()->title("Marked submitted on {$directory->name}")
+            ->body('The next scan verifies it. It is off the work order until then.')->send();
+    }
+
+    /** The tracker sheet for this office — the NAP block and every directory with the scan's status — as CSV. */
+    public function downloadTracker(): ?StreamedResponse
+    {
+        $location = $this->getLocation();
+        if ($location === null) {
+            return null;
+        }
+        $site = $location->site;
+        $data = app(CitationSheetExport::class)->forLocation($site, $location);
+        $csv = CitationSheetExport::csv($data);
+        $name = 'citations-'.Str::slug((string) $location->name).'-'.now()->toDateString().'.csv';
+
+        return response()->streamDownload(fn () => print ($csv), $name, ['Content-Type' => 'text/csv']);
+    }
+
+    /** Apply the tracker sheet the VA filled: rows with a date or live URL become submitted, rejected rows rejected. */
+    public function importTracker(): void
+    {
+        $location = $this->getLocation();
+        if ($location === null || $this->trackerFile === null) {
+            return;
+        }
+        $csv = (string) $this->trackerFile->get();
+        $this->trackerFile = null;
+        $r = app(CitationSubmissions::class)->importTracker($location, $csv);
+        $unknown = $r['unknown'] === [] ? '' : ' Not in the catalog (left alone): '.implode(', ', array_slice($r['unknown'], 0, 8)).(count($r['unknown']) > 8 ? '…' : '').'.';
+        Notification::make()->{$r['submitted'] + $r['rejected'] > 0 ? 'success' : 'warning'}()
+            ->title("Tracker imported: {$r['submitted']} submitted, {$r['rejected']} rejected, {$r['already']} already recorded")
+            ->body("{$r['skipped']} row(s) had no date or live URL and were skipped.{$unknown} Rescan the office once the batch is in.")
+            ->send();
     }
 
     /** @return array{status: ?CitationStatus, events: Collection<int, CitationEvent>, directory: ?Directory, kit: ?OutreachKit}|null */

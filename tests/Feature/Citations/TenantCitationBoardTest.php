@@ -63,3 +63,18 @@ test('a location without a GBP is flagged for attachment', function (): void {
 
     expect($card->hasGbp)->toBeFalse();
 });
+
+test('a location card reports what the submissions did: landed, rejected, stalled', function (): void {
+    $location = Location::factory()->for($this->site)->create(['name' => 'Montclair']);
+    LocationNapProfile::factory()->for($this->site)->create(['location_id' => $location->id, 'business_name' => 'ACME', 'categories' => null]);
+    $dirs = collect(range(1, 4))->map(fn (): Directory => Directory::factory()->create(['scope' => DirectoryScope::National]));
+    CitationStatus::factory()->for($this->site)->create(['location_id' => $location->id, 'directory_id' => $dirs[0]->id, 'presence' => CitationPresence::PresentMatch, 'lifecycle' => CitationLifecycleState::Verified]);
+    CitationStatus::factory()->for($this->site)->create(['location_id' => $location->id, 'directory_id' => $dirs[1]->id, 'presence' => CitationPresence::Absent, 'lifecycle' => CitationLifecycleState::Rejected]);
+    CitationStatus::factory()->for($this->site)->create(['location_id' => $location->id, 'directory_id' => $dirs[2]->id, 'presence' => CitationPresence::Absent, 'lifecycle' => CitationLifecycleState::Stalled]);
+    CitationStatus::factory()->for($this->site)->create(['location_id' => $location->id, 'directory_id' => $dirs[3]->id, 'presence' => CitationPresence::Absent, 'lifecycle' => CitationLifecycleState::Submitted]);
+
+    $card = $this->board->forSite($this->site)[0];
+
+    expect($card->verified)->toBe(1)->and($card->rejected)->toBe(1)->and($card->stalled)->toBe(1)
+        ->and($card->live)->toBe(1)->and($card->submitted)->toBe(1)->and($card->missing)->toBe(2);
+});

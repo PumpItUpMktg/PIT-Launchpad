@@ -45,7 +45,7 @@ final class TenantCitationBoard
             $statuses = CitationStatus::query()->withoutGlobalScope(SiteScope::class)
                 ->where('location_id', $location->id)->get()->keyBy('directory_id');
 
-            $live = $mismatch = $submitted = $missing = 0;
+            $live = $mismatch = $submitted = $missing = $verified = $rejected = $stalled = 0;
             foreach ($eligible as $dir) {
                 $status = $statuses->get($dir->id);
                 if ($status === null) {
@@ -53,6 +53,13 @@ final class TenantCitationBoard
 
                     continue;
                 }
+                // The lifecycle outcomes, read alongside presence: what the submissions did.
+                match ($status->lifecycle) {
+                    CitationLifecycleState::Verified => $verified++,
+                    CitationLifecycleState::Rejected => $rejected++,
+                    CitationLifecycleState::Stalled => $stalled++,
+                    default => null,
+                };
                 if ($status->lifecycle === CitationLifecycleState::Submitted) {
                     $submitted++;
                 } elseif ($status->presence === CitationPresence::PresentMatch || $status->covered_by_sibling) {
@@ -94,6 +101,9 @@ final class TenantCitationBoard
                 unchecked: $this->unchecked($location),
                 linked: $linked,
                 linkedElsewhere: $linkedElsewhere,
+                verified: $verified,
+                rejected: $rejected,
+                stalled: $stalled,
             );
         })->all();
     }
