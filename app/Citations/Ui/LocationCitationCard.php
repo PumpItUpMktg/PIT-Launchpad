@@ -35,6 +35,9 @@ final readonly class LocationCitationCard
         public int $unchecked = 0,     // directories the last scan could not check (DataForSEO hiccup)
         public int $linked = 0,        // directories whose link in the backlink index lands on this office's page
         public int $linkedElsewhere = 0, // directories that link to the site, but to the home page / another office / another page
+        public int $verified = 0,      // submissions a later scan confirmed live
+        public int $rejected = 0,      // submissions the directory / VA rejected
+        public int $stalled = 0,       // submitted or work-ordered too many times without landing
     ) {}
 
     public function scanFailed(): bool

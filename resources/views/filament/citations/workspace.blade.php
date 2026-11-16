@@ -34,6 +34,19 @@
             </label>
         </div>
 
+        {{-- The tracker sheet: out to the VA with the scan's status, back with what they submitted --}}
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-top:.6rem;font-size:.8rem;color:var(--gray-500)">
+            <x-filament::button size="xs" color="gray" wire:click="downloadTracker">Download tracker (CSV)</x-filament::button>
+            <span>·</span>
+            <label style="display:flex;gap:.4rem;align-items:center">
+                <span>Import the filled tracker:</span>
+                <input type="file" wire:model="trackerFile" accept=".csv,text/csv" style="font-size:.78rem">
+            </label>
+            <x-filament::button size="xs" wire:click="importTracker" wire:loading.attr="disabled" wire:target="trackerFile,importTracker" x-bind:disabled="!$wire.trackerFile">Import</x-filament::button>
+            <span wire:loading wire:target="trackerFile">uploading…</span>
+            <span title="A row counts as submitted when its Date Submitted or Live URL is filled; a Status of Rejected records the rejection with the Notes as the reason. Rows already submitted or verified are left alone.">ⓘ</span>
+        </div>
+
         <div x-data="{ selected: [] }" style="margin-top:1rem">
             <div x-show="selected.length" x-cloak
                  style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.6rem .9rem;background:var(--primary-50);border:1px solid var(--primary-200);border-radius:.5rem;margin-bottom:.5rem">
@@ -166,9 +179,24 @@
                         <p style="color:var(--gray-500);font-size:.85rem">This directory has not been scanned yet.</p>
                     @endif
 
-                    <div style="margin-top:auto;display:flex;gap:.5rem;flex-wrap:wrap;padding-top:1rem;border-top:1px solid var(--gray-200)">
+                    @php($lc = $detail['status']?->lifecycle)
+                    @php($canSubmit = $detail['status'] === null || (! in_array($lc, [\App\Enums\CitationLifecycleState::Submitted, \App\Enums\CitationLifecycleState::Verified], true) && $detail['status']->presence !== \App\Enums\CitationPresence::PresentMatch))
+                    @if ($canSubmit)
+                        <div style="margin-top:auto;padding-top:1rem;border-top:1px solid var(--gray-200)">
+                            <h3 style="font-size:.8rem;text-transform:uppercase;color:var(--gray-500);margin-bottom:.4rem">Submitted it by hand?</h3>
+                            <div style="display:flex;gap:.5rem;align-items:center">
+                                <input type="url" wire:model="submitUrl" placeholder="Live listing URL (optional)" style="flex:1;border:1px solid var(--gray-300);border-radius:.375rem;padding:.35rem .5rem;font-size:.8rem">
+                                <x-filament::button size="sm" wire:click="markSubmitted">Mark submitted</x-filament::button>
+                            </div>
+                            <p style="font-size:.72rem;color:var(--gray-400);margin-top:.35rem">Flips this directory to Submitted and takes it off the work order; the next scan verifies it.</p>
+                        </div>
+                    @elseif ($lc === \App\Enums\CitationLifecycleState::Submitted)
+                        <p style="margin-top:auto;padding-top:1rem;border-top:1px solid var(--gray-200);font-size:.8rem;color:#2563eb">Submitted {{ $detail['status']->submitted_at?->diffForHumans() ?? '' }} — awaiting the next scan to verify.</p>
+                    @endif
+
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap;padding-top:.75rem;{{ $canSubmit || $lc === \App\Enums\CitationLifecycleState::Submitted ? '' : 'margin-top:auto;border-top:1px solid var(--gray-200)' }}">
                         @if ($detail['status'])
-                            <x-filament::button size="sm" wire:click="createWorkOrders(['{{ $detail['status']->id }}'])">Create fix work order</x-filament::button>
+                            <x-filament::button size="sm" color="gray" wire:click="createWorkOrders(['{{ $detail['status']->id }}'])">Create fix work order</x-filament::button>
                         @endif
                         <x-filament::button size="sm" color="gray" wire:click="markNotRelevant('{{ $this->activeDirectoryId }}')">Mark not relevant</x-filament::button>
                     </div>
