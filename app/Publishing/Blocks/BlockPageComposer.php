@@ -25,6 +25,7 @@ final class BlockPageComposer
      * @param  list<array{quote: string, author?: string, role?: string, stars?: int}>  $testimonials  substantiated reviews (data-gated)
      * @param  list<string>  $serviceAreaCounties  named counties served (the pipe-separated line beneath the block)
      * @param  list<array{county: string, cities: list<array{label: string, url: string}>}>  $serviceAreasByCounty  major cities grouped by county (the 50/50 block's cities column)
+     * @param  list<array{label: string, url: string}>  $offices  every office with a live hub page — the "Our offices" link strip (empty ⇒ omitted)
      * @param  list<array{title: string, description: string}>  $processSteps  the tenant's captured process (else a safe default)
      * @param  list<array{label?: string, number?: string, logo_url?: string}>  $certifications  real credentials (verbatim, data-gated, per-item)
      * @param  array{name?: string, description?: string}  $guarantee  the tenant's guarantee/warranty (verbatim, data-gated)
@@ -48,6 +49,7 @@ final class BlockPageComposer
         array $serviceAreaCounties = [],
         array $serviceAreasByCounty = [],
         array $processSteps = [],
+        array $offices = [],
         array $certifications = [],
         array $guarantee = [],
         bool $preview = false,
@@ -129,6 +131,15 @@ final class BlockPageComposer
             mapAvailable: $serviceAreaMapAvailable,
         );
 
+        // 8b. Our offices — a link to EVERY office hub (step 3): the home page hands its weight to each
+        //     office, not only the ones whose city the county list happens to name. One pipe-separated line,
+        //     the same strip the hubs use for their towns. Empty (no live hub) → omitted.
+        $offices = $this->sections->areasServed(
+            eyebrow: 'Our offices',
+            heading: 'Local offices near you',
+            links: $offices,
+        );
+
         // cta1 (PUSHY) — a bold accent band that blatantly asks for the business, placed MID-page (after
         // the process, once the visitor has seen what we do and how) and buffered by light sections on
         // both sides so no two colored bands ever sit adjacent.
@@ -154,7 +165,7 @@ final class BlockPageComposer
         // apart by a light section, and the risk-reversal cluster — guarantee (accent) then the
         // credentials/licensing row — sits LOW, just before the soft closing CTA. No two colored bands
         // are ever adjacent: D·L·D·L·C·L·L·L·C·L·D.
-        return $this->join([$hero, $services, $why, $process, $ctaBold, $proof, $reviews, $areas, $guaranteeBand, $certs, $cta]);
+        return $this->join([$hero, $services, $why, $process, $ctaBold, $proof, $reviews, $areas, $offices, $guaranteeBand, $certs, $cta]);
     }
 
     /**
@@ -1061,6 +1072,7 @@ final class BlockPageComposer
         array $nearbyTowns = [],
         bool $isTown = false,
         string $parentCity = '',
+        ?array $parentHub = null,
         array $localConditions = [],
         bool $hasMap = false,
         bool $areasMapAvailable = false,
@@ -1136,6 +1148,7 @@ final class BlockPageComposer
             address: $address,
             hours: $hours,
             preview: $preview,
+            hubLink: $parentHub,
             // The map rides INSIDE this block, beside the details: "Visit or call" and "Find us in
             // {city}" were two full-width sections with two headings answering one question, which read
             // as redundant and pushed the page's real content down. One block, two columns.

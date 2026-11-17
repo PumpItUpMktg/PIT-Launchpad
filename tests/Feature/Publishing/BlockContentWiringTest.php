@@ -1743,3 +1743,33 @@ it('the home page carries its lead form in the HERO as the #contact card; the cl
     // The hero card replaces the hero image — the right column is the form, not a picture.
     expect(substr_count($markup, 'lp-hero'))->toBeGreaterThan(0);
 });
+
+it('the home page links EVERY office with a live hub in an "Our offices" strip — not a folded location, not an unpublished hub', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://sewergurus.com']);
+    $office = fn (string $city, string $state, string $name) => Location::factory()->create([
+        'site_id' => $site->id, 'name' => $name,
+        'address_components' => [
+            ['types' => ['locality'], 'long_name' => $city, 'short_name' => $city],
+            ['types' => ['administrative_area_level_1'], 'long_name' => $state, 'short_name' => $state],
+        ],
+    ]);
+    $hubPage = fn (Location $l, string $slug, ?int $wp) => Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => $l->id, 'slug' => $slug, 'title' => $slug, 'wp_post_id' => $wp,
+    ]);
+    $hubPage($office('Trooper', 'PA', 'Trooper office'), 'trooper-pa', 11);
+    $hubPage($office('Montclair', 'NJ', 'Montclair office'), 'montclair-nj', 12);
+    $hubPage($office('Roslyn', 'NY', 'Roslyn office'), 'roslyn-ny', null);                  // hub not live yet
+    $folded = $office('Hoboken', 'NJ', 'Hoboken office (old)');
+    $hubPage($folded, 'hoboken-old', 13);
+    $folded->forceFill(['merged_into_id' => $folded->id])->save();                          // a folded duplicate
+
+    $home = blockHomePage($site);
+    $markup = app(BlockContentAssembler::class)->compose($home->fresh(), $home->slot_payload, []);
+
+    expect($markup)->toContain('Our offices')
+        ->toContain('href="https://sewergurus.com/montclair-nj/"')
+        ->toContain('href="https://sewergurus.com/trooper-pa/"')
+        ->not->toContain('roslyn-ny')
+        ->not->toContain('hoboken-old');
+});

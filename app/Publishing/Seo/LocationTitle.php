@@ -7,6 +7,7 @@ use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Service;
 use App\Models\SiloBlueprint;
+use App\Models\Site;
 use App\Publishing\Blocks\LocationSubject;
 use App\Support\SeoTitle;
 
@@ -23,7 +24,10 @@ use App\Support\SeoTitle;
  */
 final class LocationTitle
 {
-    public function __construct(private readonly LocationSubject $subject) {}
+    public function __construct(
+        private readonly LocationSubject $subject,
+        private readonly ServiceDemand $demand = new ServiceDemand,
+    ) {}
 
     public function compose(Content $content): ?string
     {
@@ -83,6 +87,17 @@ final class LocationTitle
     private function leadWithPlace(Content $content, string $city, string $state): string
     {
         $place = $state !== '' ? $city.', '.$state : $city;
+        $budget = $this->budget($content);
+
+        // Demand first (step 4): the services this office is actually searched for, two when they fit the
+        // budget with the brand, else the top one; then the catalog trade as before. Every candidate keeps
+        // the town — only the service term gives way.
+        foreach ($this->demandTerms($content) as $term) {
+            if (mb_strlen($term.' in '.$place) <= $budget) {
+                return $term.' in '.$place;
+            }
+        }
+
         $trade = $this->trade($content);
         if ($trade === '') {
             return $place;
@@ -99,6 +114,38 @@ final class LocationTitle
         }
 
         return $place;
+    }
+
+    /**
+     * The demand-led service terms to try, best first: both lead services joined ("Sump Pump Repair &
+     * Installation"), then the top one alone. Empty when the office shows for none of its services.
+     *
+     * @return list<string>
+     */
+    private function demandTerms(Content $content): array
+    {
+        $lead = $this->demand->leadServices($content, 2);
+        if ($lead === []) {
+            return [];
+        }
+        $terms = [];
+        if (count($lead) >= 2) {
+            $terms[] = ServiceDemand::join($lead[0], $lead[1]);
+        }
+        $terms[] = $lead[0];
+
+        return $terms;
+    }
+
+    /**
+     * How long the page portion may be so the whole <title> — page + " | {brand}" — stays within the 60
+     * the assembler guards, since its length guard cannot shorten a title with no subtitle separator.
+     */
+    private function budget(Content $content): int
+    {
+        $brand = trim((string) (Site::withoutGlobalScope(SiteScope::class)->whereKey($content->site_id)->value('brand_name') ?? ''));
+
+        return $brand === '' ? SeoTitle::MAX_LENGTH : max(20, SeoTitle::MAX_LENGTH - mb_strlen(' | '.$brand));
     }
 
     /**

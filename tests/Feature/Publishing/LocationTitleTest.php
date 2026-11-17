@@ -1,5 +1,6 @@
 <?php
 
+use App\Analytics\Gsc\Grain;
 use App\Enums\ContentKind;
 use App\Enums\MunicipalityType;
 use App\Enums\PageType;
@@ -8,6 +9,7 @@ use App\Integrations\Census\County;
 use App\Integrations\Census\MunicipalityGazetteer;
 use App\Models\Content;
 use App\Models\CoverageArea;
+use App\Models\GscUrlQueryDaily;
 use App\Models\Location;
 use App\Models\Service;
 use App\Models\SiloBlueprint;
@@ -15,6 +17,7 @@ use App\Models\Site;
 use App\Publishing\Blocks\BlockContentAssembler;
 use App\Publishing\Blocks\LocationSubject;
 use App\Publishing\MetaBlobAssembler;
+use App\Publishing\Seo\ServiceDemand;
 use Illuminate\Support\Facades\Cache;
 
 function locTitleSite(): Site
@@ -282,4 +285,91 @@ it('a drafted H1 that does not name the authoritative town yields to the formula
     expect($wrongMarkup)->not->toContain('Allentown')
         ->toContain('Neptune, NJ</h1>')                      // the formula H1 took over (no captured trade here → "Serving Neptune, NJ")
         ->and($rightMarkup)->toContain('Neptune Sump Pump Experts You Can Call Tonight'); // a drafted H1 naming the town still wins
+});
+
+// ── Step 4: the title leads with the services the office is actually searched for ──
+
+function locTitleDemand(Site $site, string $url, array $queries): void
+{
+    foreach ($queries as [$query, $impressions]) {
+        $date = now()->subDays(10)->toDateString();
+        GscUrlQueryDaily::query()->create([
+            'site_id' => $site->id, 'grain_hash' => Grain::hash([$site->id, $date, $url, $query, 'usa', 'MOBILE']),
+            'date' => $date, 'url' => $url, 'query' => $query, 'country' => 'usa', 'device' => 'MOBILE',
+            'impressions' => $impressions, 'clicks' => 0, 'ctr' => 0, 'position' => 4.0,
+        ]);
+    }
+}
+
+function locTitleDemandSite(string $brand): array
+{
+    $site = Site::factory()->create(['domain_url' => 'https://spg.test', 'brand_name' => $brand]);
+    locTitlePillar($site, 'Sump Pump Services');
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Repair', 'silo_role' => ServiceSiloRole::Supporting]);
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Sump Pump Installation', 'silo_role' => ServiceSiloRole::Supporting]);
+    Service::factory()->create(['site_id' => $site->id, 'name' => 'Basement Waterproofing', 'silo_role' => ServiceSiloRole::Supporting]);
+    $hub = Location::factory()->create([
+        'site_id' => $site->id, 'name' => 'Hackensack office',
+        'address_components' => [
+            ['types' => ['locality'], 'long_name' => 'Hackensack', 'short_name' => 'Hackensack'],
+            ['types' => ['administrative_area_level_1'], 'long_name' => 'New Jersey', 'short_name' => 'NJ'],
+        ],
+    ]);
+    $page = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => $hub->id, 'parent_location_id' => null, 'title' => 'Hackensack, NJ', 'slug' => 'hackensack-nj',
+        'meta' => ['seo' => ['title' => 'Sump Pump Service in Hackensack, NJ', 'meta_description' => 'x']],
+    ]);
+    // What the hub showed for: repair dominates, installation second, the bare trade (no specific service)
+    // biggest of all but credited to nothing, waterproofing under the floor.
+    locTitleDemand($site, 'https://spg.test/hackensack-nj/', [
+        ['sump pump repair', 300], ['sump pump repair hackensack nj', 80], ['sump pump installation nj', 120],
+        ['sump pump', 900], ['basement waterproofing hackensack', 10],
+    ]);
+
+    return [$site, $hub, $page];
+}
+
+it('a hub title leads with the services the office is searched for, both when the brand leaves room, else the top one', function () {
+    [, , $page] = locTitleDemandSite('SPG');
+    expect(app(MetaBlobAssembler::class)->documentTitle($page->fresh()))
+        ->toBe('Sump Pump Repair & Installation in Hackensack, NJ | SPG');
+
+    [, , $page] = locTitleDemandSite('Sump Pump Gurus');   // " | Sump Pump Gurus" leaves 39 chars: the pair no longer fits
+    expect(app(MetaBlobAssembler::class)->documentTitle($page->fresh()))
+        ->toBe('Sump Pump Repair in Hackensack, NJ | Sump Pump Gurus');
+});
+
+it('a town inherits its hub\'s demand; an office with no demand keeps the pillar title', function () {
+    [$site, $hub] = locTitleDemandSite('SPG');
+    locTitleCoverage($site, $hub, '3400373000', 'Teaneck');
+    $town = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => null, 'parent_location_id' => $hub->id, 'geo_id' => '3400373000',
+        'title' => 'Teaneck, NJ', 'slug' => 'hackensack-nj/teaneck-nj',
+    ]);
+    expect(app(MetaBlobAssembler::class)->documentTitle($town->fresh()))
+        ->toBe('Sump Pump Repair & Installation in Teaneck, NJ | SPG');
+
+    // A second office with no Search Console history at all → the catalog pillar, as before.
+    $quiet = Location::factory()->create([
+        'site_id' => $site->id, 'name' => 'Paramus office',
+        'address_components' => [
+            ['types' => ['locality'], 'long_name' => 'Paramus', 'short_name' => 'Paramus'],
+            ['types' => ['administrative_area_level_1'], 'long_name' => 'New Jersey', 'short_name' => 'NJ'],
+        ],
+    ]);
+    $quietPage = Content::factory()->create([
+        'site_id' => $site->id, 'kind' => ContentKind::Page, 'page_type' => PageType::Location,
+        'location_id' => $quiet->id, 'title' => 'Paramus, NJ', 'slug' => 'paramus-nj',
+    ]);
+    expect(app(MetaBlobAssembler::class)->documentTitle($quietPage->fresh()))
+        ->toBe('Sump Pump Services in Paramus, NJ | SPG');
+});
+
+it('joins two service names saying the shared lead words once, and never pads with a name the first already covers', function () {
+    expect(ServiceDemand::join('Sump Pump Repair', 'Sump Pump Installation'))->toBe('Sump Pump Repair & Installation')
+        ->and(ServiceDemand::join('Drain Cleaning', 'Drain Repair'))->toBe('Drain Cleaning & Repair')
+        ->and(ServiceDemand::join('Basement Waterproofing', 'French Drain Installation'))->toBe('Basement Waterproofing & French Drain Installation')
+        ->and(ServiceDemand::join('Sump Pump Repair', 'Sump Pump'))->toBe('Sump Pump Repair');
 });
