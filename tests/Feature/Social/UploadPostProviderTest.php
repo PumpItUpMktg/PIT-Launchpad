@@ -145,12 +145,16 @@ it('a 5xx, a per-minute 429 and a dropped connection are transient (one more try
     $site = upSite();
     $fb = SocialChannel::withoutGlobalScopes()->create(['site_id' => $site->id, 'network' => SocialNetwork::Facebook, 'provider' => 'upload_post', 'provider_channel_id' => '1029384756']);
     $post = upPost($site, $fb, ['image_url' => null]);
-    Http::fake([
-        'api.upload-post.com/api/upload_text' => Http::sequence()
-            ->push(['success' => false, 'error' => 'upstream'], 503)
-            ->push(['success' => false, 'message' => 'Too Many Requests'], 429)
-            ->push(fn () => throw new ConnectionException('cURL error 28: timed out')),
-    ]);
+    $n = 0;
+    Http::fake(['api.upload-post.com/api/upload_text' => function () use (&$n) {
+        $n++;
+
+        return match ($n) {
+            1 => Http::response(['success' => false, 'error' => 'upstream'], 503),
+            2 => Http::response(['success' => false, 'message' => 'Too Many Requests'], 429),
+            default => throw new ConnectionException('cURL error 28: timed out'),
+        };
+    }]);
     $caught = fn () => rescue(fn () => upProvider()->publish($fb, $post), fn (Throwable $e) => $e, false);
 
     expect($caught()->transient)->toBeTrue()
