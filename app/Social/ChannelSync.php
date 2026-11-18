@@ -41,6 +41,7 @@ final class ChannelSync
             $location = $profile->network->perLocation() ? $this->match($profile, $locations) : null;
             $attrs = [
                 'provider_name' => $profile->name,
+                'provider_account' => $profile->account,
                 'provider_address' => $profile->address,
                 'provider_place_id' => $profile->placeId,
                 'location_id' => $location?->id,

@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property bool $location_locked the operator assigned the location by hand; the sync keeps it
  * @property SocialNetwork $network
  * @property string $provider
+ * @property string|null $provider_account the provider profile this channel posts through (a tenant can span several)
  * @property string $provider_channel_id
  * @property string|null $provider_name
  * @property string|null $provider_address

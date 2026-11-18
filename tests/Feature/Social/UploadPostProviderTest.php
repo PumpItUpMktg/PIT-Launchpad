@@ -199,3 +199,47 @@ it('binds the Upload-Post adapter when the agency key is set, the mock otherwise
     config()->set('services.upload_post.api_key', null);
     app()->forgetInstance(SocialProvider::class);
 });
+
+it('a tenant spanning two profiles: channels from both, a listing seen under both kept once (the titled one), each channel carrying its profile, and publishing through the channel\'s own profile', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example', 'social_profile' => 'SumpPumpGurus, SPG-Pennsylvania']);
+    $profileA = ['success' => true, 'profile' => ['username' => 'SumpPumpGurus', 'facebook_page_id' => '102255308709082', 'facebook_page_name' => 'Sump Pump Gurus Corporate',
+        'social_accounts' => ['google_business' => ['handle' => 'Eric'], 'facebook' => ['handle' => 'Eric'], 'instagram' => '']]];
+    $profileB = ['success' => true, 'profile' => ['username' => 'SPG-Pennsylvania',
+        'social_accounts' => ['google_business' => ['handle' => 'Sump Pump Gurus'], 'facebook' => '', 'instagram' => '']]];
+    $info = fn (string $place, string $street, string $town) => Http::response(['success' => true, 'info' => ['place_id' => $place, 'address' => ['addressLines' => [$street], 'locality' => $town, 'administrativeArea' => 'PA', 'postalCode' => '19000']]]);
+    Http::fake([
+        'api.upload-post.com/api/uploadposts/users/SumpPumpGurus' => Http::response($profileA),
+        'api.upload-post.com/api/uploadposts/users/SPG-Pennsylvania' => Http::response($profileB),
+        'api.upload-post.com/api/uploadposts/google-business/locations?profile=SumpPumpGurus' => Http::response(['success' => true, 'locations' => [
+            ['name' => 'locations/1', 'title' => 'Sump Pump Gurus'],                 // Doylestown, untitled, under account A
+            ['name' => 'locations/2', 'title' => 'Sump Pump Gurus | Montclair'],
+        ]]),
+        'api.upload-post.com/api/uploadposts/google-business/locations?profile=SPG-Pennsylvania' => Http::response(['success' => true, 'locations' => [
+            ['name' => 'locations/2', 'title' => 'Sump Pump Gurus | Montclair'],     // the same listing, same id, under account B
+            ['name' => 'locations/3', 'title' => 'Sump Pump Gurus | Doylestown'],   // Doylestown again: another listing id, the SAME place id, titled
+            ['name' => 'locations/4', 'title' => 'Sump Pump Gurus | Hackensack'],
+        ]]),
+        'api.upload-post.com/api/uploadposts/google-business/location-info?user=SumpPumpGurus&location_id=locations%2F1&read_mask=*' => $info('ChIJ-doyle', '4343 West Swamp Road', 'Doylestown'),
+        'api.upload-post.com/api/uploadposts/google-business/location-info?user=SumpPumpGurus&location_id=locations%2F2&read_mask=*' => $info('ChIJ-mont', '50 South Park Street', 'Montclair'),
+        'api.upload-post.com/api/uploadposts/google-business/location-info?user=SPG-Pennsylvania&location_id=locations%2F3&read_mask=*' => $info('ChIJ-doyle', '4343 West Swamp Road', 'Doylestown'),
+        'api.upload-post.com/api/uploadposts/google-business/location-info?user=SPG-Pennsylvania&location_id=locations%2F4&read_mask=*' => $info('ChIJ-hack', '292 Main Street', 'Hackensack'),
+        'api.upload-post.com/api/upload_text' => Http::response(['success' => true, 'results' => ['google_business' => ['success' => true, 'post_id' => 'accounts/x/locations/4/localPosts/1']]]),
+    ]);
+
+    $profiles = upProvider()->profiles($site);
+
+    expect(array_map(fn ($p) => [$p->id, $p->network->value, $p->name, $p->placeId, $p->account], $profiles))->toBe([
+        ['102255308709082', 'facebook', 'Sump Pump Gurus Corporate', null, 'SumpPumpGurus'],
+        ['locations/3', 'gbp', 'Sump Pump Gurus | Doylestown', 'ChIJ-doyle', 'SPG-Pennsylvania'],   // the titled twin replaced the untitled one, in its slot
+        ['locations/2', 'gbp', 'Sump Pump Gurus | Montclair', 'ChIJ-mont', 'SumpPumpGurus'],       // seen under both; first profile kept
+        ['locations/4', 'gbp', 'Sump Pump Gurus | Hackensack', 'ChIJ-hack', 'SPG-Pennsylvania'],
+    ]);
+
+    // A channel posts through the profile that exposes it, not the tenant's first profile.
+    $hack = SocialChannel::withoutGlobalScopes()->create(['site_id' => $site->id, 'network' => SocialNetwork::Gbp, 'provider' => 'upload_post', 'provider_account' => 'SPG-Pennsylvania', 'provider_channel_id' => 'locations/4']);
+    upProvider()->publish($hack, upPost($site, $hack, ['image_url' => null]));
+    Http::assertSent(fn (Request $r): bool => str_ends_with($r->url(), '/api/upload_text') && upPart($r->body(), 'user', 'SPG-Pennsylvania') && upPart($r->body(), 'gbp_location_id', 'locations/4'));
+
+    expect(UploadPostSocialProvider::profilesFor($site))->toBe(['SumpPumpGurus', 'SPG-Pennsylvania'])
+        ->and(UploadPostSocialProvider::profileFor($site))->toBe('SumpPumpGurus');
+});
