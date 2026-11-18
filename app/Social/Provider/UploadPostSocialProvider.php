@@ -13,7 +13,8 @@ use Illuminate\Http\Client\Response;
 use Throwable;
 
 /**
- * The Upload-Post transport (§ Social): one Upload-Post PROFILE per tenant (`Site.social_profile`), the
+ * The Upload-Post transport (§ Social): one Upload-Post PROFILE per tenant — or several, comma-separated in
+ * `Site.social_profile`, when its listings sit under more than one Google account — the
  * agency's Google Business / Facebook / Instagram accounts connected to it in the Upload-Post dashboard.
  *
  * `profiles()` reads the profile's connected accounts, and for Google Business every location the
@@ -48,11 +49,47 @@ final class UploadPostSocialProvider implements SocialProvider
 
     public function profiles(Site $site): array
     {
-        $profile = self::profileFor($site);
-        if ($profile === null) {
-            return [];
+        $out = [];
+        $seenIds = [];
+        $seenPlaces = [];
+        foreach (self::profilesFor($site) as $profile) {
+            foreach ($this->profileChannels($profile) as $channel) {
+                // The same channel can show under two profiles (two Google accounts over one listing, one
+                // Page connected twice): one channel, through the first profile that exposed it. A GBP seen
+                // again under another listing id but the same place id is the same storefront — kept once,
+                // preferring the title that names the town.
+                $key = $channel->network->value.'|'.$channel->id;
+                if (isset($seenIds[$key])) {
+                    continue;
+                }
+                if ($channel->network === SocialNetwork::Gbp && $channel->placeId !== null) {
+                    $placeKey = $channel->placeId;
+                    if (isset($seenPlaces[$placeKey])) {
+                        $kept = $out[$seenPlaces[$placeKey]];
+                        if (! str_contains($kept->name, '|') && str_contains($channel->name, '|')) {
+                            $out[$seenPlaces[$placeKey]] = $channel;
+                        }
+
+                        continue;
+                    }
+                    $seenPlaces[$placeKey] = count($out);
+                }
+                $seenIds[$key] = true;
+                $out[] = $channel;
+            }
         }
 
+        return array_values($out);
+    }
+
+    /**
+     * The channels one Upload-Post profile exposes: its Page, its Instagram account, and every Google
+     * Business location its Google connection can post to.
+     *
+     * @return list<SocialProfile>
+     */
+    private function profileChannels(string $profile): array
+    {
         $json = $this->json($this->send(fn () => $this->request()->get($this->url('/api/uploadposts/users/'.rawurlencode($profile)))));
         $record = is_array($json['profile'] ?? null) ? $json['profile'] : (is_array($json['profiles'][0] ?? null) ? $json['profiles'][0] : $json);
         $accounts = is_array($record['social_accounts'] ?? null) ? $record['social_accounts'] : [];
@@ -67,7 +104,7 @@ final class UploadPostSocialProvider implements SocialProvider
             $id = $pageId !== '' ? $pageId : trim((string) ($fb['username'] ?? $fb['handle'] ?? ''));
             $name = $pageName !== '' ? $pageName : trim((string) ($fb['display_name'] ?? $fb['handle'] ?? $id));
             if ($id !== '') {
-                $out[] = new SocialProfile($id, SocialNetwork::Facebook, $name !== '' ? $name : $id);
+                $out[] = new SocialProfile($id, SocialNetwork::Facebook, $name !== '' ? $name : $id, account: $profile);
             }
         }
         $ig = $accounts['instagram'] ?? null;
@@ -75,7 +112,7 @@ final class UploadPostSocialProvider implements SocialProvider
             $id = trim((string) ($ig['username'] ?? $ig['handle'] ?? ''));
             $name = trim((string) ($ig['display_name'] ?? $ig['handle'] ?? $id));
             if ($id !== '' || $name !== '') {
-                $out[] = new SocialProfile($id !== '' ? $id : $name, SocialNetwork::Instagram, $name !== '' ? $name : $id);
+                $out[] = new SocialProfile($id !== '' ? $id : $name, SocialNetwork::Instagram, $name !== '' ? $name : $id, account: $profile);
             }
         }
 
@@ -86,7 +123,7 @@ final class UploadPostSocialProvider implements SocialProvider
                 // an office the sure way — place id, then street — so a listing named without its town still
                 // lands on the right office. A read that fails leaves the name match as the fallback.
                 $details = $this->gbpDetails($profile, (string) $location['name']);
-                $out[] = new SocialProfile((string) $location['name'], SocialNetwork::Gbp, (string) $location['title'], $details['address'], $details['place_id']);
+                $out[] = new SocialProfile((string) $location['name'], SocialNetwork::Gbp, (string) $location['title'], $details['address'], $details['place_id'], account: $profile);
             }
         }
 
@@ -96,7 +133,10 @@ final class UploadPostSocialProvider implements SocialProvider
     public function publish(SocialChannel $channel, SocialPost $post): SocialPublishResult
     {
         $site = Site::withoutGlobalScope(SiteScope::class)->find($channel->site_id);
-        $profile = $site === null ? null : self::profileFor($site);
+        $profile = trim((string) $channel->provider_account);
+        if ($profile === '') {
+            $profile = $site === null ? null : (self::profilesFor($site)[0] ?? null);
+        }
         if ($profile === null) {
             throw new SocialProviderException('No Upload-Post profile is set for this site (Connections → Set social posting profile).');
         }
@@ -276,11 +316,22 @@ final class UploadPostSocialProvider implements SocialProvider
         return ['success' => false, 'error' => 'Upload-Post did not finish the post in time ('.$requestId.')'];
     }
 
+    /**
+     * The tenant's Upload-Post profile usernames — one, or several comma-separated when its listings sit
+     * under more than one Google account (each Google connection lives in its own Upload-Post profile).
+     *
+     * @return list<string>
+     */
+    public static function profilesFor(Site $site): array
+    {
+        $names = preg_split('/[\s,;]+/', trim((string) ($site->social_profile ?? ''))) ?: [];
+
+        return array_values(array_unique(array_filter(array_map('trim', $names), fn (string $n): bool => $n !== '')));
+    }
+
     public static function profileFor(Site $site): ?string
     {
-        $p = trim((string) ($site->social_profile ?? ''));
-
-        return $p !== '' ? $p : null;
+        return self::profilesFor($site)[0] ?? null;
     }
 
     /**

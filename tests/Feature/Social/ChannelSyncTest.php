@@ -77,3 +77,22 @@ it('a new channel gets the default one-a-day cap, and an operator\'s locked offi
         ->and($channel->fresh()->location_locked)->toBeTrue()
         ->and($r['matched'])->toBe(1)->and($r['unmatched'])->toBe([]);
 });
+
+it('a channel remembers the provider profile that exposes it, and keeps it on re-sync', function () {
+    $site = Site::factory()->create();
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Hackensack office', 'address' => null]);
+    /** @var MockSocialProvider $mock */
+    $mock = app(SocialProvider::class);
+    $mock->connect($site->id, [
+        new SocialProfile('locations/4', SocialNetwork::Gbp, 'Sump Pump Gurus | Hackensack', account: 'SPG-Pennsylvania'),
+        new SocialProfile('102255308709082', SocialNetwork::Facebook, 'Sump Pump Gurus Corporate', account: 'SumpPumpGurus'),
+    ]);
+
+    app(ChannelSync::class)->sync($site);
+    app(ChannelSync::class)->sync($site);
+
+    $by = SocialChannel::withoutGlobalScopes()->where('site_id', $site->id)->get()->keyBy('provider_channel_id');
+    expect($by['locations/4']->provider_account)->toBe('SPG-Pennsylvania')
+        ->and($by['locations/4']->location_id)->not->toBeNull()
+        ->and($by['102255308709082']->provider_account)->toBe('SumpPumpGurus');
+});

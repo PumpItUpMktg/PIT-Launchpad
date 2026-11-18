@@ -13,5 +13,7 @@ final class SocialProfile
         public readonly string $name,
         public readonly ?string $address = null,
         public readonly ?string $placeId = null,
+        /** The provider profile (account) this channel is exposed through — a tenant can span several. */
+        public readonly ?string $account = null,
     ) {}
 }

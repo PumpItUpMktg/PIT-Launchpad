@@ -349,10 +349,10 @@ class ConnectionsResource extends Resource
             ->modalDescription('The Upload-Post profile this tenant posts through. Create it in Upload-Post, connect the client\'s Google Business (and Facebook / Instagram) to it there, then enter its username here. Operate → Shares → "Sync now" pulls the locations and Pages.')
             ->schema([
                 TextInput::make('social_profile')
-                    ->label('Upload-Post profile username')
+                    ->label('Upload-Post profile username(s)')
                     ->default(fn (): ?string => app(ActiveTenant::class)->site()?->social_profile)
                     ->placeholder('sump-pump-gurus')
-                    ->helperText('Exactly as Upload-Post shows it under Manage users. Leave blank to clear (shares go back to the mock for this tenant).'),
+                    ->helperText('Exactly as Upload-Post shows it under Manage users. Several, comma-separated, when the client\'s listings sit under more than one Google account (each Google connection is its own Upload-Post profile). Leave blank to clear (shares go back to the mock for this tenant).'),
             ])
             ->action(function (array $data): void {
                 $site = app(ActiveTenant::class)->site();
