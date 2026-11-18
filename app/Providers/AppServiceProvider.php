@@ -147,6 +147,7 @@ use App\TownRank\TownRankPoints;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Database\Events\NoPendingMigrations;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
