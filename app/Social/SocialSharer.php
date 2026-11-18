@@ -121,7 +121,7 @@ final class SocialSharer
             return;
         }
         $staleDays = (int) config('launchpad.social.stale_after_days', 7);
-        if ($post->trigger === SocialTrigger::JobPublished && $staleDays > 0 && $post->created_at !== null && $post->created_at->lt(Carbon::now()->subDays($staleDays))) {
+        if ($post->trigger === SocialTrigger::JobPublished && $staleDays > 0 && $post->created_at->lt(Carbon::now()->subDays($staleDays))) {
             $post->forceFill(['status' => SocialPostStatus::Skipped, 'error' => "stale: queued {$post->created_at->diffInDays(Carbon::now())} days ago, not posted"])->save();
 
             return;
