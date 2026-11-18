@@ -37,10 +37,14 @@ enum SocialNetwork: string
         return $this !== self::Gbp;
     }
 
-    /** Instagram captions carry no clickable link — the link is recorded but not written into the copy. */
+    /**
+     * Whether the link is written into the copy. Instagram captions carry no clickable link, and a GBP post
+     * renders a URL as plain words while its Learn-more button carries the click — so on both the link is
+     * recorded on the share (the button / the bio) and kept out of the text. Facebook keeps it in the text.
+     */
     public function linkInCopy(): bool
     {
-        return $this !== self::Instagram;
+        return $this === self::Facebook;
     }
 
     /** GBP channels belong to a physical location; the others belong to the site. */

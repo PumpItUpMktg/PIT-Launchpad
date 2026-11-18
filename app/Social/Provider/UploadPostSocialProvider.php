@@ -53,22 +53,30 @@ final class UploadPostSocialProvider implements SocialProvider
             return [];
         }
 
-        $json = $this->json($this->request()->get($this->url('/api/uploadposts/users/'.rawurlencode($profile))));
-        $accounts = $json['profile']['social_accounts'] ?? $json['social_accounts'] ?? ($json['profiles'][0]['social_accounts'] ?? []);
-        $accounts = is_array($accounts) ? $accounts : [];
+        $json = $this->json($this->send(fn () => $this->request()->get($this->url('/api/uploadposts/users/'.rawurlencode($profile)))));
+        $record = is_array($json['profile'] ?? null) ? $json['profile'] : (is_array($json['profiles'][0] ?? null) ? $json['profiles'][0] : $json);
+        $accounts = is_array($record['social_accounts'] ?? null) ? $record['social_accounts'] : [];
 
         $out = [];
-        foreach ([SocialNetwork::Facebook, SocialNetwork::Instagram] as $network) {
-            $account = $accounts[self::PLATFORM[$network->value]] ?? null;
-            if (! is_array($account) || $account === []) {
-                continue;   // not connected (Upload-Post sends '' or null for an unconnected network)
+        // Facebook: the PAGE the profile publishes to is a profile-level field (the account entry is the
+        // person who connected it, not the Page); the Page id is what publish() sends as facebook_page_id.
+        $fb = $accounts['facebook'] ?? null;
+        if (is_array($fb) && $fb !== []) {
+            $pageId = trim((string) ($record['facebook_page_id'] ?? ''));
+            $pageName = trim((string) ($record['facebook_page_name'] ?? ''));
+            $id = $pageId !== '' ? $pageId : trim((string) ($fb['username'] ?? $fb['handle'] ?? ''));
+            $name = $pageName !== '' ? $pageName : trim((string) ($fb['display_name'] ?? $fb['handle'] ?? $id));
+            if ($id !== '') {
+                $out[] = new SocialProfile($id, SocialNetwork::Facebook, $name !== '' ? $name : $id);
             }
-            $id = trim((string) ($account['username'] ?? $account['handle'] ?? ''));
-            $name = trim((string) ($account['display_name'] ?? $account['handle'] ?? $id));
-            if ($id === '' && $name === '') {
-                continue;
+        }
+        $ig = $accounts['instagram'] ?? null;
+        if (is_array($ig) && $ig !== []) {
+            $id = trim((string) ($ig['username'] ?? $ig['handle'] ?? ''));
+            $name = trim((string) ($ig['display_name'] ?? $ig['handle'] ?? $id));
+            if ($id !== '' || $name !== '') {
+                $out[] = new SocialProfile($id !== '' ? $id : $name, SocialNetwork::Instagram, $name !== '' ? $name : $id);
             }
-            $out[] = new SocialProfile($id !== '' ? $id : $name, $network, $name !== '' ? $name : $id);
         }
 
         $gbp = $accounts['google_business'] ?? null;
@@ -105,21 +113,31 @@ final class UploadPostSocialProvider implements SocialProvider
                 $fields[] = ['name' => 'gbp_cta_url', 'contents' => trim((string) $post->link)];
             }
         }
-        if ($post->network === SocialNetwork::Facebook && trim((string) $post->link) !== '' && trim((string) $post->image_url) === '') {
-            $fields[] = ['name' => 'link_url', 'contents' => trim((string) $post->link)];
+        if ($post->network === SocialNetwork::Facebook) {
+            if (ctype_digit((string) $channel->provider_channel_id)) {
+                $fields[] = ['name' => 'facebook_page_id', 'contents' => (string) $channel->provider_channel_id];
+            }
+            if (trim((string) $post->link) !== '' && trim((string) $post->image_url) === '') {
+                $fields[] = ['name' => 'link_url', 'contents' => trim((string) $post->link)];
+            }
         }
 
         $image = trim((string) $post->image_url);
         $endpoint = $image !== '' ? '/api/upload_photos' : '/api/upload_text';
         if ($image !== '') {
             $fields[] = ['name' => 'photos[]', 'contents' => $image];
+            if ($post->network === SocialNetwork::Gbp && $post->subject_type === 'job') {
+                // A real job photo also goes to the location's gallery — photo count is a pack signal.
+                $fields[] = ['name' => 'gbp_upload_to_gallery', 'contents' => 'true'];
+                $fields[] = ['name' => 'gbp_media_category', 'contents' => 'AT_WORK'];
+            }
         }
 
         $request = $this->request()->withHeaders(['Idempotency-Key' => 'lp-'.$post->id]);
         foreach ($fields as $f) {
             $request = $request->attach($f['name'], $f['contents']);
         }
-        $json = $this->json($request->post($this->url($endpoint)));
+        $json = $this->json($this->send(fn () => $request->post($this->url($endpoint))));
 
         $result = $this->platformResult($json, $platform);
         if ($result === null && isset($json['request_id'])) {
@@ -165,7 +183,7 @@ final class UploadPostSocialProvider implements SocialProvider
             if ($cursor !== null) {
                 $query['cursor'] = $cursor;
             }
-            $json = $this->json($this->request()->get($this->url('/api/uploadposts/google-business/locations'), $query));
+            $json = $this->json($this->send(fn () => $this->request()->get($this->url('/api/uploadposts/google-business/locations'), $query)));
             foreach (($json['locations'] ?? []) as $loc) {
                 if (! is_array($loc) || trim((string) ($loc['name'] ?? '')) === '') {
                     continue;
@@ -210,7 +228,7 @@ final class UploadPostSocialProvider implements SocialProvider
             if ($i > 0 && $this->pollSeconds > 0) {
                 sleep($this->pollSeconds);
             }
-            $json = $this->json($this->request()->get($this->url('/api/uploadposts/status'), ['request_id' => $requestId]));
+            $json = $this->json($this->send(fn () => $this->request()->get($this->url('/api/uploadposts/status'), ['request_id' => $requestId])));
             $status = (string) ($json['status'] ?? '');
             $entry = $this->platformResult($json, $platform);
             if ($entry !== null && in_array((string) ($entry['status'] ?? ''), ['completed', 'failed', 'skipped'], true)) {
@@ -235,6 +253,22 @@ final class UploadPostSocialProvider implements SocialProvider
         $p = trim((string) ($site->social_profile ?? ''));
 
         return $p !== '' ? $p : null;
+    }
+
+    /**
+     * Run one HTTP call; a transport failure (timeout, connection refused) is a TRANSIENT provider failure.
+     *
+     * @param  callable(): Response  $call
+     */
+    private function send(callable $call): Response
+    {
+        try {
+            return $call();
+        } catch (SocialProviderException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            throw new SocialProviderException('Upload-Post unreachable: '.$e->getMessage(), transient: true);
+        }
     }
 
     private function request(): PendingRequest
@@ -262,14 +296,16 @@ final class UploadPostSocialProvider implements SocialProvider
             throw new SocialProviderException('Upload-Post rejected the API key (401).');
         }
         if ($response->status() === 429) {
+            $message = is_array($json) ? (string) ($json['message'] ?? '429') : '429';
             $usage = is_array($json) && isset($json['usage']) ? ' (usage '.json_encode($json['usage']).')' : '';
 
-            throw new SocialProviderException('Upload-Post limit reached: '.(is_array($json) ? (string) ($json['message'] ?? '429') : '429').$usage);
+            // The monthly allowance is a refusal; a per-minute rate limit clears on its own.
+            throw new SocialProviderException('Upload-Post limit reached: '.$message.$usage, transient: ! str_contains(strtolower($message), 'monthly'));
         }
         if (! $response->successful()) {
             $message = is_array($json) ? (string) ($json['message'] ?? $json['error'] ?? '') : '';
 
-            throw new SocialProviderException('Upload-Post HTTP '.$response->status().($message !== '' ? ': '.$message : ''));
+            throw new SocialProviderException('Upload-Post HTTP '.$response->status().($message !== '' ? ': '.$message : ''), transient: $response->status() >= 500);
         }
         if (! is_array($json)) {
             throw new SocialProviderException('Upload-Post returned a non-JSON body.');

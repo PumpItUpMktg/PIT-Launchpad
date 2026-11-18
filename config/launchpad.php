@@ -897,6 +897,8 @@ return [
         'excerpt_chars' => (int) env('LAUNCHPAD_SOCIAL_EXCERPT_CHARS', 320),
         'reshare_cooldown_days' => (int) env('LAUNCHPAD_SOCIAL_RESHARE_COOLDOWN_DAYS', 60),
         'slot_hour' => (int) env('LAUNCHPAD_SOCIAL_SLOT_HOUR', 14),   // UTC hour a capped channel's overflow posts at
+        'default_max_per_day' => (int) env('LAUNCHPAD_SOCIAL_MAX_PER_DAY', 1),   // a newly synced channel's cap: one post a day, overflow carried to the next days
+        'stale_after_days' => (int) env('LAUNCHPAD_SOCIAL_STALE_DAYS', 7),      // a job share still unsent this long after it queued is skipped, not posted stale
         // Upward movement in Search Console → a suggestion on the board (any one rule fires).
         'momentum' => [
             'impressions_ratio' => (float) env('LAUNCHPAD_SOCIAL_MOMENTUM_RATIO', 2.0),   // trailing 7d ≥ ratio × prior 7d …

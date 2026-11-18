@@ -16,6 +16,7 @@ use App\Models\SocialPost;
 use App\Models\SocialSuggestion;
 use App\Models\User;
 use App\Operator\ActiveTenant;
+use App\Social\ChannelSync;
 use App\Social\Provider\MockSocialProvider;
 use App\Social\Provider\SocialProfile;
 use App\Social\Provider\SocialProvider;
@@ -110,4 +111,26 @@ it('approving with nothing ticked asks for a platform', function () {
 
     Livewire::test(OperateShares::class)->set("picks.{$s->id}.facebook", false)->call('approve', $s->id)->assertNotified('Tick at least one platform');
     expect($s->fresh()->status)->toBe(SocialSuggestionStatus::Open);
+});
+
+it('an unmatched GBP channel offers the offices; assigning one ties it (locked) and unassigning frees it', function () {
+    $site = sharesSite();
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown office']);
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair office']);
+    /** @var MockSocialProvider $mock */
+    $mock = app(SocialProvider::class);
+    $mock->connect($site->id, [new SocialProfile('locations/555', SocialNetwork::Gbp, 'Sump Pump Gurus')]);
+    app(ChannelSync::class)->sync($site);
+    $channel = SocialChannel::withoutGlobalScopes()->where('provider_channel_id', 'locations/555')->firstOrFail();
+
+    Livewire::test(OperateShares::class)
+        ->assertSee('unmatched — assign office…')
+        ->assertSee('Hackettstown office')
+        ->call('assignChannel', $channel->id, $loc->id)
+        ->assertNotified()
+        ->assertDontSee('unmatched — assign office…');
+    expect($channel->fresh()->location_id)->toBe($loc->id)->and($channel->fresh()->location_locked)->toBeTrue();
+
+    Livewire::test(OperateShares::class)->call('assignChannel', $channel->id, '');
+    expect($channel->fresh()->location_id)->toBeNull()->and($channel->fresh()->location_locked)->toBeFalse();
 });

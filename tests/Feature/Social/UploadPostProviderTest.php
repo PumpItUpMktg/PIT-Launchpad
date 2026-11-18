@@ -11,6 +11,7 @@ use App\Social\Provider\MockSocialProvider;
 use App\Social\Provider\SocialProvider;
 use App\Social\Provider\SocialProviderException;
 use App\Social\Provider\UploadPostSocialProvider;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -48,11 +49,15 @@ it('reads the tenant profile\'s connected accounts: a channel per GBP location (
         'api.upload-post.com/api/uploadposts/users/sump-pump-gurus' => Http::response(['success' => true, 'profile' => [
             'username' => 'sump-pump-gurus',
             'social_accounts' => [
-                'google_business' => ['username' => 'acct-1', 'display_name' => 'Sump Pump Gurus'],
-                'facebook' => ['username' => '1029384756', 'display_name' => 'Sump Pump Gurus'],
+                'google_business' => ['display_name' => 'Eric Wright', 'handle' => 'Eric Wright'],
+                'facebook' => ['display_name' => 'Eric Lite', 'handle' => 'Eric Lite'],   // the person who connected it — not the Page
                 'instagram' => '',   // not connected
                 'tiktok' => '',
             ],
+            // The Page the profile publishes to is a profile-level field (as the live account shows).
+            'facebook_page_id' => '102255308709082',
+            'facebook_page_name' => 'Sump Pump Gurus Corporate',
+            'google_business_location_id' => 'locations/111',
         ]]),
         'api.upload-post.com/api/uploadposts/google-business/locations?profile=sump-pump-gurus&cursor=c2' => Http::response(['success' => true, 'locations' => [
             ['name' => 'accounts/1/locations/333', 'title' => 'Sump Pump Gurus | Trooper', 'account_id' => 'a'],
@@ -66,7 +71,7 @@ it('reads the tenant profile\'s connected accounts: a channel per GBP location (
     $profiles = upProvider()->profiles($site);
 
     expect(array_map(fn ($p) => [$p->id, $p->network->value, $p->name], $profiles))->toBe([
-        ['1029384756', 'facebook', 'Sump Pump Gurus'],
+        ['102255308709082', 'facebook', 'Sump Pump Gurus Corporate'],
         ['accounts/1/locations/111', 'gbp', 'Sump Pump Gurus | Montclair'],
         ['accounts/1/locations/222', 'gbp', 'Sump Pump Gurus | Bedminster'],
         ['accounts/1/locations/333', 'gbp', 'Sump Pump Gurus | Trooper'],
@@ -101,6 +106,8 @@ it('publishes a job photo to the office\'s GBP location with the link as the Lea
             && upPart($body, 'gbp_cta_type', 'LEARN_MORE')
             && upPart($body, 'gbp_cta_url', 'https://spg.example/jobs/x?utm_source=gbp')
             && upPart($body, 'photos[]', 'https://cdn.spg.example/jobs/x.jpg')
+            && upPart($body, 'gbp_upload_to_gallery', 'true')   // a job photo also lands in the location's gallery
+            && upPart($body, 'gbp_media_category', 'AT_WORK')
             && str_contains($body, 'Pump replaced in Nutley.')
             && ! str_contains($body, '#SumpPumpRepair');   // GBP renders hashtags as noise — the composer keeps them off
     });
@@ -122,11 +129,33 @@ it('a Facebook share carries the hashtags in the caption; a share with no image 
     expect($result->providerPostId)->toBe('1029384756_42')->and($result->permalink)->toBe('https://facebook.com/1029384756/posts/42');
     Http::assertSent(fn (Request $r): bool => str_ends_with($r->url(), '/api/upload_text')
         && str_contains($r->body(), '#SumpPumpRepair #NutleyNJ')
+        && upPart($r->body(), 'facebook_page_id', '1029384756')
         && upPart($r->body(), 'link_url', 'https://spg.example/jobs/x?utm_source=gbp'));
 
-    expect(fn () => upProvider()->publish($fb, $textPost))->toThrow(SocialProviderException::class, 'Page token expired');
-    expect(fn () => upProvider()->publish($fb, $textPost))->toThrow(SocialProviderException::class, 'limit reached');
-    expect(fn () => upProvider()->publish($fb, $textPost))->toThrow(SocialProviderException::class, '401');
+    $caught = fn () => rescue(fn () => upProvider()->publish($fb, $textPost), fn (Throwable $e) => $e, false);
+    $refusal = $caught();
+    $monthly = $caught();
+    $badKey = $caught();
+    expect($refusal)->toBeInstanceOf(SocialProviderException::class)->and($refusal->getMessage())->toContain('Page token expired')->and($refusal->transient)->toBeFalse()
+        ->and($monthly->getMessage())->toContain('limit reached')->and($monthly->transient)->toBeFalse()
+        ->and($badKey->getMessage())->toContain('401')->and($badKey->transient)->toBeFalse();
+});
+
+it('a 5xx, a per-minute 429 and a dropped connection are transient (one more try); nothing else is', function () {
+    $site = upSite();
+    $fb = SocialChannel::withoutGlobalScopes()->create(['site_id' => $site->id, 'network' => SocialNetwork::Facebook, 'provider' => 'upload_post', 'provider_channel_id' => '1029384756']);
+    $post = upPost($site, $fb, ['image_url' => null]);
+    Http::fake([
+        'api.upload-post.com/api/upload_text' => Http::sequence()
+            ->push(['success' => false, 'error' => 'upstream'], 503)
+            ->push(['success' => false, 'message' => 'Too Many Requests'], 429)
+            ->push(fn () => throw new ConnectionException('cURL error 28: timed out')),
+    ]);
+    $caught = fn () => rescue(fn () => upProvider()->publish($fb, $post), fn (Throwable $e) => $e, false);
+
+    expect($caught()->transient)->toBeTrue()
+        ->and($caught()->transient)->toBeTrue()
+        ->and($caught()->transient)->toBeTrue();
 });
 
 it('a request Upload-Post takes async is polled on the status endpoint until the platform entry ends', function () {

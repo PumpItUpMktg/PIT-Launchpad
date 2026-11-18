@@ -218,6 +218,9 @@ final class SuggestionBoard
             ->where('site_id', $siteId)->with('location')
             ->orderBy('network')->orderBy('provider_name')->get()
             ->map(fn (SocialChannel $c): array => [
+                'id' => (string) $c->id,
+                'location_id' => $c->location_id !== null ? (string) $c->location_id : null,
+                'locked' => (bool) $c->location_locked,
                 'network' => $c->network->value,
                 'network_label' => $c->network->label(),
                 'label' => $c->displayLabel(),

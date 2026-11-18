@@ -22,6 +22,7 @@ use App\Publishing\PublishContentService;
 use App\Social\Provider\MockSocialProvider;
 use App\Social\Provider\SocialProvider;
 use App\Social\SocialSharer;
+use App\Social\TransientShareFailure;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -199,4 +200,43 @@ it('the share jobs only act on live subjects', function () {
     $live = sharerJob($site);
     (new ShareJobSocially($live->id))->handle(app(SocialSharer::class));
     expect(SocialPost::withoutGlobalScopes()->count())->toBe(1);
+});
+
+it('a job share that sat past the stale window is skipped, not posted late; a post share is not time-boxed', function () {
+    $site = sharerSite();
+    $channel = sharerChannel($site, SocialNetwork::Facebook);
+    $sharer = app(SocialSharer::class);
+    $job = sharerJob($site);
+    [$row] = $sharer->shareJob($job);
+    SocialPost::withoutGlobalScopes()->whereKey($row->id)->update(['created_at' => now()->subDays(9)]);
+
+    $sharer->send($row->fresh());
+    expect($row->fresh()->status)->toBe(SocialPostStatus::Skipped)->and($row->fresh()->error)->toContain('stale');
+
+    [$postRow] = $sharer->sharePost(sharerPost($site), SocialTrigger::PostPublished);
+    SocialPost::withoutGlobalScopes()->whereKey($postRow->id)->update(['created_at' => now()->subDays(30)]);
+    $sharer->send($postRow->fresh());
+    expect($postRow->fresh()->status)->toBe(SocialPostStatus::Sent);
+});
+
+it('a transient provider failure keeps the row queued and asks the job to retry; the last attempt (or a refusal) fails the row', function () {
+    $site = sharerSite();
+    sharerChannel($site, SocialNetwork::Facebook);
+    $sharer = app(SocialSharer::class);
+    /** @var MockSocialProvider $mock */
+    $mock = app(SocialProvider::class);
+    [$row] = $sharer->sharePost(sharerPost($site), SocialTrigger::Manual);
+
+    $mock->failNext('gateway timeout', transient: true);
+    expect(fn () => $sharer->send($row, lastAttempt: false))->toThrow(TransientShareFailure::class, 'gateway timeout');
+    expect($row->fresh()->status)->toBe(SocialPostStatus::Queued)->and($row->fresh()->error)->toStartWith('retrying:');
+
+    $mock->failNext('gateway timeout', transient: true);
+    $sharer->send($row->fresh(), lastAttempt: true);   // the second attempt is the last
+    expect($row->fresh()->status)->toBe(SocialPostStatus::Failed);
+
+    [$second] = $sharer->sharePost(sharerPost($site, ['x' => 1]), SocialTrigger::Manual);
+    $mock->failNext('Page token expired');   // a refusal never retries, whatever the attempt
+    $sharer->send($second, lastAttempt: false);
+    expect($second->fresh()->status)->toBe(SocialPostStatus::Failed)->and($second->fresh()->error)->toBe('Page token expired');
 });

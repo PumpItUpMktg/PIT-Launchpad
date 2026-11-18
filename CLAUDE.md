@@ -724,7 +724,13 @@ a job share queues when the job publishes (`JobPublisher` → `ShareJobSocially`
   Observed rain only — there is no forecast source yet.
 - **Schedule:** `launchpad:social-rules --all --execute` daily 06:10 (after sync-gsc); report-first
   without `--execute`. `SendSocialPost` (unique per row, one try) → `SocialProvider` → sent / failed.
-- **Provider:** `MockSocialProvider` bound (records; `connect()` seeds profiles in tests). The SoMePoster
-  adapter binds here once the API key exists (`services.someposter`).
+- **Provider:** `UploadPostSocialProvider` when `UPLOAD_POST_API_KEY` is set (one Upload-Post profile per
+  tenant in `Site.social_profile`, set under Connections; GBP per location via `gbp_location_id`, the Page
+  from the profile's `facebook_page_id`, Instagram), else `MockSocialProvider` (records; `connect()` seeds
+  profiles in tests). GBP rules: no phone numbers in the copy, the link is the Learn-more button not text,
+  a job photo also goes to the location gallery. A new channel is capped at one post a day (overflow slides
+  to the next days); a job share unsent after `stale_after_days` (7) is skipped. `SendSocialPost` retries a
+  transient failure once after 10 minutes; a refusal fails at once. An unmatched GBP channel can be tied
+  to an office by hand on the Shares page (`location_locked`, kept through syncs).
 - **Not yet:** share markers on the client position trend, Instagram image sizing, the GBP Q&A API, a
   forecast feed.

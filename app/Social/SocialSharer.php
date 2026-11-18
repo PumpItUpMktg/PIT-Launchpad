@@ -13,6 +13,7 @@ use App\Models\SocialChannel;
 use App\Models\SocialPost;
 use App\Models\SocialSuggestion;
 use App\Social\Provider\SocialProvider;
+use App\Social\Provider\SocialProviderException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Throwable;
@@ -102,8 +103,13 @@ final class SocialSharer
         return $out;
     }
 
-    /** Push one queued row through the provider; `sent` with the provider's id, or `failed` with the message. */
-    public function send(SocialPost $post): void
+    /**
+     * Push one queued row through the provider; `sent` with the provider's id, or `failed` with the message.
+     * A job share that sat in the queue past `stale_after_days` (a capped channel's backlog) is skipped, not
+     * posted stale. With `$lastAttempt` false, a transient provider failure leaves the row queued and throws
+     * {@see TransientShareFailure} so the send job retries after its backoff.
+     */
+    public function send(SocialPost $post, bool $lastAttempt = true): void
     {
         if ($post->status !== SocialPostStatus::Queued) {
             return;
@@ -114,9 +120,20 @@ final class SocialSharer
 
             return;
         }
+        $staleDays = (int) config('launchpad.social.stale_after_days', 7);
+        if ($post->trigger === SocialTrigger::JobPublished && $staleDays > 0 && $post->created_at !== null && $post->created_at->lt(Carbon::now()->subDays($staleDays))) {
+            $post->forceFill(['status' => SocialPostStatus::Skipped, 'error' => "stale: queued {$post->created_at->diffInDays(Carbon::now())} days ago, not posted"])->save();
+
+            return;
+        }
         try {
             $result = $this->provider->publish($channel, $post);
         } catch (Throwable $e) {
+            if (! $lastAttempt && $e instanceof SocialProviderException && $e->transient) {
+                $post->forceFill(['error' => 'retrying: '.mb_substr($e->getMessage(), 0, 900)])->save();
+
+                throw new TransientShareFailure($e->getMessage(), 0, $e);
+            }
             $post->forceFill(['status' => SocialPostStatus::Failed, 'error' => mb_substr($e->getMessage(), 0, 1000)])->save();
 
             return;

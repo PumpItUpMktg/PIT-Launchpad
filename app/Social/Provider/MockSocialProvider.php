@@ -20,6 +20,8 @@ final class MockSocialProvider implements SocialProvider
 
     private ?string $failWith = null;
 
+    private bool $failTransient = false;
+
     /** @param  list<SocialProfile>  $profiles */
     public function connect(string $siteId, array $profiles): void
     {
@@ -31,17 +33,20 @@ final class MockSocialProvider implements SocialProvider
         return $this->profiles[(string) $site->id] ?? [];
     }
 
-    public function failNext(string $message = 'provider refused the post'): void
+    public function failNext(string $message = 'provider refused the post', bool $transient = false): void
     {
         $this->failWith = $message;
+        $this->failTransient = $transient;
     }
 
     public function publish(SocialChannel $channel, SocialPost $post): SocialPublishResult
     {
         if ($this->failWith !== null) {
             $message = $this->failWith;
+            $transient = $this->failTransient;
             $this->failWith = null;
-            throw new SocialProviderException($message);
+            $this->failTransient = false;
+            throw new SocialProviderException($message, transient: $transient);
         }
 
         $this->published[] = [
