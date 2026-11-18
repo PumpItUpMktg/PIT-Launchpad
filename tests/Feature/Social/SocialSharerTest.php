@@ -227,7 +227,8 @@ it('a transient provider failure keeps the row queued and asks the job to retry;
     $sharer = app(SocialSharer::class);
     /** @var MockSocialProvider $mock */
     $mock = app(SocialProvider::class);
-    [$row] = $sharer->sharePost(sharerPost($site), SocialTrigger::Manual);
+    $post = sharerPost($site);
+    [$row] = $sharer->sharePost($post, SocialTrigger::Manual);
 
     $mock->failNext('gateway timeout', transient: true);
     expect(fn () => $sharer->send($row, lastAttempt: false))->toThrow(TransientShareFailure::class, 'gateway timeout');
@@ -237,7 +238,7 @@ it('a transient provider failure keeps the row queued and asks the job to retry;
     $sharer->send($row->fresh(), lastAttempt: true);   // the second attempt is the last
     expect($row->fresh()->status)->toBe(SocialPostStatus::Failed);
 
-    [$second] = $sharer->sharePost(sharerPost($site, ['x' => 1]), SocialTrigger::Manual);
+    [$second] = $sharer->sharePost($post, SocialTrigger::Manual);   // manual shares are always allowed, so the same post serves
     $mock->failNext('Page token expired');   // a refusal never retries, whatever the attempt
     $sharer->send($second, lastAttempt: false);
     expect($second->fresh()->status)->toBe(SocialPostStatus::Failed)->and($second->fresh()->error)->toBe('Page token expired');
