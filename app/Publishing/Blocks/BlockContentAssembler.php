@@ -41,6 +41,7 @@ use App\Publishing\MetaBlobAssembler;
 use App\Publishing\PhoneNumber;
 use App\Publishing\SiteContact;
 use App\Support\BusinessHours;
+use App\Support\PublicUrl;
 use App\TownPages\PriorityKeywords;
 use App\TownPages\PrioritySections;
 use Illuminate\Support\Collection;
@@ -358,6 +359,7 @@ final class BlockContentAssembler
             testimonials: $this->testimonials($content),
             serviceAreaCounties: $this->serviceAreas->resolve($siteId)['counties'],
             serviceAreasByCounty: $this->serviceAreas->byCounty($siteId),
+            offices: $this->officeLinks($site),
             processSteps: $this->processSteps($content),
             certifications: $this->mergedCredentials($content),
             guarantee: $this->guarantee($content),
@@ -939,6 +941,7 @@ final class BlockContentAssembler
             nearbyTowns: $nearbyTowns,
             isTown: $isTown,
             parentCity: $parentCity,
+            parentHub: $isTown ? $this->parentHubLink($this->site($content), $location, $parentCity) : null,
             // HUB PAGES ONLY. $location here is the town page's PARENT, so its facts describe the
             // parent's city — rendering them under a heading naming the town ("About Buckingham") both
             // repeats one identical block across every town page under the hub AND mislabels whose
@@ -1036,6 +1039,77 @@ final class BlockContentAssembler
      * @return list<string>
      */
     /** How many physical locations this tenant has — a one-office business never offers "another of ours". */
+    /**
+     * Every office with a LIVE hub page, as a link — the home page's "Our offices" strip (step 3): the home
+     * page is the site's strongest page, so every office hub gets its link from it, not only the ones whose
+     * city happens to sit in the county coverage list. Folded (merged) locations are hidden by the model's
+     * scope; an office whose hub is not yet published is left out rather than linked to a 404.
+     *
+     * @return list<array{label: string, url: string}>
+     */
+    private function officeLinks(?Site $site): array
+    {
+        if ($site === null) {
+            return [];
+        }
+        $locations = Location::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
+        if ($locations->isEmpty()) {
+            return [];
+        }
+        $hubs = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('page_type', PageType::Location->value)
+            ->whereIn('location_id', $locations->pluck('id')->all())
+            ->whereNotNull('wp_post_id')
+            ->get(['location_id', 'slug'])
+            ->keyBy(fn (Content $c): string => (string) $c->location_id);
+
+        $links = [];
+        foreach ($locations as $location) {
+            $hub = $hubs->get((string) $location->id);
+            if ($hub === null) {
+                continue;
+            }
+            ['city' => $city, 'state' => $state] = $location->cityState();
+            $label = trim($city) !== '' ? trim($city).(trim($state) !== '' ? ', '.trim($state) : '') : trim((string) $location->name);
+            $url = PublicUrl::for($site->domain_url, (string) $hub->slug);
+            if ($label === '' || $url === null) {
+                continue;
+            }
+            $links[] = ['label' => $label, 'url' => $url];
+        }
+        usort($links, fn (array $a, array $b): int => strcmp($a['label'], $b['label']));
+
+        return $links;
+    }
+
+    /**
+     * A TOWN page's link back to the office that serves it (step 3): the parent's LIVE hub page, rendered
+     * as an "Office" row in the town's NAP block so the town → hub edge is a visible link in the copy, not
+     * only a breadcrumb in the schema. Null when the parent's hub is not published yet.
+     *
+     * @return array{label: string, url: string}|null
+     */
+    private function parentHubLink(?Site $site, Location $parent, string $parentCity): ?array
+    {
+        if ($site === null) {
+            return null;
+        }
+        $hub = Content::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $site->id)
+            ->where('page_type', PageType::Location->value)
+            ->where('location_id', $parent->id)
+            ->whereNotNull('wp_post_id')
+            ->first(['slug']);
+        $url = $hub === null ? null : PublicUrl::for($site->domain_url, (string) $hub->slug);
+        if ($url === null) {
+            return null;
+        }
+        $city = trim($parentCity) !== '' ? trim($parentCity) : trim((string) $parent->name);
+
+        return ['label' => 'Our '.$city.' office', 'url' => $url];
+    }
+
     private function locationCount(string $siteId): int
     {
         return Location::withoutGlobalScope(SiteScope::class)->where('site_id', $siteId)->count();

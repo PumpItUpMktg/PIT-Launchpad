@@ -1454,6 +1454,7 @@ final class BlockSections
         array $hours,
         bool $preview = false,
         string $mapSlotKey = '',
+        ?array $hubLink = null,
     ): string {
         $phoneDisplay = trim((string) $phoneDisplay);
         $email = trim((string) $email);
@@ -1484,6 +1485,11 @@ final class BlockSections
         }
         if ($address !== '') {
             $rows[] = $this->detailRow('Address', $this->text($address));
+        }
+        // A TOWN page's way back to the office that serves it — a real link in the copy (the hub → town
+        // spine runs the other way through the areas strip), never only the schema breadcrumb.
+        if ($hubLink !== null && trim((string) ($hubLink['url'] ?? '')) !== '' && trim((string) ($hubLink['label'] ?? '')) !== '') {
+            $rows[] = $this->detailRow('Office', '<a href="'.$this->attr($hubLink['url']).'">'.$this->text($hubLink['label']).'</a>');
         }
 
         $cols = [];

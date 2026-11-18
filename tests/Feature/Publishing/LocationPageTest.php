@@ -1068,3 +1068,27 @@ it('the Google reviews minimum rating is configurable — at 1 every stored revi
 
     expect($markup)->toContain('Google review number 5 about the Trooper crew.');
 });
+
+// ── Step 3: every town links back to the office that serves it ──
+
+it('a TOWN page links back to its parent office hub as an Office row in the NAP, once the hub is live', function () {
+    $site = locRelaySite();
+    $parent = locRelayLocation($site);
+    $hub = locRelayPage($site, $parent, ['wp_post_id' => 4242]);   // the live Trooper hub
+    $town = locRelayPage($site, $parent, [
+        'location_id' => null, 'parent_location_id' => $parent->id, 'title' => 'Pequannock, NJ', 'slug' => 'trooper-pa/pequannock-nj',
+    ]);
+
+    $markup = app(BlockContentAssembler::class)->compose($town->fresh(), $town->slot_payload, []);
+
+    expect($markup)->toContain('<a href="https://drybasements.example/trooper-pa/">Our Trooper office</a>')
+        ->and($markup)->toContain('Serving Pequannock from our Trooper office');
+
+    // The hub itself carries no Office row (it IS the office), and a town whose hub is not live yet links nowhere.
+    $hubMarkup = app(BlockContentAssembler::class)->compose($hub->fresh(), $hub->slot_payload, []);
+    expect($hubMarkup)->not->toContain('Our Trooper office</a>');
+
+    $hub->forceFill(['wp_post_id' => null])->save();
+    $markup = app(BlockContentAssembler::class)->compose($town->fresh(), $town->slot_payload, []);
+    expect($markup)->not->toContain('Our Trooper office</a>');
+});
