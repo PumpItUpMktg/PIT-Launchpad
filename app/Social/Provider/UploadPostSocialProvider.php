@@ -88,10 +88,7 @@ final class UploadPostSocialProvider implements SocialProvider
         if ($profile === null) {
             throw new SocialProviderException('No Upload-Post profile is set for this site (Connections → Set social posting profile).');
         }
-        $platform = self::PLATFORM[$post->network->value] ?? null;
-        if ($platform === null) {
-            throw new SocialProviderException("Upload-Post has no platform for {$post->network->value}.");
-        }
+        $platform = self::PLATFORM[$post->network->value];
 
         $fields = [
             ['name' => 'user', 'contents' => $profile],
@@ -202,8 +199,12 @@ final class UploadPostSocialProvider implements SocialProvider
         return null;
     }
 
-    /** Poll the status endpoint for a request Upload-Post took async; the per-platform entry when it ends. */
-    private function awaitResult(string $requestId, string $platform): ?array
+    /**
+     * Poll the status endpoint for a request Upload-Post took async; the per-platform entry when it ends.
+     *
+     * @return array<string, mixed>
+     */
+    private function awaitResult(string $requestId, string $platform): array
     {
         for ($i = 0; $i < self::POLL_ATTEMPTS; $i++) {
             if ($i > 0 && $this->pollSeconds > 0) {
