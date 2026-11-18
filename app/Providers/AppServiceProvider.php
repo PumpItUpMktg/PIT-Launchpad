@@ -140,13 +140,13 @@ use App\Security\Verification\ConnectionVerifier;
 use App\Security\Verification\WordpressConnectionVerifier;
 use App\Social\Provider\MockSocialProvider;
 use App\Social\Provider\SocialProvider;
+use App\Social\Provider\UploadPostSocialProvider;
 use App\Support\CurrentSite;
 use App\Support\Tenancy\ResetTenantOnJobBoundary;
 use App\TownRank\TownRankPoints;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Database\Events\NoPendingMigrations;
-use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
@@ -289,9 +289,21 @@ class AppServiceProvider extends ServiceProvider
         // come online, with no change to the relevance scoring that consumes them.
         $this->app->singleton(LocalSignalProvider::class, MockLocalSignalProvider::class);
 
-        // Social shares: the posting transport. Mock (records, never posts) until the SoMePoster adapter
-        // lands; tests read the mock's `published` list.
-        $this->app->singleton(SocialProvider::class, MockSocialProvider::class);
+        // Social shares: the posting transport. The Upload-Post adapter when its API key is set (GBP per
+        // location, Facebook, Instagram — one Upload-Post profile per tenant); otherwise the mock, which
+        // records and never posts (tests read its `published` list).
+        $this->app->singleton(SocialProvider::class, function (): SocialProvider {
+            if (UploadPostSocialProvider::configured()) {
+                return new UploadPostSocialProvider(
+                    http: $this->app->make(Http::class),
+                    apiKey: (string) config('services.upload_post.api_key'),
+                    baseUrl: (string) config('services.upload_post.base_url', 'https://api.upload-post.com'),
+                    timeout: (int) config('services.upload_post.timeout', 60),
+                );
+            }
+
+            return new MockSocialProvider;
+        });
 
         // §5 SERP + local-grid run on the real DataForSEO adapters (Step 2,
         // Adapter 1). They supply NORMALIZED signals only — opportunity scoring

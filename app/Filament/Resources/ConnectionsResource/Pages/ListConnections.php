@@ -20,6 +20,7 @@ class ListConnections extends ListRecords
             ConnectionsResource::connectGoogleAction(),
             ConnectionsResource::googlePropertiesAction(),
             ConnectionsResource::bingSiteAction(),
+            ConnectionsResource::socialProfileAction(),
         ];
     }
 }
