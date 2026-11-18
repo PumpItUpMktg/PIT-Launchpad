@@ -17,6 +17,7 @@ use App\Security\Capability;
 use App\Security\ConnectionRotator;
 use App\Security\CredentialMasker;
 use App\Security\CredentialRevealer;
+use App\Social\Provider\UploadPostSocialProvider;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\KeyValue;
@@ -315,6 +316,55 @@ class ConnectionsResource extends Resource
                 Notification::make()->success()
                     ->title('Bing site saved')
                     ->body($site->brand_name.' now reads Bing Webmaster '.($url !== '' ? rtrim($url, '/') : '— (cleared)').'.')
+                    ->send();
+            });
+    }
+
+    /**
+     * Point a tenant at its Upload-Post profile — the container the agency connects its Google Business,
+     * Facebook and Instagram accounts to (dashboard: app.upload-post.com → Manage users). One profile per
+     * tenant; the channel sync then reads that profile's GBP locations and Pages. Until the agency API key
+     * is configured (UPLOAD_POST_API_KEY) the button shows the setup steps instead of the form.
+     */
+    public static function socialProfileAction(): Action
+    {
+        if (! UploadPostSocialProvider::configured()) {
+            return Action::make('socialProfile')
+                ->label('Set social posting profile')
+                ->icon('heroicon-o-megaphone')
+                ->modalHeading('Social posting is not connected yet')
+                ->modalDescription('This needs the agency\'s Upload-Post API key before a tenant profile can be set. '
+                    .'1) In Upload-Post (app.upload-post.com) create a profile per client and connect its Google Business account there. '
+                    .'2) Copy the API key from the dashboard and add it to the environment as UPLOAD_POST_API_KEY, then redeploy. '
+                    .'Then this button saves which profile this tenant posts through. Until then shares are recorded but never sent.')
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel('Close')
+                ->action(fn () => null);
+        }
+
+        return Action::make('socialProfile')
+            ->label('Set social posting profile')
+            ->icon('heroicon-o-megaphone')
+            ->modalSubmitActionLabel('Save profile')
+            ->modalDescription('The Upload-Post profile this tenant posts through. Create it in Upload-Post, connect the client\'s Google Business (and Facebook / Instagram) to it there, then enter its username here. Operate → Shares → "Sync now" pulls the locations and Pages.')
+            ->schema([
+                TextInput::make('social_profile')
+                    ->label('Upload-Post profile username')
+                    ->default(fn (): ?string => app(ActiveTenant::class)->site()?->social_profile)
+                    ->placeholder('sump-pump-gurus')
+                    ->helperText('Exactly as Upload-Post shows it under Manage users. Leave blank to clear (shares go back to the mock for this tenant).'),
+            ])
+            ->action(function (array $data): void {
+                $site = app(ActiveTenant::class)->site();
+                if ($site === null) {
+                    return;
+                }
+                $profile = trim((string) ($data['social_profile'] ?? ''));
+                $site->forceFill(['social_profile' => $profile !== '' ? $profile : null])->save();
+
+                Notification::make()->success()
+                    ->title('Social posting profile saved')
+                    ->body($site->brand_name.' now posts through Upload-Post profile '.($profile !== '' ? $profile : '— (cleared)').'. Run "Sync now" on the Shares page to pull its channels.')
                     ->send();
             });
     }

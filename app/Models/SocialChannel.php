@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property string $id
  * @property string $site_id
  * @property string|null $location_id
+ * @property bool $location_locked the operator assigned the location by hand; the sync keeps it
  * @property SocialNetwork $network
  * @property string $provider
  * @property string $provider_channel_id
@@ -39,6 +40,7 @@ class SocialChannel extends Model
         return [
             'network' => SocialNetwork::class,
             'enabled' => 'boolean',
+            'location_locked' => 'boolean',
             'max_per_day' => 'integer',
             'synced_at' => 'datetime',
         ];

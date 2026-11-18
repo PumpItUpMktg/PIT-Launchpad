@@ -103,6 +103,9 @@ final class SocialComposer
     /** @param  list<string>  $hashtags */
     private function assemble(string $body, array $hashtags, ?string $image, ?string $link, SocialNetwork $network, string $ctaLabel): SocialCopy
     {
+        if ($network === SocialNetwork::Gbp) {
+            $body = self::withoutPhoneNumbers($body);   // Google rejects a post carrying a phone number; the Call button is the number
+        }
         $tail = '';
         if ($link !== null && $network->linkInCopy()) {
             $tail .= "\n\n{$ctaLabel}: {$link}";
@@ -114,6 +117,20 @@ final class SocialComposer
         $copy = $this->cut(trim($body), $room, '…').$tail;
 
         return new SocialCopy($copy, $hashtags, $image, $link, $link !== null ? 'LEARN_MORE' : null);
+    }
+
+    /**
+     * The copy with any phone number removed and the sentence tidied ("Call 908-224-0550 today." → "Call
+     * today."). Google's posts policy refuses a phone number in the text; the profile's Call button is the
+     * sanctioned way to offer one.
+     */
+    public static function withoutPhoneNumbers(string $text): string
+    {
+        $out = preg_replace('/(?:\b(?:at|on)\s+)?(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}\b/iu', '', $text) ?? $text;
+        $out = preg_replace('/[ \t]{2,}/', ' ', $out) ?? $out;
+        $out = preg_replace('/\s+([.,!?;:])/', '$1', $out) ?? $out;
+
+        return trim($out);
     }
 
     /** Cut at the last sentence end inside the cap; failing that the last word; the ellipsis marks a cut. */

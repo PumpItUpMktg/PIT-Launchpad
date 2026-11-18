@@ -46,7 +46,7 @@ function socialPost(Site $site, array $meta = [], string $slug = 'sump-pump-inst
     ])->fresh(['site', 'silo', 'renderJobs']);
 }
 
-it('composes a GBP job share — service and town in the words, no hashtags, a tagged Learn-more link, under the GBP cap', function () {
+it('composes a GBP job share — service and town in the words, no hashtags, the tagged link as the button (not in the text), under the GBP cap', function () {
     $job = socialJob(socialSite());
 
     $copy = app(SocialComposer::class)->job($job, SocialNetwork::Gbp, SocialTrigger::JobPublished);
@@ -54,9 +54,9 @@ it('composes a GBP job share — service and town in the words, no hashtags, a t
     expect($copy->copy)->toStartWith('Sump Pump Replacement in Hackettstown')
         ->toContain('We replaced a failed pedestal pump')
         ->toContain('Sump Pump Gurus serving Hackettstown, NJ.')
-        ->toContain('See the job: https://spg.example/jobs/')
-        ->toContain('utm_source=gbp')->toContain('utm_medium=social')->toContain('utm_content=job_published')
+        ->not->toContain('https://')   // a URL in GBP text is plain words — the Learn-more button carries the click
         ->not->toContain('#')
+        ->and($copy->link)->toContain('https://spg.example/jobs/')->toContain('utm_source=gbp')->toContain('utm_medium=social')->toContain('utm_content=job_published')
         ->and(mb_strlen($copy->copy))->toBeLessThanOrEqual(1500)
         ->and($copy->hashtags)->toBe([])
         ->and($copy->cta)->toBe('LEARN_MORE')
@@ -102,11 +102,24 @@ it('cuts long copy at a sentence inside the network cap and the link always surv
     $job = socialJob(socialSite(), ['enhanced_description' => $long]);
     config(['launchpad.social.excerpt_chars' => 2000]);
 
-    $copy = app(SocialComposer::class)->job($job, SocialNetwork::Gbp, SocialTrigger::JobPublished);
+    $copy = app(SocialComposer::class)->job($job, SocialNetwork::Facebook, SocialTrigger::JobPublished);
 
-    expect(mb_strlen($copy->copy))->toBeLessThanOrEqual(1500)
+    expect(mb_strlen($copy->copy))->toBeLessThanOrEqual(2000)
         ->and($copy->copy)->toContain('See the job: https://spg.example/jobs/')
         ->and(str_ends_with(explode("\n\nSee the job", $copy->copy)[0], '.'))->toBeTrue();
+});
+
+it('strips a phone number from GBP copy (Google rejects it; the Call button is the number) and leaves Facebook copy alone', function () {
+    $job = socialJob(socialSite(), ['enhanced_description' => '<p>The pit was cleaned and a new check valve fitted. Call (908) 224-0550 today or text 908.224.0551 for a quote.</p>']);
+
+    $gbp = app(SocialComposer::class)->job($job, SocialNetwork::Gbp, SocialTrigger::JobPublished);
+    $fb = app(SocialComposer::class)->job($job, SocialNetwork::Facebook, SocialTrigger::JobPublished);
+
+    expect($gbp->copy)->not->toMatch('/\\d{3}[\\s.\\-]?\\d{4}/')
+        ->and($gbp->copy)->toContain('a new check valve fitted. Call today or text for a quote.')
+        ->and($fb->copy)->toContain('(908) 224-0550')
+        ->and(SocialComposer::withoutPhoneNumbers('Reach us at 908-224-0550.'))->toBe('Reach us.')
+        ->and(SocialComposer::withoutPhoneNumbers('Dial +1 (908) 224-0550, we answer.'))->toBe('Dial, we answer.');
 });
 
 it('builds the GBP Q&A pair for a question post, and none for a post without an answer', function () {

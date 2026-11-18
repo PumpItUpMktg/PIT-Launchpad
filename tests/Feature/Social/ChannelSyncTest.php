@@ -57,3 +57,23 @@ it('a single-location site takes any GBP profile as that location', function () 
 
     expect(SocialChannel::withoutGlobalScopes()->where('provider_channel_id', 'g9')->value('location_id'))->toBe($only->id);
 });
+
+it('a new channel gets the default one-a-day cap, and an operator\'s locked office assignment survives the next sync', function () {
+    $site = Site::factory()->create();
+    $hack = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown office', 'address' => null]);
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair office', 'address' => null]);
+    /** @var MockSocialProvider $mock */
+    $mock = app(SocialProvider::class);
+    $mock->connect($site->id, [new SocialProfile('locations/111', SocialNetwork::Gbp, 'Sump Pump Gurus')]);   // no town in the name → unmatched
+
+    $r = app(ChannelSync::class)->sync($site);
+    $channel = SocialChannel::withoutGlobalScopes()->where('provider_channel_id', 'locations/111')->first();
+    expect($r['unmatched'])->toBe(['Sump Pump Gurus'])->and($channel->location_id)->toBeNull()->and($channel->max_per_day)->toBe(1);
+
+    $channel->forceFill(['location_id' => $hack->id, 'location_locked' => true])->save();   // what the Shares page's assign control writes
+
+    $r = app(ChannelSync::class)->sync($site);
+    expect($channel->fresh()->location_id)->toBe($hack->id)
+        ->and($channel->fresh()->location_locked)->toBeTrue()
+        ->and($r['matched'])->toBe(1)->and($r['unmatched'])->toBe([]);
+});

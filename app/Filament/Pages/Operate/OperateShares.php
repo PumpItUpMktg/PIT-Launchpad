@@ -4,7 +4,9 @@ namespace App\Filament\Pages\Operate;
 
 use App\Enums\SocialTrigger;
 use App\Models\Content;
+use App\Models\Location;
 use App\Models\Scopes\SiteScope;
+use App\Models\SocialChannel;
 use App\Models\SocialSuggestion;
 use App\Operator\ActiveTenant;
 use App\Social\ChannelSync;
@@ -124,6 +126,41 @@ class OperateShares extends OperatePage
             return;
         }
         Notification::make()->success()->title('Added to the board')->send();
+    }
+
+    /** The site's offices, for the assign-to-office control on an unmatched GBP channel. @return array<string, string> id → name */
+    public function getLocationOptionsProperty(): array
+    {
+        if ($this->siteId === null) {
+            return [];
+        }
+
+        return Location::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $this->siteId)->whereNull('merged_into_id')
+            ->orderBy('name')->get()
+            ->mapWithKeys(fn (Location $l): array => [(string) $l->id => (string) $l->name])->all();
+    }
+
+    /**
+     * Tie a GBP channel the sync could not place to an office by hand (or free it again with no office).
+     * The assignment is locked, so later syncs keep it; the listing's own name in Google stays untouched.
+     */
+    public function assignChannel(string $channelId, ?string $locationId): void
+    {
+        if ($this->siteId === null) {
+            return;
+        }
+        $channel = SocialChannel::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->find($channelId);
+        if ($channel === null || ! $channel->network->perLocation()) {
+            return;
+        }
+        $locationId = trim((string) $locationId);
+        $location = $locationId === '' ? null : Location::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->find($locationId);
+        $channel->forceFill(['location_id' => $location?->id, 'location_locked' => $location !== null])->save();
+        Notification::make()->success()
+            ->title($location !== null ? "{$channel->displayLabel()} → {$location->name}" : "{$channel->displayLabel()} unassigned")
+            ->body($location !== null ? 'This Business Profile now receives the shares for jobs in that office\'s towns. The sync keeps your assignment.' : 'It receives no shares until it is tied to an office.')
+            ->send();
     }
 
     public function syncChannels(): void

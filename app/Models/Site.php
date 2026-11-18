@@ -39,6 +39,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $domain_url
  * @property string|null $gsc_property Search Console property to query for this tenant (from the shared Google grant)
  * @property string|null $bing_site_url Bing Webmaster Tools verified site URL to query for this tenant (agency BWT API key)
+ * @property string|null $social_profile the tenant's profile in the posting provider (Upload-Post) — its GBP / Facebook / Instagram connect there
  * @property string|null $ga4_property GA4 property id to query for this tenant (from the shared Google grant)
  * @property string $brand_name
  * @property string|null $header_tone_override operator override for the header bar: 'light' | 'dark' | null (auto from logo)

@@ -9,12 +9,18 @@ use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
-/** Sends one queued share through the provider. One try — the row records `failed` and the panel retries. */
+/**
+ * Sends one queued share through the provider. Two attempts: a transient provider failure (timeout, 5xx,
+ * per-minute limit) is retried once after the backoff; anything else, or a second failure, lands the row
+ * as `failed` and the panel retries by hand.
+ */
 class SendSocialPost implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 1;
+    public int $tries = 2;
+
+    public int $backoff = 600;
 
     public int $timeout = 120;
 
@@ -31,7 +37,7 @@ class SendSocialPost implements ShouldBeUnique, ShouldQueue
     {
         $post = SocialPost::withoutGlobalScope(SiteScope::class)->find($this->postId);
         if ($post !== null) {
-            $sharer->send($post);
+            $sharer->send($post, lastAttempt: $this->attempts() >= $this->tries);
         }
     }
 }

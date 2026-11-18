@@ -94,6 +94,14 @@ return [
         'timeout' => (int) env('SOMEPOSTER_TIMEOUT', 30),
     ],
 
+    // Upload-Post — the social posting transport (GBP per location, Facebook, Instagram). One Upload-Post
+    // profile per tenant (Site.social_profile); the key binds the real adapter in place of the mock.
+    'upload_post' => [
+        'api_key' => env('UPLOAD_POST_API_KEY'),
+        'base_url' => env('UPLOAD_POST_BASE_URL', 'https://api.upload-post.com'),
+        'timeout' => (int) env('UPLOAD_POST_TIMEOUT', 60),
+    ],
+
     'dataforseo' => [
         'login' => env('DATAFORSEO_LOGIN'),
         'password' => env('DATAFORSEO_PASSWORD'),

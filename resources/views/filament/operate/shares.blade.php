@@ -38,7 +38,14 @@
                     <b style="font-size:13px">Channels</b>
                     @forelse ($this->channels as $ch)
                         <span class="sh-pill {{ $ch['enabled'] ? $ch['network'] : 'off' }}" title="{{ $ch['provider_name'] }}">{{ $ch['label'] }}{{ $ch['enabled'] ? '' : ' · gone' }}</span>
-                        @if ($ch['unmatched'])<span class="sh-pill warn" title="This GBP profile could not be tied to one of our locations — it receives no shares">unmatched</span>@endif
+                        @if ($ch['unmatched'] || $ch['locked'])
+                            <select class="sh-select" title="{{ $ch['unmatched'] ? 'This Business Profile could not be tied to an office by its name — it receives no shares until you pick one' : 'Assigned by hand; the sync keeps it' }}" wire:change="assignChannel('{{ $ch['id'] }}', $event.target.value)" style="font-size:11px;padding:2px 4px;border:1px solid {{ $ch['unmatched'] ? '#f59e0b' : '#cbd5e1' }};border-radius:6px;max-width:170px">
+                                <option value="">{{ $ch['unmatched'] ? 'unmatched — assign office…' : 'unassign' }}</option>
+                                @foreach ($this->locationOptions as $lid => $lname)
+                                    <option value="{{ $lid }}" @selected($ch['location_id'] === $lid)>{{ $lname }}</option>
+                                @endforeach
+                            </select>
+                        @endif
                     @empty
                         <span class="sub">none connected yet — connect the profiles in the posting provider, then sync</span>
                     @endforelse

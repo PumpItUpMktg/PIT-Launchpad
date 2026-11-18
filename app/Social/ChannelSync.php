@@ -49,8 +49,13 @@ final class ChannelSync
             ];
             $channel = $existing->get($key);
             if ($channel === null) {
-                SocialChannel::withoutGlobalScope(SiteScope::class)->create([...$attrs, 'site_id' => $site->id, 'network' => $profile->network, 'provider_channel_id' => $profile->id]);
+                $cap = (int) config('launchpad.social.default_max_per_day', 1);
+                SocialChannel::withoutGlobalScope(SiteScope::class)->create([...$attrs, 'site_id' => $site->id, 'network' => $profile->network, 'provider_channel_id' => $profile->id, 'max_per_day' => $cap > 0 ? $cap : null]);
             } else {
+                if ($channel->location_locked && $channel->location_id !== null) {
+                    $location = $locations->firstWhere('id', $channel->location_id);   // the operator's assignment stands
+                    $attrs['location_id'] = $channel->location_id;
+                }
                 $channel->forceFill($attrs)->save();
             }
             $out['synced']++;
