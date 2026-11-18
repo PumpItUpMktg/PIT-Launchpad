@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\UserRole;
+use App\Filament\Resources\ConnectionsResource;
 use App\Filament\Resources\ConnectionsResource\Pages\ListConnections;
 use App\Models\Site;
 use App\Models\User;
@@ -30,7 +31,12 @@ test('without the agency key the action explains the setup instead of offering a
     $site = Site::factory()->create(['social_profile' => null]);
     app(ActiveTenant::class)->set($site->id);
 
+    $action = ConnectionsResource::socialProfileAction();
+    expect($action->isDisabled())->toBeFalse()
+        ->and((string) $action->getModalHeading())->toBe('Social posting is not connected yet')
+        ->and((string) $action->getModalDescription())->toContain('UPLOAD_POST_API_KEY');
     Livewire::test(ListConnections::class)
-        ->mountAction('socialProfile')
-        ->assertSee('Social posting is not connected yet');
+        ->assertActionEnabled('socialProfile')
+        ->callAction('socialProfile');
+    expect($site->fresh()->social_profile)->toBeNull();
 });
