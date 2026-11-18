@@ -140,11 +140,13 @@ it('an unmatched GBP channel offers the offices; assigning one ties it (locked) 
 it('tying a GBP channel to an office is a Super Admin matter — a Site Admin sees the board, not the assign control', function () {
     $site = sharesSite();
     $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown office']);
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair office']);   // two offices: the sync cannot place the listing on its own
     /** @var MockSocialProvider $mock */
     $mock = app(SocialProvider::class);
     $mock->connect($site->id, [new SocialProfile('locations/555', SocialNetwork::Gbp, 'Sump Pump Gurus')]);
     app(ChannelSync::class)->sync($site);
     $channel = SocialChannel::withoutGlobalScopes()->where('provider_channel_id', 'locations/555')->firstOrFail();
+    expect($channel->location_id)->toBeNull();
 
     $siteAdmin = User::factory()->create(['role' => UserRole::SiteAdmin]);
     Membership::create(['user_id' => $siteAdmin->id, 'account_id' => $site->account_id, 'site_id' => $site->id, 'role' => UserRole::SiteAdmin]);
@@ -153,6 +155,7 @@ it('tying a GBP channel to an office is a Super Admin matter — a Site Admin se
     Livewire::test(OperateShares::class)
         ->assertSee('Sync now')
         ->assertDontSee('unmatched — assign office…')
+        ->assertSee('unmatched')
         ->assertDontSee('Posting profiles')
         ->call('assignChannel', $channel->id, $loc->id);
     expect($channel->fresh()->location_id)->toBeNull();
