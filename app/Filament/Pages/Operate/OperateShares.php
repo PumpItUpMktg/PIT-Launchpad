@@ -88,7 +88,7 @@ class OperateShares extends OperatePage
      */
     public function getProfilesProperty(): array
     {
-        if (! $this->canManageChannels) {
+        if (! $this->getCanManageChannelsProperty()) {
             return ['profiles' => [], 'error' => null];
         }
         $site = app(ActiveTenant::class)->site();
@@ -172,7 +172,7 @@ class OperateShares extends OperatePage
      */
     public function assignChannel(string $channelId, ?string $locationId): void
     {
-        if ($this->siteId === null || ! $this->canManageChannels) {
+        if ($this->siteId === null || ! $this->getCanManageChannelsProperty()) {
             return;
         }
         $channel = SocialChannel::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->find($channelId);
