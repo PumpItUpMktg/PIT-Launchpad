@@ -203,11 +203,12 @@ it('the share jobs only act on live subjects', function () {
 });
 
 it('a job share that sat past the stale window is skipped, not posted late; a post share is not time-boxed', function () {
+    Queue::fake();
     $site = sharerSite();
     $channel = sharerChannel($site, SocialNetwork::Facebook);
     $sharer = app(SocialSharer::class);
     $job = sharerJob($site);
-    [$row] = $sharer->shareJob($job);
+    [$row] = $sharer->shareJob($job, SocialTrigger::JobPublished);
     SocialPost::withoutGlobalScopes()->whereKey($row->id)->update(['created_at' => now()->subDays(9)]);
 
     $sharer->send($row->fresh());
@@ -220,6 +221,7 @@ it('a job share that sat past the stale window is skipped, not posted late; a po
 });
 
 it('a transient provider failure keeps the row queued and asks the job to retry; the last attempt (or a refusal) fails the row', function () {
+    Queue::fake();
     $site = sharerSite();
     sharerChannel($site, SocialNetwork::Facebook);
     $sharer = app(SocialSharer::class);

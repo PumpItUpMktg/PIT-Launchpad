@@ -64,22 +64,30 @@ it('reads the tenant profile\'s connected accounts: a channel per GBP location (
         ]]),
         'api.upload-post.com/api/uploadposts/google-business/locations?profile=sump-pump-gurus' => Http::response(['success' => true, 'incomplete' => true, 'next_cursor' => 'c2', 'locations' => [
             ['name' => 'accounts/1/locations/111', 'title' => 'Sump Pump Gurus | Montclair', 'account_id' => 'a'],
-            ['name' => 'accounts/1/locations/222', 'title' => 'Sump Pump Gurus | Bedminster', 'account_id' => 'a'],
+            ['name' => 'accounts/1/locations/222', 'title' => 'Sump Pump Gurus', 'account_id' => 'a'],   // named without its town
         ]]),
+        // Each location's own record: the street and the Google place id — what the channel sync matches on first.
+        'api.upload-post.com/api/uploadposts/google-business/location-info?user=sump-pump-gurus&location_id=accounts%2F1%2Flocations%2F111&read_mask=*' => Http::response(['success' => true, 'info' => [
+            'place_id' => 'ChIJ-montclair', 'address' => ['addressLines' => ['50 South Park Street'], 'locality' => 'Montclair', 'administrativeArea' => 'New Jersey', 'postalCode' => '07042'],
+        ]]),
+        'api.upload-post.com/api/uploadposts/google-business/location-info?user=sump-pump-gurus&location_id=accounts%2F1%2Flocations%2F222&read_mask=*' => Http::response(['success' => true, 'info' => [
+            'place_id' => 'ChIJ-bedminster', 'address' => ['addressLines' => ['432 U.S. 202'], 'locality' => 'Bedminster', 'administrativeArea' => 'New Jersey', 'postalCode' => '07921'],
+        ]]),
+        'api.upload-post.com/api/uploadposts/google-business/location-info?user=sump-pump-gurus&location_id=accounts%2F1%2Flocations%2F333&read_mask=*' => Http::response(['success' => false, 'message' => 'Google timed out'], 502),   // a failed read leaves the name as the fallback
     ]);
 
     $profiles = upProvider()->profiles($site);
 
-    expect(array_map(fn ($p) => [$p->id, $p->network->value, $p->name], $profiles))->toBe([
-        ['102255308709082', 'facebook', 'Sump Pump Gurus Corporate'],
-        ['accounts/1/locations/111', 'gbp', 'Sump Pump Gurus | Montclair'],
-        ['accounts/1/locations/222', 'gbp', 'Sump Pump Gurus | Bedminster'],
-        ['accounts/1/locations/333', 'gbp', 'Sump Pump Gurus | Trooper'],
+    expect(array_map(fn ($p) => [$p->id, $p->network->value, $p->name, $p->address, $p->placeId], $profiles))->toBe([
+        ['102255308709082', 'facebook', 'Sump Pump Gurus Corporate', null, null],
+        ['accounts/1/locations/111', 'gbp', 'Sump Pump Gurus | Montclair', '50 South Park Street, Montclair, New Jersey 07042', 'ChIJ-montclair'],
+        ['accounts/1/locations/222', 'gbp', 'Sump Pump Gurus', '432 U.S. 202, Bedminster, New Jersey 07921', 'ChIJ-bedminster'],
+        ['accounts/1/locations/333', 'gbp', 'Sump Pump Gurus | Trooper', null, null],
     ]);
     Http::assertSent(fn (Request $r): bool => $r->hasHeader('Authorization', 'Apikey agency-key'));
 
     expect(upProvider()->profiles(Site::factory()->create(['social_profile' => null])))->toBe([]);
-    Http::assertSentCount(3);
+    Http::assertSentCount(6);   // profile + two location pages + three location reads; nothing for a site with no profile
 });
 
 it('publishes a job photo to the office\'s GBP location with the link as the Learn-more button, no hashtags on GBP', function () {

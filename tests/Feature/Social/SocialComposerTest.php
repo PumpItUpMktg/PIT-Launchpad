@@ -116,7 +116,7 @@ it('strips a phone number from GBP copy (Google rejects it; the Call button is t
     $fb = app(SocialComposer::class)->job($job, SocialNetwork::Facebook, SocialTrigger::JobPublished);
 
     expect($gbp->copy)->not->toMatch('/\\d{3}[\\s.\\-]?\\d{4}/')
-        ->and($gbp->copy)->toContain('a new check valve fitted. Call today or for a quote.')
+        ->and($gbp->copy)->toContain('a new check valve fitted. Call today or text for a quote.')
         ->and($fb->copy)->toContain('(908) 224-0550')
         ->and(SocialComposer::withoutPhoneNumbers('Reach us at 908-224-0550.'))->toBe('Reach us.')
         ->and(SocialComposer::withoutPhoneNumbers('Dial +1 (908) 224-0550, we answer.'))->toBe('Dial, we answer.');

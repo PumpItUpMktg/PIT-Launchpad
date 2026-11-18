@@ -126,7 +126,7 @@ final class SocialComposer
      */
     public static function withoutPhoneNumbers(string $text): string
     {
-        $out = preg_replace('/(?:(?:call|text|phone|dial|at|on)\s+)?(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}\b/iu', '', $text) ?? $text;
+        $out = preg_replace('/(?:\b(?:at|on)\s+)?(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}\b/iu', '', $text) ?? $text;
         $out = preg_replace('/[ \t]{2,}/', ' ', $out) ?? $out;
         $out = preg_replace('/\s+([.,!?;:])/', '$1', $out) ?? $out;
 

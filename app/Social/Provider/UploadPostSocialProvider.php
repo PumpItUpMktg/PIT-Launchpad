@@ -82,7 +82,11 @@ final class UploadPostSocialProvider implements SocialProvider
         $gbp = $accounts['google_business'] ?? null;
         if (is_array($gbp) && $gbp !== []) {
             foreach ($this->gbpLocations($profile) as $location) {
-                $out[] = new SocialProfile((string) $location['name'], SocialNetwork::Gbp, (string) $location['title']);
+                // The listing's address and Google place id (one read per location) let ChannelSync tie it to
+                // an office the sure way — place id, then street — so a listing named without its town still
+                // lands on the right office. A read that fails leaves the name match as the fallback.
+                $details = $this->gbpDetails($profile, (string) $location['name']);
+                $out[] = new SocialProfile((string) $location['name'], SocialNetwork::Gbp, (string) $location['title'], $details['address'], $details['place_id']);
             }
         }
 
@@ -197,6 +201,30 @@ final class UploadPostSocialProvider implements SocialProvider
         }
 
         return $out;
+    }
+
+    /**
+     * A GBP location's street address and Google place id, as Google holds them.
+     *
+     * @return array{address: ?string, place_id: ?string}
+     */
+    private function gbpDetails(string $profile, string $locationName): array
+    {
+        try {
+            $json = $this->json($this->send(fn () => $this->request()->get($this->url('/api/uploadposts/google-business/location-info'), [
+                'user' => $profile, 'location_id' => $locationName, 'read_mask' => 'name,title,storefrontAddress,metadata',
+            ])));
+        } catch (SocialProviderException) {
+            return ['address' => null, 'place_id' => null];
+        }
+        $info = is_array($json['info'] ?? null) ? $json['info'] : [];
+        $addr = is_array($info['address'] ?? null) ? $info['address'] : [];
+        $lines = array_values(array_filter(array_map('strval', is_array($addr['addressLines'] ?? null) ? $addr['addressLines'] : [])));
+        $parts = array_filter([implode(' ', $lines), (string) ($addr['locality'] ?? ''), trim((string) ($addr['administrativeArea'] ?? '').' '.(string) ($addr['postalCode'] ?? ''))]);
+        $address = trim(implode(', ', $parts));
+        $placeId = trim((string) ($info['place_id'] ?? ($json['location']['metadata']['placeId'] ?? '')));
+
+        return ['address' => $address !== '' ? $address : null, 'place_id' => $placeId !== '' ? $placeId : null];
     }
 
     /** @return array<string, mixed>|null the per-platform entry of a sync response */
