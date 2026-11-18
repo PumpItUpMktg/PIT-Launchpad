@@ -10,6 +10,7 @@ use App\Filament\Pages\Operate\OperateShares;
 use App\Jobs\SendSocialPost;
 use App\Models\Content;
 use App\Models\Location;
+use App\Models\Membership;
 use App\Models\Site;
 use App\Models\SocialChannel;
 use App\Models\SocialPost;
@@ -17,6 +18,7 @@ use App\Models\SocialSuggestion;
 use App\Models\User;
 use App\Operator\ActiveTenant;
 use App\Social\ChannelSync;
+use App\Social\Provider\AccountProfile;
 use App\Social\Provider\MockSocialProvider;
 use App\Social\Provider\SocialProfile;
 use App\Social\Provider\SocialProvider;
@@ -133,4 +135,43 @@ it('an unmatched GBP channel offers the offices; assigning one ties it (locked) 
 
     Livewire::test(OperateShares::class)->call('assignChannel', $channel->id, '');
     expect($channel->fresh()->location_id)->toBeNull()->and($channel->fresh()->location_locked)->toBeFalse();
+});
+
+it('tying a GBP channel to an office is a Super Admin matter — a Site Admin sees the board, not the assign control', function () {
+    $site = sharesSite();
+    $loc = Location::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown office']);
+    /** @var MockSocialProvider $mock */
+    $mock = app(SocialProvider::class);
+    $mock->connect($site->id, [new SocialProfile('locations/555', SocialNetwork::Gbp, 'Sump Pump Gurus')]);
+    app(ChannelSync::class)->sync($site);
+    $channel = SocialChannel::withoutGlobalScopes()->where('provider_channel_id', 'locations/555')->firstOrFail();
+
+    $siteAdmin = User::factory()->create(['role' => UserRole::SiteAdmin]);
+    Membership::create(['user_id' => $siteAdmin->id, 'account_id' => $site->account_id, 'site_id' => $site->id, 'role' => UserRole::SiteAdmin]);
+    $this->actingAs($siteAdmin);
+
+    Livewire::test(OperateShares::class)
+        ->assertSee('Sync now')
+        ->assertDontSee('unmatched — assign office…')
+        ->assertDontSee('Posting profiles')
+        ->call('assignChannel', $channel->id, $loc->id);
+    expect($channel->fresh()->location_id)->toBeNull();
+});
+
+it('a Super Admin sees the tenant\'s posting profiles with what each has connected, and one the account no longer has flagged', function () {
+    $site = sharesSite();
+    $site->forceFill(['social_profile' => 'SumpPumpGurus, Gone'])->save();
+    /** @var MockSocialProvider $mock */
+    $mock = app(SocialProvider::class);
+    $mock->accountProfiles = [
+        new AccountProfile('SumpPumpGurus', ['gbp' => 'Eric Wright', 'facebook' => 'Sump Pump Gurus Corporate']),
+        new AccountProfile('OtherClient', ['facebook' => 'Other Co']),
+    ];
+
+    Livewire::test(OperateShares::class)
+        ->assertSee('Posting profiles')
+        ->assertSee('SumpPumpGurus')
+        ->assertSee('Google Business Profile: Eric Wright · Facebook: Sump Pump Gurus Corporate')
+        ->assertSee('not in the provider account')
+        ->assertDontSee('OtherClient');
 });

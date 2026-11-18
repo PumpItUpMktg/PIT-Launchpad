@@ -10,8 +10,10 @@ use App\Models\SocialChannel;
 use App\Models\SocialSuggestion;
 use App\Operator\ActiveTenant;
 use App\Social\ChannelSync;
+use App\Social\ProfilePicker;
 use App\Social\SuggestionBoard;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\Auth;
 use Throwable;
 
 /**
@@ -19,7 +21,9 @@ use Throwable;
  * suggested post — why it is proposed, the copy as it will post, the platforms pre-ticked, the GBP
  * locations resolved from the post — Approve posts it, Skip dismisses it. Below, what went out and why
  * (approved and the rain rule's automatic shares). Channels are read from the posting provider; the
- * only control is Sync now.
+ * only control is Sync now. Which provider profiles the tenant posts through, and tying an unplaced GBP
+ * channel to an office, are Super Admin matters ({@see canManageChannels}); a Site Admin sees the board
+ * and decides the re-shares.
  */
 class OperateShares extends OperatePage
 {
@@ -69,6 +73,27 @@ class OperateShares extends OperatePage
     public function getChannelsProperty(): array
     {
         return $this->siteId === null ? [] : app(SuggestionBoard::class)->channels($this->siteId);
+    }
+
+    /** Super Admin only: the posting profiles a tenant uses and the office a GBP channel is tied to. */
+    public function getCanManageChannelsProperty(): bool
+    {
+        return Auth::user()?->isSuperAdmin() ?? false;
+    }
+
+    /**
+     * The tenant's posting-provider profiles with what is connected on each (Super Admin only).
+     *
+     * @return array{profiles: list<array{name: string, summary: string, found: bool}>, error: string|null}
+     */
+    public function getProfilesProperty(): array
+    {
+        if (! $this->canManageChannels) {
+            return ['profiles' => [], 'error' => null];
+        }
+        $site = app(ActiveTenant::class)->site();
+
+        return $site === null ? ['profiles' => [], 'error' => null] : app(ProfilePicker::class)->forShares($site);
     }
 
     /** @return array<string, string> */
@@ -147,7 +172,7 @@ class OperateShares extends OperatePage
      */
     public function assignChannel(string $channelId, ?string $locationId): void
     {
-        if ($this->siteId === null) {
+        if ($this->siteId === null || ! $this->canManageChannels) {
             return;
         }
         $channel = SocialChannel::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->find($channelId);
@@ -172,6 +197,7 @@ class OperateShares extends OperatePage
         if ($site === null) {
             return;
         }
+        ProfilePicker::forget();
         try {
             $r = app(ChannelSync::class)->sync($site);
         } catch (Throwable $e) {

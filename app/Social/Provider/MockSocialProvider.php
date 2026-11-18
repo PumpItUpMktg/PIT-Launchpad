@@ -18,6 +18,9 @@ final class MockSocialProvider implements SocialProvider
     /** @var array<string, list<SocialProfile>> site id → profiles the mock answers with (tests seed it) */
     public array $profiles = [];
 
+    /** @var list<AccountProfile> the account's profiles the mock lists (tests seed it) */
+    public array $accountProfiles = [];
+
     private ?string $failWith = null;
 
     private bool $failTransient = false;
@@ -31,6 +34,11 @@ final class MockSocialProvider implements SocialProvider
     public function profiles(Site $site): array
     {
         return $this->profiles[(string) $site->id] ?? [];
+    }
+
+    public function accountProfiles(): array
+    {
+        return $this->accountProfiles;
     }
 
     public function failNext(string $message = 'provider refused the post', bool $transient = false): void

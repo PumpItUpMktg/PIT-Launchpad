@@ -83,6 +83,74 @@ final class UploadPostSocialProvider implements SocialProvider
     }
 
     /**
+     * Every profile ("user") in the agency's Upload-Post account, with what is connected on each. One read;
+     * the per-platform entries are an object when connected and an empty string when not.
+     */
+    public function accountProfiles(): array
+    {
+        $json = $this->json($this->send(fn () => $this->request()->get($this->url('/api/uploadposts/users'))));
+        $records = is_array($json['profiles'] ?? null) ? $json['profiles'] : (is_array($json['users'] ?? null) ? $json['users'] : []);
+
+        $out = [];
+        foreach ($records as $record) {
+            if (! is_array($record)) {
+                continue;
+            }
+            $name = trim((string) ($record['username'] ?? $record['name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $out[] = new AccountProfile($name, self::connectedOn($record));
+        }
+        usort($out, fn (AccountProfile $a, AccountProfile $b): int => strcasecmp($a->name, $b->name));
+
+        return $out;
+    }
+
+    /**
+     * What one profile record has signed in, per network: the Page name (profile-level, like publish() reads
+     * it), the Instagram handle, the Google account's display name.
+     *
+     * @param  array<string, mixed>  $record
+     * @return array<string, string>
+     */
+    private static function connectedOn(array $record): array
+    {
+        $accounts = is_array($record['social_accounts'] ?? null) ? $record['social_accounts'] : [];
+        $label = static function (mixed $entry, string ...$keys): ?string {
+            if (! is_array($entry) || $entry === []) {
+                return null;
+            }
+            foreach ($keys as $key) {
+                $raw = $entry[$key] ?? null;
+                $v = is_scalar($raw) ? trim((string) $raw) : '';
+                if ($v !== '') {
+                    return $v;
+                }
+            }
+
+            return '';
+        };
+
+        $out = [];
+        $fb = $label($accounts['facebook'] ?? null, 'display_name', 'handle', 'username');
+        if ($fb !== null) {
+            $page = trim((string) ($record['facebook_page_name'] ?? ''));
+            $out[SocialNetwork::Facebook->value] = $page !== '' ? $page : $fb;
+        }
+        $ig = $label($accounts['instagram'] ?? null, 'username', 'handle', 'display_name');
+        if ($ig !== null) {
+            $out[SocialNetwork::Instagram->value] = $ig;
+        }
+        $gbp = $label($accounts['google_business'] ?? null, 'display_name', 'handle', 'username');
+        if ($gbp !== null) {
+            $out[SocialNetwork::Gbp->value] = $gbp;
+        }
+
+        return $out;
+    }
+
+    /**
      * The channels one Upload-Post profile exposes: its Page, its Instagram account, and every Google
      * Business location its Google connection can post to.
      *

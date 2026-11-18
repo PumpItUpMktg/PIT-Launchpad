@@ -17,9 +17,11 @@ use App\Security\Capability;
 use App\Security\ConnectionRotator;
 use App\Security\CredentialMasker;
 use App\Security\CredentialRevealer;
+use App\Social\ProfilePicker;
 use App\Social\Provider\UploadPostSocialProvider;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -321,10 +323,12 @@ class ConnectionsResource extends Resource
     }
 
     /**
-     * Point a tenant at its Upload-Post profile — the container the agency connects its Google Business,
-     * Facebook and Instagram accounts to (dashboard: app.upload-post.com → Manage users). One profile per
-     * tenant; the channel sync then reads that profile's GBP locations and Pages. Until the agency API key
-     * is configured (UPLOAD_POST_API_KEY) the button shows the setup steps instead of the form.
+     * Point a tenant at its Upload-Post profile(s) — the containers the agency connects its Google Business,
+     * Facebook and Instagram accounts to (dashboard: app.upload-post.com → Manage users). Picked from the
+     * account's profile list ({@see ProfilePicker}: what each has connected, greyed out when another tenant
+     * owns it); a text box when the list cannot be read. The channel sync then reads the picked profiles'
+     * GBP locations and Pages. Super-Admin-only like the whole resource. Until the agency API key is
+     * configured (UPLOAD_POST_API_KEY) the button shows the setup steps instead of the form.
      */
     public static function socialProfileAction(): Action
     {
@@ -346,20 +350,41 @@ class ConnectionsResource extends Resource
             ->label('Set social posting profile')
             ->icon('heroicon-o-megaphone')
             ->modalSubmitActionLabel('Save profile')
-            ->modalDescription('The Upload-Post profile this tenant posts through. Create it in Upload-Post, connect the client\'s Google Business (and Facebook / Instagram) to it there, then enter its username here. Operate → Shares → "Sync now" pulls the locations and Pages.')
-            ->schema([
-                TextInput::make('social_profile')
-                    ->label('Upload-Post profile username(s)')
-                    ->default(fn (): ?string => app(ActiveTenant::class)->site()?->social_profile)
-                    ->placeholder('sump-pump-gurus')
-                    ->helperText('Exactly as Upload-Post shows it under Manage users. Several, comma-separated, when the client\'s listings sit under more than one Google account (each Google connection is its own Upload-Post profile). Leave blank to clear (shares go back to the mock for this tenant).'),
-            ])
+            ->modalDescription('The Upload-Post profile(s) this tenant posts through — pick from what the agency account has. Connect the client\'s Google Business (and Facebook / Instagram) to the profile in Upload-Post first; Operate → Shares → "Sync now" then pulls the locations and Pages. One profile belongs to one tenant.')
+            ->schema(function (): array {
+                $site = app(ActiveTenant::class)->site();
+                $pick = $site !== null ? app(ProfilePicker::class)->forSite($site) : null;
+                if ($pick === null || $pick['options'] === []) {
+                    // The account could not be listed (or has no profile yet): type the name, as before.
+                    return [
+                        TextInput::make('social_profile')
+                            ->label('Upload-Post profile username(s)')
+                            ->default(fn (): ?string => $site?->social_profile)
+                            ->placeholder('sump-pump-gurus')
+                            ->helperText(($pick !== null && $pick['error'] !== null ? 'The profile list could not be read ('.$pick['error'].') — enter the name by hand. ' : '')
+                                .'Exactly as Upload-Post shows it under Manage users. Several, comma-separated, when the client\'s listings sit under more than one Google account. Leave blank to clear (shares go back to the mock for this tenant).'),
+                    ];
+                }
+                $taken = $pick['taken'];
+
+                return [
+                    CheckboxList::make('social_profiles')
+                        ->label('Upload-Post profiles')
+                        ->options($pick['options'])
+                        ->descriptions($pick['descriptions'])
+                        ->disableOptionWhen(fn (string $value): bool => isset($taken[$value]))
+                        ->default($pick['current'])
+                        ->helperText('Tick every profile whose connected accounts belong to this client — several when its listings sit under more than one Google account. A profile another tenant owns is greyed out. Untick all to clear (shares go back to the mock for this tenant).'),
+                ];
+            })
             ->action(function (array $data): void {
                 $site = app(ActiveTenant::class)->site();
                 if ($site === null) {
                     return;
                 }
-                $profile = trim((string) ($data['social_profile'] ?? ''));
+                $taken = app(ProfilePicker::class)->forSite($site)['taken'];
+                $names = ProfilePicker::normalise($data['social_profiles'] ?? $data['social_profile'] ?? '', $taken);
+                $profile = implode(', ', $names);
                 $site->forceFill(['social_profile' => $profile !== '' ? $profile : null])->save();
 
                 Notification::make()->success()

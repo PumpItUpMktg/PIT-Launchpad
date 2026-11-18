@@ -90,6 +90,26 @@ it('reads the tenant profile\'s connected accounts: a channel per GBP location (
     Http::assertSentCount(6);   // profile + two location pages + three location reads; nothing for a site with no profile
 });
 
+it('lists the account\'s profiles with what each has connected — the Page name over the person who connected it, the Instagram handle, the Google account', function () {
+    Http::fake([
+        'api.upload-post.com/api/uploadposts/users' => Http::response(['success' => true, 'profiles' => [
+            ['username' => 'SPG-Pennsylvania', 'social_accounts' => ['google_business' => ['display_name' => 'Sump Pump Gurus'], 'facebook' => '', 'instagram' => '']],
+            ['username' => 'SumpPumpGurus', 'facebook_page_id' => '102255308709082', 'facebook_page_name' => 'Sump Pump Gurus Corporate',
+                'social_accounts' => ['google_business' => ['display_name' => 'Eric Wright'], 'facebook' => ['display_name' => 'Eric Lite'], 'instagram' => ['username' => 'sumppumpgurus'], 'tiktok' => '']],
+            ['username' => 'empty', 'social_accounts' => ['facebook' => '', 'instagram' => '']],
+        ]]),
+    ]);
+
+    $profiles = upProvider()->accountProfiles();
+
+    expect(array_map(fn ($p) => $p->name, $profiles))->toBe(['empty', 'SPG-Pennsylvania', 'SumpPumpGurus'])
+        ->and($profiles[2]->connected)->toBe(['facebook' => 'Sump Pump Gurus Corporate', 'instagram' => 'sumppumpgurus', 'gbp' => 'Eric Wright'])
+        ->and($profiles[2]->summary())->toBe('Google Business Profile: Eric Wright · Facebook: Sump Pump Gurus Corporate · Instagram: sumppumpgurus')
+        ->and($profiles[1]->summary())->toBe('Google Business Profile: Sump Pump Gurus')
+        ->and($profiles[1]->has(SocialNetwork::Facebook))->toBeFalse()
+        ->and($profiles[0]->summary())->toBe('nothing connected');
+});
+
 it('publishes a job photo to the office\'s GBP location with the link as the Learn-more button, no hashtags on GBP', function () {
     $site = upSite();
     $office = Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair office']);
