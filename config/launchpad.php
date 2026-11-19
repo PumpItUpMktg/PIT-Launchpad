@@ -922,6 +922,16 @@ return [
                 'The rain gauge filled up fast in {area}.',
             ],
         ],
+        // The planner's spotlight town on a GBP share: the opening line, {town} filled in (GBP only — the Page
+        // and Instagram speak to the whole footprint). Drawn with weight toward striking-distance towns.
+        'spotlight' => [
+            'leads' => [
+                'Serving {town} homeowners.',
+                'For our {town} neighbors.',
+                'A note for {town} basements.',
+                '{town} homeowners: this one is worth a read.',
+            ],
+        ],
     ],
 
     /*

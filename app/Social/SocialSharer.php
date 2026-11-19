@@ -71,7 +71,12 @@ final class SocialSharer
      * @param  string|null  $lead  a line the composer puts first (the rain rule's storm line)
      * @return list<SocialPost>
      */
-    public function sharePost(Content $post, SocialTrigger $trigger, ?array $snapshot = null, ?array $networks = null, ?array $locationIds = null, ?SocialSuggestion $suggestion = null, ?string $lead = null): array
+    /**
+     * @param  Carbon|null  $at  when the shares should go (the planner's date); null = now, capped channels slide
+     * @param  array<string, array{lead?: string|null, link?: string|null}>|null  $perChannel  channel id → the
+     *                                                                                         planner's spotlight for that channel: its own opening line and, on GBP, the page the button opens
+     */
+    public function sharePost(Content $post, SocialTrigger $trigger, ?array $snapshot = null, ?array $networks = null, ?array $locationIds = null, ?SocialSuggestion $suggestion = null, ?string $lead = null, ?Carbon $at = null, ?array $perChannel = null): array
     {
         $channels = $this->channels((string) $post->site_id);
         if ($channels->isEmpty()) {
@@ -96,8 +101,9 @@ final class SocialSharer
             if (! $this->allowed($channel, SocialPost::SUBJECT_POST, (string) $post->id, $trigger)) {
                 continue;
             }
-            $copy = $this->composer->post($post, $channel->network, $trigger, $lead);
-            $out[] = $this->queue($channel, SocialPost::SUBJECT_POST, (string) $post->id, $trigger, $copy, $snapshot, $suggestion);
+            $own = $perChannel[(string) $channel->id] ?? [];
+            $copy = $this->composer->post($post, $channel->network, $trigger, $own['lead'] ?? $lead, $own['link'] ?? null);
+            $out[] = $this->queue($channel, SocialPost::SUBJECT_POST, (string) $post->id, $trigger, $copy, $snapshot, $suggestion, $at);
         }
 
         return $out;
@@ -191,7 +197,7 @@ final class SocialSharer
                 ->whereIn('status', [SocialPostStatus::Queued->value, SocialPostStatus::Sent->value])
                 ->where('created_at', '>=', Carbon::now()->subDays((int) config('launchpad.social.weather.cooldown_days', 30)))
                 ->exists(),
-            SocialTrigger::Manual => true,
+            SocialTrigger::Manual, SocialTrigger::Planned => true,
         };
     }
 
@@ -213,9 +219,9 @@ final class SocialSharer
     }
 
     /** @param  array<string, mixed>|null  $snapshot */
-    private function queue(SocialChannel $channel, string $subjectType, string $subjectId, SocialTrigger $trigger, SocialCopy $copy, ?array $snapshot, ?SocialSuggestion $suggestion = null): SocialPost
+    private function queue(SocialChannel $channel, string $subjectType, string $subjectId, SocialTrigger $trigger, SocialCopy $copy, ?array $snapshot, ?SocialSuggestion $suggestion = null, ?Carbon $at = null): SocialPost
     {
-        $when = $this->slot($channel);
+        $when = $this->slot($channel, $at);
         $post = SocialPost::withoutGlobalScope(SiteScope::class)->create([
             'site_id' => $channel->site_id,
             'social_channel_id' => $channel->id,
@@ -237,6 +243,7 @@ final class SocialSharer
         if ($when->isFuture()) {
             $job->delay($when);
         }
+        // (A later reschedule moves `scheduled_for`; the send job re-queues itself to the new time.)
 
         return $post;
     }
@@ -245,10 +252,14 @@ final class SocialSharer
      * The channel's cadence slot: now when the channel has no daily cap or room left today; otherwise the
      * first later day with room, at the configured hour. A capped GBP never buries itself under six jobs.
      */
-    private function slot(SocialChannel $channel): Carbon
+    /**
+     * The first slot the channel's daily cap allows, from now — or from `$from` (the planner's date, kept at its
+     * own hour) when given: a planned share on a day the channel already posts slides to the next free day.
+     */
+    private function slot(SocialChannel $channel, ?Carbon $from = null): Carbon
     {
         $cap = $channel->max_per_day;
-        $now = Carbon::now();
+        $now = $from !== null && $from->isFuture() ? $from->copy() : Carbon::now();
         if ($cap === null || $cap <= 0) {
             return $now;
         }
