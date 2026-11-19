@@ -40,7 +40,7 @@ class SyncSocialChannels implements ShouldBeUnique, ShouldQueue
     public static function queue(Site $site): void
     {
         $current = self::status((string) $site->id);
-        if (in_array($current['state'] ?? null, ['queued', 'running'], true) && isset($current['at']) && strtotime((string) $current['at']) > time() - 900) {
+        if (in_array($current['state'], ['queued', 'running'], true) && $current['at'] !== null && strtotime($current['at']) > time() - 900) {
             return;
         }
         Cache::put(self::key((string) $site->id), ['state' => 'queued', 'at' => now()->toIso8601String()], self::TTL);
