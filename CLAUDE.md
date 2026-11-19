@@ -715,7 +715,9 @@ a job share queues when the job publishes (`JobPublisher` → `ShareJobSocially`
   impressions ≥ 2× prior with ≥ 30, position gain ≥ 3 inside the top 20, or first clicks ≥ 3 — snapshot on
   the card), or the operator's pick. One open suggestion per post; `reshare_cooldown_days` (60) after a
   share / decision unless manual. Approve with the ticked platforms → `SocialSharer::sharePost` (GBP to the
-  resolved locations); Skip closes.
+  TICKED offices: the card lists every office with a GBP that takes shares as a tick, pre-ticked to the post's
+  routing — all when it names no town — and GBP ticked with no office is refused; the pick is saved on the
+  suggestion's `location_ids`); Skip closes.
 - **Rain** (`Rules\WeatherRule`, auto): the site's observed NOAA rainfall (`RainfallSeries`, the metric
   the rainfall board already syncs) ≥ `inches_1d` (1.0) or `inches_2d` (1.5) → one share per rain event
   (`event_days` 3). Per GBP location a separate weighted-random draw from the **rain pool**

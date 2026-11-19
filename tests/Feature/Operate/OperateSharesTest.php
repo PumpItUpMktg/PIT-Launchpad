@@ -88,7 +88,6 @@ it('a suggestion card shows why, the copy, the resolved GBP locations and the Q&
     $page = Livewire::test(OperateShares::class)
         ->assertSee('Post refreshed · Refreshed to answer')
         ->assertSee('Why Pumps Run')
-        ->assertSee('GBP: every location')
         ->assertSee('Why does my sump pump run constantly?')
         ->assertSee('Usually a stuck float.')
         ->assertSee('GBP Q&amp;A to add by hand', false);
@@ -258,4 +257,32 @@ it('a Super Admin can set a channel aside — it leaves the row, sits under Igno
     $this->actingAs($siteAdmin);
     Livewire::test(OperateShares::class)->call('ignoreChannel', $channel->id);
     expect($channel->fresh()->ignored_at)->toBeNull();
+});
+
+it('a card lists the offices with a GBP as ticks (pre-ticked to the routing); approve posts the GBP share to the ticked offices only; GBP with no office is refused', function () {
+    Queue::fake();
+    $site = sharesSite();
+    $trooper = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper office']);
+    $montclair = Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair office']);
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Hoboken office']);   // no GBP: never offered
+    SocialChannel::withoutGlobalScopes()->create(['site_id' => $site->id, 'network' => SocialNetwork::Facebook, 'provider_channel_id' => 'fb']);
+    SocialChannel::withoutGlobalScopes()->create(['site_id' => $site->id, 'network' => SocialNetwork::Gbp, 'provider_channel_id' => 'g-trooper', 'location_id' => $trooper->id]);
+    SocialChannel::withoutGlobalScopes()->create(['site_id' => $site->id, 'network' => SocialNetwork::Gbp, 'provider_channel_id' => 'g-montclair', 'location_id' => $montclair->id]);
+    $s = app(SuggestionBoard::class)->suggest(sharesPost($site)->fresh(['site']), SocialTrigger::Manual, 'Picked');
+
+    $page = Livewire::test(OperateShares::class)
+        ->assertSee('GBP offices')
+        ->assertSee('Trooper')->assertSee('Montclair')->assertDontSee('Hoboken');
+    expect($page->get('offices')[$s->id])->toBe([$montclair->id => true, $trooper->id => true]);
+
+    // GBP ticked, every office unticked → refused, nothing queued.
+    $page->set("offices.{$s->id}.{$montclair->id}", false)->set("offices.{$s->id}.{$trooper->id}", false)
+        ->call('approve', $s->id)->assertNotified('Tick at least one office for the GBP share, or untick GBP');
+    expect(SocialPost::withoutGlobalScopes()->count())->toBe(0);
+
+    // Trooper only → the Page share + one GBP share, to Trooper.
+    $page->set("offices.{$s->id}.{$trooper->id}", true)->call('approve', $s->id)->assertNotified('Queued 2 share(s)');
+    $channels = SocialPost::withoutGlobalScopes()->with('channel')->get()->map(fn (SocialPost $p): string => (string) $p->channel->provider_channel_id)->sort()->values()->all();
+    expect($channels)->toBe(['fb', 'g-trooper'])
+        ->and($s->fresh()->location_ids)->toBe([$trooper->id]);
 });

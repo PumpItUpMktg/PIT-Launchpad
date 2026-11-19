@@ -19,6 +19,8 @@
         .sh-why { font-size:12.5px; color:#b45309; font-weight:700; }
         .sh-copy { white-space:pre-wrap; font-size:12.5px; color:#334155; background:#f8fafc; border-radius:8px; padding:8px 10px; margin-top:6px; }
         .sh-chk { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:#334155; margin-right:12px; }
+        .sh-chk.sm { font-size:11.5px; font-weight:600; margin-right:8px; }
+        .sh-offices { display:flex; flex-wrap:wrap; gap:4px 6px; align-items:center; margin-top:6px; }
         .sh-act { display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
         .sh details summary { cursor:pointer; font-size:12px; color:#64748b; }
         .sh-pill.sm { font-size:10.5px; padding:1px 7px; font-weight:700; }
@@ -131,9 +133,22 @@
                             <div class="sh-why">{{ $s['trigger_label'] }} · {{ $s['reason'] }}</div>
                             <b style="font-size:13.5px">{{ $s['title'] }}</b>
                             <div class="sub">
-                                @if ($s['gbp_locations'] === null) GBP: every location @else GBP: {{ implode(', ', $s['gbp_locations']) }} @endif
-                                · suggested {{ \Illuminate\Support\Carbon::parse($s['created_at'])->diffForHumans() }}
+                                suggested {{ \Illuminate\Support\Carbon::parse($s['created_at'])->diffForHumans() }}
                             </div>
+                            @if (in_array('gbp', $s['networks'], true))
+                                <div class="sh-offices">
+                                    <span class="sub" style="font-weight:700">GBP offices</span>
+                                    @forelse ($s['gbp_offices'] as $o)
+                                        <label class="sh-chk sm" title="{{ $o['name'] }}"><input type="checkbox" wire:model="offices.{{ $s['id'] }}.{{ $o['id'] }}"> {{ $o['town'] }}</label>
+                                    @empty
+                                        <span class="sub">no office has a GBP yet — the GBP tick posts nowhere</span>
+                                    @endforelse
+                                    @if (count($s['gbp_offices']) > 1)
+                                        <button type="button" class="sh-x" wire:click="$set('offices.{{ $s['id'] }}', {{ json_encode(array_fill_keys(array_column($s['gbp_offices'], 'id'), true)) }})">all</button>
+                                        <button type="button" class="sh-x" wire:click="$set('offices.{{ $s['id'] }}', {{ json_encode(array_fill_keys(array_column($s['gbp_offices'], 'id'), false)) }})">none</button>
+                                    @endif
+                                </div>
+                            @endif
                             <div class="sh-copy">{{ $s['copy'] }}</div>
                             <div class="sh-act">
                                 @foreach (\App\Enums\SocialNetwork::cases() as $n)

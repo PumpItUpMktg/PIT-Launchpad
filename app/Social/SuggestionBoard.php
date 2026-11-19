@@ -74,7 +74,11 @@ final class SuggestionBoard
      * @param  list<string>  $networks
      * @return list<SocialPost>
      */
-    public function approve(SocialSuggestion $suggestion, array $networks): array
+    /**
+     * @param  list<string>  $networks  the ticked network values
+     * @param  list<string>|null  $locationIds  the ticked GBP offices; null = the suggestion's own routing
+     */
+    public function approve(SocialSuggestion $suggestion, array $networks, ?array $locationIds = null): array
     {
         if ($suggestion->status !== SocialSuggestionStatus::Open) {
             return [];
@@ -90,8 +94,9 @@ final class SuggestionBoard
             return [];
         }
         $trigger = $suggestion->trigger === SocialTrigger::PostRefreshed ? SocialTrigger::Manual : $suggestion->trigger;
-        $rows = $this->sharer->sharePost($post, $trigger, $suggestion->snapshot, $picked, $suggestion->location_ids, $suggestion);
-        $suggestion->forceFill(['status' => SocialSuggestionStatus::Approved, 'networks' => array_map(fn (SocialNetwork $n): string => $n->value, $picked), 'decided_at' => Carbon::now()])->save();
+        $offices = $locationIds ?? $suggestion->location_ids;
+        $rows = $this->sharer->sharePost($post, $trigger, $suggestion->snapshot, $picked, $offices, $suggestion);
+        $suggestion->forceFill(['status' => SocialSuggestionStatus::Approved, 'networks' => array_map(fn (SocialNetwork $n): string => $n->value, $picked), 'location_ids' => $offices, 'decided_at' => Carbon::now()])->save();
 
         return $rows;
     }
@@ -170,12 +175,17 @@ final class SuggestionBoard
     private function rows(array $suggestions): array
     {
         $out = [];
+        $officesBySite = [];
         foreach ($suggestions as $s) {
             $post = $s->content;
             if ($post === null) {
                 continue;
             }
             $locations = $s->location_ids === null ? null : Location::withoutGlobalScope(SiteScope::class)->whereIn('id', $s->location_ids)->pluck('name')->all();
+            // The offices a GBP share can go to (one GBP channel that takes shares, tied to the office), each
+            // pre-ticked when the post's routing names it (or every office when the post names no town).
+            $officesBySite[(string) $s->site_id] ??= $this->gbpOffices((string) $s->site_id);
+            $gbpOffices = array_map(fn (array $o): array => [...$o, 'routed' => $s->location_ids === null || in_array($o['id'], $s->location_ids, true)], $officesBySite[(string) $s->site_id]);
             $preview = $this->composer->post($post, SocialNetwork::Facebook, $s->trigger);
             $gbpPreview = $this->composer->post($post, SocialNetwork::Gbp, $s->trigger);
             $qa = $this->composer->gbpQa($post);
@@ -190,6 +200,7 @@ final class SuggestionBoard
                 'snapshot' => $s->snapshot,
                 'networks' => $s->networks,
                 'gbp_locations' => $locations,
+                'gbp_offices' => $gbpOffices,
                 'image_url' => $preview->imageUrl,
                 'copy' => $preview->copy,
                 'gbp_copy' => $gbpPreview->copy,
@@ -210,6 +221,25 @@ final class SuggestionBoard
         }
 
         return $out;
+    }
+
+    /**
+     * The offices a GBP share can reach: each office with a GBP channel that takes shares, by town name.
+     *
+     * @return list<array{id: string, name: string, town: string}>
+     */
+    public function gbpOffices(string $siteId): array
+    {
+        $ids = SocialChannel::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)->where('network', SocialNetwork::Gbp->value)->takesShares()
+            ->whereNotNull('location_id')->pluck('location_id')->unique()->values()->all();
+        if ($ids === []) {
+            return [];
+        }
+
+        return Location::withoutGlobalScopes()->whereIn('id', $ids)->orderBy('name')->get(['id', 'name'])
+            ->map(fn (Location $l): array => ['id' => (string) $l->id, 'name' => (string) $l->name, 'town' => ChannelLabel::officeTown((string) $l->name)])
+            ->sortBy('town')->values()->all();
     }
 
     /** @return list<array<string, mixed>> the synced channels, for the board's read-only line */

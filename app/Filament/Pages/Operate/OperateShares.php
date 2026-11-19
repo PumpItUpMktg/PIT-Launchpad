@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Operate;
 
+use App\Enums\SocialNetwork;
 use App\Enums\SocialTrigger;
 use App\Jobs\SyncSocialChannels;
 use App\Models\Content;
@@ -40,6 +41,9 @@ class OperateShares extends OperatePage
     /** @var array<string, array<string, bool>> suggestion id → network → ticked */
     public array $picks = [];
 
+    /** @var array<string, array<string, bool>> suggestion id → office (location id) → ticked, for the GBP share */
+    public array $offices = [];
+
     public ?string $pickPostId = null;
 
     public function mount(): void
@@ -57,6 +61,13 @@ class OperateShares extends OperatePage
         foreach ($rows as $row) {
             if (! isset($this->picks[$row['id']])) {
                 $this->picks[$row['id']] = array_fill_keys($row['networks'], true);
+            }
+            if (! isset($this->offices[$row['id']])) {
+                $ticks = [];
+                foreach ($row['gbp_offices'] as $office) {
+                    $ticks[$office['id']] = (bool) $office['routed'];
+                }
+                $this->offices[$row['id']] = $ticks;
             }
         }
 
@@ -123,8 +134,18 @@ class OperateShares extends OperatePage
 
             return;
         }
-        $rows = app(SuggestionBoard::class)->approve($suggestion, $networks);
-        unset($this->picks[$suggestionId]);
+        // The GBP share goes to the ticked offices only; GBP ticked with no office is a slip, not a request.
+        $officeIds = null;
+        if (in_array(SocialNetwork::Gbp->value, $networks, true) && isset($this->offices[$suggestionId])) {
+            $officeIds = array_values(array_map('strval', array_keys(array_filter($this->offices[$suggestionId]))));
+            if ($officeIds === []) {
+                Notification::make()->warning()->title('Tick at least one office for the GBP share, or untick GBP')->send();
+
+                return;
+            }
+        }
+        $rows = app(SuggestionBoard::class)->approve($suggestion, $networks, $officeIds);
+        unset($this->picks[$suggestionId], $this->offices[$suggestionId]);
         if ($rows === []) {
             Notification::make()->warning()->title('Nothing queued')->body('No enabled channel takes this share on the ticked platforms.')->send();
 
@@ -138,7 +159,7 @@ class OperateShares extends OperatePage
         $suggestion = $this->suggestion($suggestionId);
         if ($suggestion !== null) {
             app(SuggestionBoard::class)->skip($suggestion);
-            unset($this->picks[$suggestionId]);
+            unset($this->picks[$suggestionId], $this->offices[$suggestionId]);
         }
     }
 
