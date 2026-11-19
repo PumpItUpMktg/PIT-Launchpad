@@ -11,6 +11,7 @@ use App\Enums\SocialTrigger;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
+use App\Models\Site;
 use App\Models\SocialChannel;
 use App\Models\SocialPost;
 use App\Models\SocialSuggestion;
@@ -222,10 +223,14 @@ final class SuggestionBoard
         $offices = Location::withoutGlobalScopes()
             ->whereIn('id', $channels->pluck('location_id')->filter()->unique()->values()->all())
             ->pluck('name', 'id');
+        $brand = (string) (Site::withoutGlobalScopes()->whereKey($siteId)->value('brand_name') ?? '');
 
-        return $channels->map(function (SocialChannel $c) use ($offices): array {
+        $rows = $channels->map(function (SocialChannel $c) use ($offices, $brand): array {
             $office = $c->location_id !== null ? $offices->get((string) $c->location_id) : null;
             $office = is_string($office) && $office !== '' ? $office : null;
+            $short = $c->network->perLocation()
+                ? ChannelLabel::gbpPill((string) $c->provider_name, $brand, $office)
+                : (string) ($c->provider_name !== null && $c->provider_name !== '' ? $c->provider_name : $c->displayLabel());
 
             return [
                 'id' => (string) $c->id,
@@ -238,16 +243,24 @@ final class SuggestionBoard
                 'label' => $c->network->perLocation()
                     ? $c->network->label().' · '.($c->provider_name ?? '').($office !== null ? ' → '.$office : '')
                     : $c->displayLabel(),
+                // The board pill: brand initials + the office town ("SPG · Trooper"); Google's title kept
+                // for another brand or when it disagrees with the office. The full title stays in `label`.
+                'short' => $short,
                 'provider_name' => $c->provider_name,
                 'address' => $c->provider_address,
                 'location' => $office,
+                'office_town' => $office !== null ? ChannelLabel::officeTown($office) : null,
                 'enabled' => $c->enabled,
                 'unmatched' => $c->unmatched(),
                 'ignored' => $c->ignored(),
                 'ignored_at' => $c->ignored_at?->toIso8601String(),
                 'synced_at' => $c->synced_at?->toIso8601String(),
             ];
-        })->values()->all();
+        });
+
+        // Pages first, then GBP by the town it routes to (unmatched last), so the dense list reads as a map.
+        return $rows->sortBy(fn (array $r): string => ($r['network'] === SocialNetwork::Gbp->value ? '1' : '0').'|'.($r['office_town'] !== null ? '0'.mb_strtolower($r['office_town']) : '1'.mb_strtolower((string) $r['provider_name'])))
+            ->values()->all();
     }
 
     /** @return array<string, string> published posts the operator can pick for a manual suggestion */

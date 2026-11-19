@@ -742,6 +742,10 @@ a job share queues when the job publishes (`JobPublisher` → `ShareJobSocially`
   sets aside (another brand's listing on the same Google account) is **ignored** (`ignored_at`, Super Admin,
   Shares page): listed under "Ignored", restorable, kept through syncs, never shared to — every channel
   pick goes through `SocialChannel::takesShares()` (enabled AND not ignored). The network label for Google
-  Business Profile reads "GBP" on the surfaces.
+  Business Profile reads "GBP" on the surfaces. The Channels block is one summary row (Pages, "N GBP offices
+  · M unmatched", ignored count, Sync now) with the office list behind a toggle that opens itself when a
+  listing needs an office; a GBP pill reads `ChannelLabel::gbpPill` — brand initials + the office town
+  ("SPG · Trooper"), Google's title kept for another brand or when it names a different town than the office
+  ("SPG | Spring City → Phoenixville"); hover for Google's title + address.
 - **Not yet:** share markers on the client position trend, Instagram image sizing, the GBP Q&A API, a
   forecast feed.
