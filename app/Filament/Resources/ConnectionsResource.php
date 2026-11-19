@@ -350,6 +350,14 @@ class ConnectionsResource extends Resource
             ->label('Set social posting profile')
             ->icon('heroicon-o-megaphone')
             ->modalSubmitActionLabel('Save profile')
+            // The current pick, pre-ticked (and pre-typed for the fallback box): the action form is filled from
+            // here, not from component defaults, which an action modal does not apply.
+            ->fillForm(function (): array {
+                $site = app(ActiveTenant::class)->site();
+                $current = $site !== null ? UploadPostSocialProvider::profilesFor($site) : [];
+
+                return ['social_profiles' => $current, 'social_profile' => implode(', ', $current)];
+            })
             ->modalDescription('The Upload-Post profile(s) this tenant posts through — pick from what the agency account has. Connect the client\'s Google Business (and Facebook / Instagram) to the profile in Upload-Post first; Operate → Shares → "Sync now" then pulls the locations and Pages. One profile belongs to one tenant.')
             ->schema(function (): array {
                 $site = app(ActiveTenant::class)->site();

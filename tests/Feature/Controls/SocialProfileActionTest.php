@@ -44,6 +44,10 @@ test('the picker lists the account\'s profiles with what is connected, greys out
         ->and($pick['current'])->toBe(['SumpPumpGurus', 'Gone-Profile'])
         ->and($pick['error'])->toBeNull();
 
+    // Opening the modal pre-ticks the site's current profiles.
+    Livewire::test(ListConnections::class)->mountAction('socialProfile')
+        ->assertSchemaStateSet(['social_profiles' => ['SumpPumpGurus', 'Gone-Profile']]);
+
     Livewire::test(ListConnections::class)->callAction('socialProfile', ['social_profiles' => ['SumpPumpGurus', 'SPG-Pennsylvania']]);
     expect($site->fresh()->social_profile)->toBe('SumpPumpGurus, SPG-Pennsylvania');
 
@@ -61,6 +65,9 @@ test('when the profile list cannot be read the action falls back to typing the n
 
     $pick = app(ProfilePicker::class)->forSite($site);
     expect($pick['options'])->toBe([])->and($pick['error'])->not->toBeNull();
+
+    $site->forceFill(['social_profile' => 'typed-one'])->save();
+    Livewire::test(ListConnections::class)->mountAction('socialProfile')->assertSchemaStateSet(['social_profile' => 'typed-one']);
 
     Livewire::test(ListConnections::class)->callAction('socialProfile', ['social_profile' => ' sump-pump-gurus ']);
     expect($site->fresh()->social_profile)->toBe('sump-pump-gurus');
