@@ -137,7 +137,7 @@ class OperateShares extends OperatePage
         // The GBP share goes to the ticked offices only; GBP ticked with no office is a slip, not a request.
         $officeIds = null;
         if (in_array(SocialNetwork::Gbp->value, $networks, true) && isset($this->offices[$suggestionId])) {
-            $officeIds = array_values(array_map('strval', array_keys(array_filter($this->offices[$suggestionId]))));
+            $officeIds = array_map('strval', array_keys(array_filter($this->offices[$suggestionId])));
             if ($officeIds === []) {
                 Notification::make()->warning()->title('Tick at least one office for the GBP share, or untick GBP')->send();
 
