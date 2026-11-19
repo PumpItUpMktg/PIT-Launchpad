@@ -46,7 +46,8 @@ final class SharePlanner
         $days = max(1, min(90, (int) ($options['days'] ?? 30)));
         $cadence = (string) ($options['cadence'] ?? 'alternate');
         $hour = (int) ($options['hour'] ?? config('launchpad.social.slot_hour', 14));
-        $start = isset($options['start']) && is_string($options['start']) && $options['start'] !== '' ? Carbon::parse($options['start'])->startOfDay() : Carbon::now()->addDay()->startOfDay();
+        $startOption = $options['start'] ?? null;
+        $start = is_string($startOption) && $startOption !== '' ? Carbon::parse($startOption)->startOfDay() : Carbon::now()->addDay()->startOfDay();
         $networks = array_values(array_filter(array_map(fn (string $n): ?SocialNetwork => SocialNetwork::tryFrom($n), $options['networks'] ?? array_map(fn (SocialNetwork $n): string => $n->value, $this->sharer->networksFor((string) $site->id)))));
         $gbpLink = (string) ($options['gbp_link'] ?? 'town');
 
@@ -242,7 +243,7 @@ final class SharePlanner
         if ($post->status !== SocialPostStatus::Queued) {
             return false;
         }
-        $hour = $post->scheduled_for?->hour ?? (int) config('launchpad.social.slot_hour', 14);
+        $hour = $post->scheduled_for !== null ? $post->scheduled_for->hour : (int) config('launchpad.social.slot_hour', 14);
         $when = $to->copy()->startOfDay()->setHour($hour);
         if ($when->isPast()) {
             $when = Carbon::now()->addMinutes(2);
