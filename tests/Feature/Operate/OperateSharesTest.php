@@ -3,6 +3,7 @@
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\SocialNetwork;
+use App\Enums\SocialPostStatus;
 use App\Enums\SocialSuggestionStatus;
 use App\Enums\SocialTrigger;
 use App\Enums\UserRole;

@@ -24,6 +24,7 @@ use App\Social\SharePlanner;
 use App\Social\SocialSharer;
 use App\Social\SpotlightTowns;
 use App\TownRank\TownRankPoints;
+use Illuminate\Bus\UniqueLock;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
@@ -160,10 +161,10 @@ it('commits a plan: an approved Planned suggestion per item, shares queued for t
 
     // Reschedule keeps the hour. The job already queued for the old time wakes, sees the future time and re-queues
     // itself instead of sending (the unique lock from the first dispatch is released before processing; the fake
-    // never releases it, so clear it here to see the re-queue).
+    // never releases it — and an array-store lock survives a flush — so release it here to see the re-queue).
     expect($planner->reschedule($gbpFirst, Carbon::parse('2026-11-25')))->toBeTrue()
         ->and($gbpFirst->fresh()->scheduled_for->toDateTimeString())->toBe('2026-11-25 '.sprintf('%02d', (int) config('launchpad.social.slot_hour')).':00:00');
-    Cache::flush();
+    (new UniqueLock(Cache::store()))->release(new SendSocialPost($gbpFirst->id));
     (new SendSocialPost($gbpFirst->id))->handle(app(SocialSharer::class));
     /** @var MockSocialProvider $mock */
     $mock = app(SocialProvider::class);
