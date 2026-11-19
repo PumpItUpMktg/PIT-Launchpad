@@ -6,6 +6,9 @@
     <div @if ($anyScanning) wire:poll.10s @endif></div>
 
     <div style="display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:4px">
+        <x-filament::button color="gray" wire:click="downloadWorkbook" icon="heroicon-o-table-cells" wire:loading.attr="disabled" title="One workbook: Read me, All offices NAP, a tab per office with the tracker columns and what the scan found">
+            Download work order (.xlsx)
+        </x-filament::button>
         <x-filament::button wire:click="scanAll" icon="heroicon-o-magnifying-glass" wire:loading.attr="disabled">
             Scan all listings
         </x-filament::button>
