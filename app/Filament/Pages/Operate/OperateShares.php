@@ -213,6 +213,40 @@ class OperateShares extends OperatePage
         }
     }
 
+    /**
+     * Set a channel aside (another brand's listing on the same Google account, a Page not to post to): it
+     * receives nothing and sits under "Ignored" until restored. The sync keeps the flag; nothing is deleted.
+     */
+    public function ignoreChannel(string $channelId): void
+    {
+        $channel = $this->manageable($channelId);
+        if ($channel === null || $channel->ignored()) {
+            return;
+        }
+        $channel->forceFill(['ignored_at' => now()])->save();
+        Notification::make()->success()->title("{$channel->displayLabel()} ignored")->body('It receives no shares. Restore it from the Ignored list any time.')->send();
+    }
+
+    public function restoreChannel(string $channelId): void
+    {
+        $channel = $this->manageable($channelId);
+        if ($channel === null || ! $channel->ignored()) {
+            return;
+        }
+        $channel->forceFill(['ignored_at' => null])->save();
+        Notification::make()->success()->title("{$channel->displayLabel()} restored")->body($channel->unmatched() ? 'Tie it to an office before it can receive shares.' : 'It takes shares again.')->send();
+    }
+
+    /** A channel of the active tenant, for a Super Admin — null otherwise. */
+    private function manageable(string $channelId): ?SocialChannel
+    {
+        if ($this->siteId === null || ! $this->getCanManageChannelsProperty()) {
+            return null;
+        }
+
+        return SocialChannel::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->find($channelId);
+    }
+
     /** Queue the provider read on the worker — a sync reads every listing and outruns a web request. */
     public function syncChannels(): void
     {

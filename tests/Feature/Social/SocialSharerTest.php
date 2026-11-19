@@ -56,7 +56,7 @@ function sharerPost(Site $site, array $meta = []): Content
     ])->fresh(['site', 'silo', 'renderJobs']);
 }
 
-it('a published job shares to the serving location\'s GBP and the site-level Page — not another location\'s GBP, not a disabled channel', function () {
+it('a published job shares to the serving location\'s GBP and the site-level Page — not another location\'s GBP, not a disabled channel, not an ignored one', function () {
     Queue::fake();
     $site = sharerSite();
     $home = Location::factory()->create(['site_id' => $site->id, 'name' => 'Home', 'lat' => 40.85, 'lng' => -74.83]);
@@ -66,6 +66,7 @@ it('a published job shares to the serving location\'s GBP and the site-level Pag
     sharerChannel($site, SocialNetwork::Gbp, null, ['provider_channel_id' => 'gbp-unmatched']);   // a GBP profile the sync could not place
     $page = sharerChannel($site, SocialNetwork::Facebook);
     sharerChannel($site, SocialNetwork::Instagram, null, ['enabled' => false]);
+    sharerChannel($site, SocialNetwork::Gbp, $home, ['provider_channel_id' => 'gbp-other-brand', 'ignored_at' => now()]);   // set aside by the operator: another brand's listing
     $job = sharerJob($site);   // coordinates from the factory sit nearer Home
     $job->forceFill(['lat_true' => 40.86, 'lng_true' => -74.82])->save();
 

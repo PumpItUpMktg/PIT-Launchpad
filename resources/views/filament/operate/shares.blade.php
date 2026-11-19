@@ -21,6 +21,8 @@
         .sh-chk { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:#334155; margin-right:12px; }
         .sh-act { display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
         .sh details summary { cursor:pointer; font-size:12px; color:#64748b; }
+        .sh-x { border:0; background:transparent; color:inherit; opacity:.55; cursor:pointer; font-size:11px; font-weight:800; padding:0 2px; margin-left:2px; }
+        .sh-x:hover { opacity:1; color:#b91c1c; }
         .sh-qa textarea { width:100%; min-height:54px; font-size:12px; border:1px solid var(--line,#e5e7eb); border-radius:8px; padding:8px; margin-top:4px; }
         @media (prefers-color-scheme: dark) {
             .sh-panel, .sh-btn, .sh select, .sh-qa textarea { background:#151b24; color:#cbd5e1; }
@@ -36,8 +38,9 @@
             <div class="sh-panel" @if (in_array($this->syncState['state'], ['queued', 'running'], true)) wire:poll.10s @endif>
                 <div class="sh-line">
                     <b style="font-size:13px">Channels</b>
-                    @forelse ($this->channels as $ch)
-                        <span class="sh-pill {{ $ch['enabled'] ? $ch['network'] : 'off' }}" title="{{ $ch['address'] ?? $ch['provider_name'] }}">{{ $ch['label'] }}{{ $ch['enabled'] ? '' : ' · gone' }}</span>
+                    @php($ignored = array_values(array_filter($this->channels, fn (array $c): bool => $c['ignored'])))
+                    @forelse (array_filter($this->channels, fn (array $c): bool => ! $c['ignored']) as $ch)
+                        <span class="sh-pill {{ $ch['enabled'] ? $ch['network'] : 'off' }}" title="{{ $ch['address'] ?? $ch['provider_name'] }}">{{ $ch['label'] }}{{ $ch['enabled'] ? '' : ' · gone' }}@if ($this->canManageChannels) <button type="button" class="sh-x" title="Ignore this channel — it receives nothing until restored" wire:click="ignoreChannel('{{ $ch['id'] }}')">×</button>@endif</span>
                         @if ($this->canManageChannels && ($ch['unmatched'] || $ch['locked']))
                             <select class="sh-select" title="{{ $ch['unmatched'] ? 'This Business Profile could not be tied to an office by its name — it receives no shares until you pick one' : 'Assigned by hand; the sync keeps it' }}" wire:change="assignChannel('{{ $ch['id'] }}', $event.target.value)" style="font-size:11px;padding:2px 4px;border:1px solid {{ $ch['unmatched'] ? '#f59e0b' : '#cbd5e1' }};border-radius:6px;max-width:170px">
                                 <option value="">{{ $ch['unmatched'] ? 'unmatched — assign office…' : 'unassign' }}</option>
@@ -60,6 +63,16 @@
                     <div class="sub" style="margin-top:6px"><span class="sh-pill failed">sync failed</span> {{ $sync['error'] }}@if ($sync['at']) · {{ \Illuminate\Support\Carbon::parse($sync['at'])->diffForHumans() }}@endif</div>
                 @elseif ($sync['state'] === 'done' && is_array($sync['result']))
                     <div class="sub" style="margin-top:6px"><span class="sh-pill sent">synced</span> {{ (int) ($sync['result']['synced'] ?? 0) }} profile(s), {{ (int) ($sync['result']['matched'] ?? 0) }} GBP matched @if (($sync['result']['unmatched'] ?? []) !== []) · unmatched: {{ implode(', ', (array) $sync['result']['unmatched']) }}@endif @if ($sync['at']) · {{ \Illuminate\Support\Carbon::parse($sync['at'])->diffForHumans() }}@endif</div>
+                @endif
+                @if ($ignored !== [])
+                    <details class="sh-ignored" style="margin-top:8px">
+                        <summary>Ignored ({{ count($ignored) }}) — receive nothing{{ $this->canManageChannels ? '; restore any time' : '' }}</summary>
+                        <div class="sh-line" style="margin-top:6px">
+                            @foreach ($ignored as $ch)
+                                <span class="sh-pill off" title="{{ $ch['address'] ?? $ch['provider_name'] }}">{{ $ch['label'] }}@if ($this->canManageChannels) <button type="button" class="sh-x" title="Restore — it takes shares again" wire:click="restoreChannel('{{ $ch['id'] }}')">↶ restore</button>@endif</span>
+                            @endforeach
+                        </div>
+                    </details>
                 @endif
                 @if ($this->canManageChannels)
                     <div class="sh-line" style="margin-top:8px">

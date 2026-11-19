@@ -15,7 +15,7 @@ enum SocialNetwork: string
     public function label(): string
     {
         return match ($this) {
-            self::Gbp => 'Google Business Profile',
+            self::Gbp => 'GBP',
             self::Facebook => 'Facebook',
             self::Instagram => 'Instagram',
         };

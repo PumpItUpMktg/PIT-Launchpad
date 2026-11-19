@@ -166,7 +166,7 @@ final class SocialSharer
 
         return SocialChannel::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $siteId)
-            ->where('enabled', true)
+            ->takesShares()
             ->orderBy('network')
             ->get();
     }

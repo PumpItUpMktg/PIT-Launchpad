@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\SocialNetwork;
 use App\Models\Concerns\BelongsToSite;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -42,9 +43,27 @@ class SocialChannel extends Model
             'network' => SocialNetwork::class,
             'enabled' => 'boolean',
             'location_locked' => 'boolean',
+            'ignored_at' => 'datetime',
             'max_per_day' => 'integer',
             'synced_at' => 'datetime',
         ];
+    }
+
+    /**
+     * The channels that take a share: enabled by the provider and not set aside by the operator.
+     *
+     * @param  Builder<SocialChannel>  $query
+     * @return Builder<SocialChannel>
+     */
+    public function scopeTakesShares(Builder $query): Builder
+    {
+        return $query->where('enabled', true)->whereNull('ignored_at');
+    }
+
+    /** Set aside by the operator — listed under "Ignored", never shared to, restorable. */
+    public function ignored(): bool
+    {
+        return $this->ignored_at !== null;
     }
 
     /** @return BelongsTo<Location, $this> */

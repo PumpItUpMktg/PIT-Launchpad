@@ -104,8 +104,8 @@ it('lists the account\'s profiles with what each has connected — the Page name
 
     expect(array_map(fn ($p) => $p->name, $profiles))->toBe(['empty', 'SPG-Pennsylvania', 'SumpPumpGurus'])
         ->and($profiles[2]->connected)->toBe(['facebook' => 'Sump Pump Gurus Corporate', 'instagram' => 'sumppumpgurus', 'gbp' => 'Eric Wright'])
-        ->and($profiles[2]->summary())->toBe('Google Business Profile: Eric Wright · Facebook: Sump Pump Gurus Corporate · Instagram: sumppumpgurus')
-        ->and($profiles[1]->summary())->toBe('Google Business Profile: Sump Pump Gurus')
+        ->and($profiles[2]->summary())->toBe('GBP: Eric Wright · Facebook: Sump Pump Gurus Corporate · Instagram: sumppumpgurus')
+        ->and($profiles[1]->summary())->toBe('GBP: Sump Pump Gurus')
         ->and($profiles[1]->has(SocialNetwork::Facebook))->toBeFalse()
         ->and($profiles[0]->summary())->toBe('nothing connected');
 });
