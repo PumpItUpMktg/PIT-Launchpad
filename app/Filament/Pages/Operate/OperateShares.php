@@ -14,6 +14,7 @@ use App\Social\ProfilePicker;
 use App\Social\SuggestionBoard;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
+use Throwable;
 
 /**
  * Operate → Shares: the re-share board. Jobs share on their own and never appear here. A card per
@@ -83,16 +84,25 @@ class OperateShares extends OperatePage
     /**
      * The tenant's posting-provider profiles with what is connected on each (Super Admin only).
      *
-     * @return array{profiles: list<array{name: string, summary: string, found: bool}>, error: string|null}
+     * @return array{profiles: list<array{name: string, summary: string, found: bool}>, error: string|null, warm: bool}
      */
     public function getProfilesProperty(): array
     {
         if (! $this->getCanManageChannelsProperty()) {
-            return ['profiles' => [], 'error' => null];
+            return ['profiles' => [], 'error' => null, 'warm' => true];
         }
         $site = app(ActiveTenant::class)->site();
+        if ($site === null) {
+            return ['profiles' => [], 'error' => null, 'warm' => true];
+        }
+        try {
+            return app(ProfilePicker::class)->forShares($site);
+        } catch (Throwable $e) {
+            // Never a 500 from this line: the fault is reported and printed where a Super Admin reads it.
+            report($e);
 
-        return $site === null ? ['profiles' => [], 'error' => null] : app(ProfilePicker::class)->forShares($site);
+            return ['profiles' => [], 'error' => get_class($e).': '.$e->getMessage(), 'warm' => false];
+        }
     }
 
     /** @return array<string, string> */
@@ -190,7 +200,17 @@ class OperateShares extends OperatePage
     /** The state of the queued sync for this tenant (idle / queued / running / done / failed), for the panel. @return array<string, mixed> */
     public function getSyncStateProperty(): array
     {
-        return $this->siteId === null ? ['state' => 'idle', 'at' => null, 'result' => null, 'error' => null] : SyncSocialChannels::status($this->siteId);
+        if ($this->siteId === null) {
+            return ['state' => 'idle', 'at' => null, 'result' => null, 'error' => null];
+        }
+        try {
+            return SyncSocialChannels::status($this->siteId);
+        } catch (Throwable $e) {
+            // The board must render whatever the cache holds; the fault is shown, not thrown.
+            report($e);
+
+            return ['state' => 'failed', 'at' => null, 'result' => null, 'error' => 'sync state unreadable: '.get_class($e).': '.$e->getMessage()];
+        }
     }
 
     /** Queue the provider read on the worker — a sync reads every listing and outruns a web request. */

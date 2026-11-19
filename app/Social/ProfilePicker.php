@@ -20,7 +20,8 @@ final class ProfilePicker
 {
     private const CACHE_KEY = 'social.account_profiles';
 
-    private const CACHE_SECONDS = 300;
+    /** A day: the sync job (Sync now, the daily sync) re-reads it; the Shares page only ever reads the cache. */
+    private const CACHE_SECONDS = 86400;
 
     public function __construct(private readonly SocialProvider $provider) {}
 
@@ -65,20 +66,21 @@ final class ProfilePicker
     }
 
     /**
-     * The site's own profiles with what is connected on each — the read-only panel on the Shares page.
+     * The site's own profiles with what is connected on each — the read-only panel on the Shares page. Reads
+     * the CACHE only (the page re-renders on a poll; a provider call inside a web request is what tripped the
+     * request limit): until a sync has warmed it, the names show without their connections.
      *
-     * @return array{profiles: list<array{name: string, summary: string, found: bool}>, error: string|null}
+     * @return array{profiles: list<array{name: string, summary: string, found: bool}>, error: string|null, warm: bool}
      */
     public function forShares(Site $site): array
     {
         $names = UploadPostSocialProvider::profilesFor($site);
         if ($names === []) {
-            return ['profiles' => [], 'error' => null];
+            return ['profiles' => [], 'error' => null, 'warm' => true];
         }
-        try {
-            $account = $this->accountProfiles();
-        } catch (Throwable $e) {
-            return ['profiles' => array_map(fn (string $n): array => ['name' => $n, 'summary' => '', 'found' => false], $names), 'error' => $e->getMessage()];
+        $account = $this->cachedAccountProfiles();
+        if ($account === null) {
+            return ['profiles' => array_map(fn (string $n): array => ['name' => $n, 'summary' => '', 'found' => true], $names), 'error' => null, 'warm' => false];
         }
         $byName = [];
         foreach ($account as $profile) {
@@ -90,12 +92,12 @@ final class ProfilePicker
             $rows[] = ['name' => $name, 'summary' => $profile?->summary() ?? 'not in the provider account', 'found' => $profile !== null];
         }
 
-        return ['profiles' => $rows, 'error' => null];
+        return ['profiles' => $rows, 'error' => null, 'warm' => true];
     }
 
     /**
-     * The account's profiles, cached briefly (the Connections modal and the Shares panel both read them; a
-     * sync forgets the cache).
+     * The account's profiles: the cache when warm, else one provider read that warms it (the Connections
+     * modal — an interactive one-off; the Shares page never comes here).
      *
      * @return list<AccountProfile>
      *
@@ -103,10 +105,35 @@ final class ProfilePicker
      */
     public function accountProfiles(): array
     {
-        /** @var list<AccountProfile> $profiles */
-        $profiles = Cache::remember(self::CACHE_KEY, self::CACHE_SECONDS, fn (): array => $this->provider->accountProfiles());
+        return $this->cachedAccountProfiles() ?? $this->warm();
+    }
+
+    /**
+     * Read the provider and cache the result — the sync job calls this on the worker after every sync.
+     *
+     * @return list<AccountProfile>
+     *
+     * @throws SocialProviderException
+     */
+    public function warm(): array
+    {
+        $profiles = $this->provider->accountProfiles();
+        Cache::put(self::CACHE_KEY, $profiles, self::CACHE_SECONDS);
 
         return $profiles;
+    }
+
+    /** @return list<AccountProfile>|null null when nothing is cached */
+    public function cachedAccountProfiles(): ?array
+    {
+        $cached = Cache::get(self::CACHE_KEY);
+        if (! is_array($cached)) {
+            return null;
+        }
+        /** @var list<AccountProfile> $cached */
+        $cached = array_values(array_filter($cached, fn (mixed $p): bool => $p instanceof AccountProfile));
+
+        return $cached;
     }
 
     public static function forget(): void

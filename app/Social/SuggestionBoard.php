@@ -214,22 +214,38 @@ final class SuggestionBoard
     /** @return list<array<string, mixed>> the synced channels, for the board's read-only line */
     public function channels(string $siteId): array
     {
-        return SocialChannel::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $siteId)->with('location')
-            ->orderBy('network')->orderBy('provider_name')->get()
-            ->map(fn (SocialChannel $c): array => [
+        $channels = SocialChannel::withoutGlobalScope(SiteScope::class)
+            ->where('site_id', $siteId)
+            ->orderBy('network')->orderBy('provider_name')->get();
+        // The office each GBP channel routes to, read without any scope: the panel is where the operator
+        // verifies the matching, so it must name the office whatever the request's tenant context is.
+        $offices = Location::withoutGlobalScopes()
+            ->whereIn('id', $channels->pluck('location_id')->filter()->unique()->values()->all())
+            ->pluck('name', 'id');
+
+        return $channels->map(function (SocialChannel $c) use ($offices): array {
+            $office = $c->location_id !== null ? $offices->get((string) $c->location_id) : null;
+            $office = is_string($office) && $office !== '' ? $office : null;
+
+            return [
                 'id' => (string) $c->id,
                 'location_id' => $c->location_id !== null ? (string) $c->location_id : null,
                 'locked' => (bool) $c->location_locked,
                 'network' => $c->network->value,
                 'network_label' => $c->network->label(),
-                'label' => $c->displayLabel(),
+                // "Google Business Profile · Sump Pump Gurus | Trooper → Trooper office": the listing as Google
+                // names it, then the office it routes to; a Page / Instagram account shows its name alone.
+                'label' => $c->network->perLocation()
+                    ? $c->network->label().' · '.($c->provider_name ?? '').($office !== null ? ' → '.$office : '')
+                    : $c->displayLabel(),
                 'provider_name' => $c->provider_name,
-                'location' => $c->location?->name,
+                'address' => $c->provider_address,
+                'location' => $office,
                 'enabled' => $c->enabled,
                 'unmatched' => $c->unmatched(),
                 'synced_at' => $c->synced_at?->toIso8601String(),
-            ])->values()->all();
+            ];
+        })->values()->all();
     }
 
     /** @return array<string, string> published posts the operator can pick for a manual suggestion */

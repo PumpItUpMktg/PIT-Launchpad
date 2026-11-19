@@ -37,7 +37,7 @@
                 <div class="sh-line">
                     <b style="font-size:13px">Channels</b>
                     @forelse ($this->channels as $ch)
-                        <span class="sh-pill {{ $ch['enabled'] ? $ch['network'] : 'off' }}" title="{{ $ch['provider_name'] }}">{{ $ch['label'] }}{{ $ch['enabled'] ? '' : ' · gone' }}</span>
+                        <span class="sh-pill {{ $ch['enabled'] ? $ch['network'] : 'off' }}" title="{{ $ch['address'] ?? $ch['provider_name'] }}">{{ $ch['label'] }}{{ $ch['enabled'] ? '' : ' · gone' }}</span>
                         @if ($this->canManageChannels && ($ch['unmatched'] || $ch['locked']))
                             <select class="sh-select" title="{{ $ch['unmatched'] ? 'This Business Profile could not be tied to an office by its name — it receives no shares until you pick one' : 'Assigned by hand; the sync keeps it' }}" wire:change="assignChannel('{{ $ch['id'] }}', $event.target.value)" style="font-size:11px;padding:2px 4px;border:1px solid {{ $ch['unmatched'] ? '#f59e0b' : '#cbd5e1' }};border-radius:6px;max-width:170px">
                                 <option value="">{{ $ch['unmatched'] ? 'unmatched — assign office…' : 'unassign' }}</option>
@@ -71,6 +71,8 @@
                         @endforelse
                         @if ($this->profiles['error'] !== null)
                             <span class="sub" style="color:#b91c1c">{{ $this->profiles['error'] }}</span>
+                        @elseif (! $this->profiles['warm'] && $this->profiles['profiles'] !== [])
+                            <span class="sub">connections show after the next sync</span>
                         @endif
                     </div>
                 @endif

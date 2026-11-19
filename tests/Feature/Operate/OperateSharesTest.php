@@ -19,6 +19,7 @@ use App\Models\SocialSuggestion;
 use App\Models\User;
 use App\Operator\ActiveTenant;
 use App\Social\ChannelSync;
+use App\Social\ProfilePicker;
 use App\Social\Provider\AccountProfile;
 use App\Social\Provider\MockSocialProvider;
 use App\Social\Provider\SocialProfile;
@@ -68,7 +69,7 @@ it('shows the synced channels read-only with Sync now, no typing in', function (
         ->assertDontSee('Add channel')
         ->call('syncChannels')
         ->assertNotified('3 profile(s) synced')
-        ->assertSee('Google Business Profile · Hackettstown office')
+        ->assertSee('Google Business Profile · SPG Hackettstown → Hackettstown office')
         ->assertSee('Facebook · SPG Page')
         ->assertSee('unmatched');
     expect(SocialChannel::withoutGlobalScopes()->where('provider_channel_id', 'g1')->value('location_id'))->toBe($loc->id);
@@ -162,7 +163,7 @@ it('tying a GBP channel to an office is a Super Admin matter — a Site Admin se
     expect($channel->fresh()->location_id)->toBeNull();
 });
 
-it('a Super Admin sees the tenant\'s posting profiles with what each has connected, and one the account no longer has flagged', function () {
+it('a Super Admin sees the tenant\'s posting profiles with what each has connected, and one the account no longer has flagged — from the cache the sync warmed, never a provider call on render', function () {
     $site = sharesSite();
     $site->forceFill(['social_profile' => 'SumpPumpGurus, Gone'])->save();
     /** @var MockSocialProvider $mock */
@@ -171,6 +172,15 @@ it('a Super Admin sees the tenant\'s posting profiles with what each has connect
         new AccountProfile('SumpPumpGurus', ['gbp' => 'Eric Wright', 'facebook' => 'Sump Pump Gurus Corporate']),
         new AccountProfile('OtherClient', ['facebook' => 'Other Co']),
     ];
+
+    // Nothing cached yet: the names show, the connections wait for a sync — the page did not read the provider.
+    Livewire::test(OperateShares::class)
+        ->assertSee('Posting profiles')
+        ->assertSee('SumpPumpGurus')
+        ->assertSee('connections show after the next sync')
+        ->assertDontSee('Eric Wright');
+
+    (new SyncSocialChannels($site->id))->handle(app(ChannelSync::class), app(ProfilePicker::class));
 
     Livewire::test(OperateShares::class)
         ->assertSee('Posting profiles')
@@ -200,12 +210,12 @@ it('Sync now queues the provider read on the worker and shows the state until it
     Livewire::test(OperateShares::class)->call('syncChannels');
     Queue::assertPushed(SyncSocialChannels::class, 1);
 
-    (new SyncSocialChannels($site->id))->handle(app(ChannelSync::class));
+    (new SyncSocialChannels($site->id))->handle(app(ChannelSync::class), app(ProfilePicker::class));
     $state = SyncSocialChannels::status($site->id);
     expect($state['state'])->toBe('done')->and($state['result']['synced'])->toBe(1);
     Livewire::test(OperateShares::class)->assertSee('Sync now')->assertSee('1 profile(s), 0 GBP matched')->assertSee('Facebook · SPG Page');
 
     // A site that vanished before the worker got to it leaves no state behind.
-    (new SyncSocialChannels('01HZZZZZZZZZZZZZZZZZZZZZZZ'))->handle(app(ChannelSync::class));
+    (new SyncSocialChannels('01HZZZZZZZZZZZZZZZZZZZZZZZ'))->handle(app(ChannelSync::class), app(ProfilePicker::class));
     expect(SyncSocialChannels::status('01HZZZZZZZZZZZZZZZZZZZZZZZ')['state'])->toBe('idle');
 });

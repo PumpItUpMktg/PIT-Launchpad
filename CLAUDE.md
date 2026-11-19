@@ -730,6 +730,8 @@ a job share queues when the job publishes (`JobPublisher` → `ShareJobSocially`
   a tenant's profile(s) in `Site.social_profile`, PICKED under Connections by a Super Admin from the account's
   profile list — `ProfilePicker` over `SocialProvider::accountProfiles()`, what each has connected shown, a
   profile another tenant owns greyed out, one profile per tenant; a text box only when the list can't be read.
+  The account's profile list is cached a day and re-read by the sync job on the worker (`ProfilePicker::warm`);
+  the Shares page reads only that cache — never a provider call inside a web request, the page polls.
   The Shares page shows the tenant's profiles and the assign-GBP-to-office control to Super Admins only; GBP per location via `gbp_location_id`, the Page
   from the profile's `facebook_page_id`, Instagram), else `MockSocialProvider` (records; `connect()` seeds
   profiles in tests). GBP rules: no phone numbers in the copy, the link is the Learn-more button not text,

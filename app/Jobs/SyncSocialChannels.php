@@ -44,7 +44,6 @@ class SyncSocialChannels implements ShouldBeUnique, ShouldQueue
             return;
         }
         Cache::put(self::key((string) $site->id), ['state' => 'queued', 'at' => now()->toIso8601String()], self::TTL);
-        ProfilePicker::forget();
         self::dispatch((string) $site->id);
     }
 
@@ -66,7 +65,7 @@ class SyncSocialChannels implements ShouldBeUnique, ShouldQueue
         ];
     }
 
-    public function handle(ChannelSync $sync): void
+    public function handle(ChannelSync $sync, ProfilePicker $picker): void
     {
         $site = Site::withoutGlobalScopes()->find($this->siteId);
         if ($site === null) {
@@ -83,6 +82,13 @@ class SyncSocialChannels implements ShouldBeUnique, ShouldQueue
             return;
         }
         Cache::put(self::key($this->siteId), ['state' => 'done', 'at' => now()->toIso8601String(), 'result' => $result], self::TTL);
+        // Re-read the account's profile list here, on the worker, so the Shares panel and the Connections modal
+        // serve it from cache and never call the provider inside a web request.
+        try {
+            $picker->warm();
+        } catch (Throwable) {
+            // The sync itself succeeded; the panel shows the profile names without their connections until the next sync.
+        }
     }
 
     private static function key(string $siteId): string
