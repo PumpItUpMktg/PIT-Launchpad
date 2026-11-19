@@ -2,17 +2,21 @@
 
 namespace App\Filament\Pages\Operate;
 
+use App\Enums\SocialNetwork;
 use App\Enums\SocialTrigger;
 use App\Jobs\SyncSocialChannels;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\SocialChannel;
+use App\Models\SocialPost;
 use App\Models\SocialSuggestion;
 use App\Operator\ActiveTenant;
 use App\Social\ProfilePicker;
+use App\Social\SharePlanner;
 use App\Social\SuggestionBoard;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Throwable;
 
@@ -40,7 +44,41 @@ class OperateShares extends OperatePage
     /** @var array<string, array<string, bool>> suggestion id → network → ticked */
     public array $picks = [];
 
+    /** @var array<string, array<string, bool>> suggestion id → office (location id) → ticked, for the GBP share */
+    public array $offices = [];
+
     public ?string $pickPostId = null;
+
+    // ── Plan ahead ──────────────────────────────────────────────────────────────────────────────────────
+    public int $planDays = 30;
+
+    public string $planCadence = 'alternate';
+
+    public ?string $planStart = null;
+
+    /** @var array<string, bool> network value → ticked */
+    public array $planNetworks = [];
+
+    /** @var array<string, bool> office (location id) → ticked */
+    public array $planOffices = [];
+
+    /** GBP button target: 'town' (the spotlight town's page) or 'post'. */
+    public string $planGbpLink = 'town';
+
+    /** @var array<string, bool> post id → picked by hand; none picked = auto-fill */
+    public array $planPosts = [];
+
+    /** @var list<array<string, mixed>> the reviewed plan (plan() output), until queued or cleared */
+    public array $plan = [];
+
+    /** @var array{slots: int, unfilled: int, posts_available: int}|null */
+    public ?array $planMeta = null;
+
+    /** @var array<int, array<string, string>> item index → copy key → the operator's text */
+    public array $planCopy = [];
+
+    /** @var array<string, string> queued share id → the date typed in the calendar strip */
+    public array $moveTo = [];
 
     public function mount(): void
     {
@@ -57,6 +95,13 @@ class OperateShares extends OperatePage
         foreach ($rows as $row) {
             if (! isset($this->picks[$row['id']])) {
                 $this->picks[$row['id']] = array_fill_keys($row['networks'], true);
+            }
+            if (! isset($this->offices[$row['id']])) {
+                $ticks = [];
+                foreach ($row['gbp_offices'] as $office) {
+                    $ticks[$office['id']] = (bool) $office['routed'];
+                }
+                $this->offices[$row['id']] = $ticks;
             }
         }
 
@@ -123,8 +168,18 @@ class OperateShares extends OperatePage
 
             return;
         }
-        $rows = app(SuggestionBoard::class)->approve($suggestion, $networks);
-        unset($this->picks[$suggestionId]);
+        // The GBP share goes to the ticked offices only; GBP ticked with no office is a slip, not a request.
+        $officeIds = null;
+        if (in_array(SocialNetwork::Gbp->value, $networks, true) && isset($this->offices[$suggestionId])) {
+            $officeIds = array_map('strval', array_keys(array_filter($this->offices[$suggestionId])));
+            if ($officeIds === []) {
+                Notification::make()->warning()->title('Tick at least one office for the GBP share, or untick GBP')->send();
+
+                return;
+            }
+        }
+        $rows = app(SuggestionBoard::class)->approve($suggestion, $networks, $officeIds);
+        unset($this->picks[$suggestionId], $this->offices[$suggestionId]);
         if ($rows === []) {
             Notification::make()->warning()->title('Nothing queued')->body('No enabled channel takes this share on the ticked platforms.')->send();
 
@@ -138,7 +193,7 @@ class OperateShares extends OperatePage
         $suggestion = $this->suggestion($suggestionId);
         if ($suggestion !== null) {
             app(SuggestionBoard::class)->skip($suggestion);
-            unset($this->picks[$suggestionId]);
+            unset($this->picks[$suggestionId], $this->offices[$suggestionId]);
         }
     }
 
@@ -273,6 +328,147 @@ class OperateShares extends OperatePage
             return;
         }
         Notification::make()->success()->title('Sync queued')->body('The worker is reading the provider\'s listings — the channels refresh here as it finishes (a minute or two).')->send();
+    }
+
+    // ── Plan ahead ──────────────────────────────────────────────────────────────────────────────────────
+
+    /** @return array<string, string> cadence key → label */
+    public function getCadencesProperty(): array
+    {
+        return SharePlanner::CADENCES;
+    }
+
+    /** @return list<array{id: string, name: string, town: string}> */
+    public function getPlanOfficeOptionsProperty(): array
+    {
+        return $this->siteId === null ? [] : app(SuggestionBoard::class)->gbpOffices($this->siteId);
+    }
+
+    /** @return list<string> the networks the site has channels for */
+    public function getPlanNetworkOptionsProperty(): array
+    {
+        if ($this->siteId === null) {
+            return [];
+        }
+
+        return array_values(array_unique(array_map(fn (array $c): string => (string) $c['network'], array_filter($this->getChannelsProperty(), fn (array $c): bool => $c['enabled'] && ! $c['ignored']))));
+    }
+
+    /** @return list<array{date: string, posts: list<array<string, mixed>>}> */
+    public function getUpcomingProperty(): array
+    {
+        return $this->siteId === null ? [] : app(SharePlanner::class)->upcoming($this->siteId);
+    }
+
+    /** Lay the plan out for review — nothing is queued until queuePlan(). */
+    public function previewPlan(): void
+    {
+        $site = app(ActiveTenant::class)->site();
+        if ($site === null) {
+            return;
+        }
+        $networks = array_keys(array_filter($this->planNetworks));
+        if ($networks === []) {
+            $networks = $this->getPlanNetworkOptionsProperty();
+        }
+        $offices = array_keys(array_filter($this->planOffices));
+        $posts = array_keys(array_filter($this->planPosts));
+        $result = app(SharePlanner::class)->plan($site, [
+            'days' => $this->planDays,
+            'cadence' => $this->planCadence,
+            'start' => $this->planStart,
+            'networks' => array_map('strval', $networks),
+            'location_ids' => $offices !== [] ? array_map('strval', $offices) : null,
+            'gbp_link' => $this->planGbpLink,
+            'post_ids' => $posts !== [] ? array_map('strval', $posts) : null,
+        ]);
+        $this->plan = $result['items'];
+        $this->planMeta = ['slots' => $result['slots'], 'unfilled' => $result['unfilled'], 'posts_available' => $result['posts_available']];
+        $this->planCopy = [];
+        foreach ($this->plan as $item) {
+            $copy = [];
+            foreach ($item['copy'] as $network => $text) {
+                $copy[(string) $network] = (string) $text;
+            }
+            foreach ($item['offices'] as $office) {
+                $copy['gbp:'.$office['channel_id']] = (string) $office['copy'];
+            }
+            $this->planCopy[(int) $item['index']] = $copy;
+        }
+        if ($this->plan === []) {
+            Notification::make()->warning()->title('Nothing to plan')->body('No published post is free to re-share in this window (every one shared inside the cooldown), or no channel takes the ticked networks.')->send();
+        }
+    }
+
+    public function dropPlanItem(int $index): void
+    {
+        $this->plan = array_values(array_filter($this->plan, fn (array $item): bool => (int) $item['index'] !== $index));
+    }
+
+    public function clearPlan(): void
+    {
+        $this->plan = [];
+        $this->planMeta = null;
+        $this->planCopy = [];
+    }
+
+    /** Queue the reviewed plan as dated shares. */
+    public function queuePlan(): void
+    {
+        $site = app(ActiveTenant::class)->site();
+        if ($site === null || $this->plan === []) {
+            return;
+        }
+        $r = app(SharePlanner::class)->commit($site, $this->plan, $this->planCopy);
+        $this->clearPlan();
+        Notification::make()->success()
+            ->title(sprintf('%d post(s) planned, %d share(s) queued', $r['suggestions'], $r['shares']))
+            ->body('They are on the calendar below; move, rewrite or cancel any of them until it sends.')->send();
+    }
+
+    public function cancelPlanned(string $postId): void
+    {
+        $post = $this->queuedShare($postId);
+        if ($post !== null && app(SharePlanner::class)->cancel($post)) {
+            Notification::make()->success()->title('Share cancelled')->send();
+        }
+    }
+
+    public function reschedulePlanned(string $postId): void
+    {
+        $post = $this->queuedShare($postId);
+        $date = trim((string) ($this->moveTo[$postId] ?? ''));
+        if ($post === null || $date === '') {
+            return;
+        }
+        try {
+            $to = Carbon::parse($date);
+        } catch (Throwable) {
+            Notification::make()->warning()->title('That is not a date')->send();
+
+            return;
+        }
+        if (app(SharePlanner::class)->reschedule($post, $to)) {
+            unset($this->moveTo[$postId]);
+            Notification::make()->success()->title('Moved to '.$to->toFormattedDateString())->send();
+        }
+    }
+
+    public function rewritePlanned(string $postId, string $copy): void
+    {
+        $post = $this->queuedShare($postId);
+        if ($post !== null && app(SharePlanner::class)->rewrite($post, $copy)) {
+            Notification::make()->success()->title('Text updated')->send();
+        }
+    }
+
+    private function queuedShare(string $postId): ?SocialPost
+    {
+        if ($this->siteId === null) {
+            return null;
+        }
+
+        return SocialPost::withoutGlobalScope(SiteScope::class)->where('site_id', $this->siteId)->find($postId);
     }
 
     private function suggestion(string $id): ?SocialSuggestion

@@ -715,7 +715,20 @@ a job share queues when the job publishes (`JobPublisher` → `ShareJobSocially`
   impressions ≥ 2× prior with ≥ 30, position gain ≥ 3 inside the top 20, or first clicks ≥ 3 — snapshot on
   the card), or the operator's pick. One open suggestion per post; `reshare_cooldown_days` (60) after a
   share / decision unless manual. Approve with the ticked platforms → `SocialSharer::sharePost` (GBP to the
-  resolved locations); Skip closes.
+  TICKED offices: the card lists every office with a GBP that takes shares as a tick, pre-ticked to the post's
+  routing — all when it names no town — and GBP ticked with no office is refused; the pick is saved on the
+  suggestion's `location_ids`); Skip closes.
+- **Plan ahead** (`SharePlanner`, Operate → Shares): re-shares laid out over a window (30 days default) — one
+  published post per cadence slot (daily / alternate / Mon-Wed-Fri / weekly), the ticked networks and GBP offices,
+  posts picked by hand or auto-filled (never shared first, then longest since; nothing inside the cooldown).
+  Each GBP share gets a **spotlight town** (`SpotlightTowns`: a town the office serves, weighted to striking
+  distance 4–15 on the latest town-rank read, a town with a page preferred, not repeated on the channel inside
+  the window) as its opening line (`launchpad.social.spotlight.leads`) and, by choice, as the Learn-more
+  target; the Page and Instagram keep brand copy (one audience across the footprint). `plan()` is read-only
+  and every line is editable before `commit()`, which writes an approved `SocialTrigger::Planned` suggestion
+  per item and dated shares (`SocialSharer::sharePost(..., $at, $perChannel)`; a capped day slides).
+  "Scheduled" lists the next 30 days of queued shares, every trigger, with move / rewrite / cancel;
+  `SendSocialPost` re-queues itself when `scheduled_for` moved (unique lock released before processing).
 - **Rain** (`Rules\WeatherRule`, auto): the site's observed NOAA rainfall (`RainfallSeries`, the metric
   the rainfall board already syncs) ≥ `inches_1d` (1.0) or `inches_2d` (1.5) → one share per rain event
   (`event_days` 3). Per GBP location a separate weighted-random draw from the **rain pool**

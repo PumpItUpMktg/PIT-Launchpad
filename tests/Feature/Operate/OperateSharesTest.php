@@ -3,6 +3,7 @@
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\SocialNetwork;
+use App\Enums\SocialPostStatus;
 use App\Enums\SocialSuggestionStatus;
 use App\Enums\SocialTrigger;
 use App\Enums\UserRole;
@@ -26,6 +27,7 @@ use App\Social\Provider\SocialProfile;
 use App\Social\Provider\SocialProvider;
 use App\Social\SuggestionBoard;
 use Filament\Facades\Filament;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
@@ -88,7 +90,6 @@ it('a suggestion card shows why, the copy, the resolved GBP locations and the Q&
     $page = Livewire::test(OperateShares::class)
         ->assertSee('Post refreshed · Refreshed to answer')
         ->assertSee('Why Pumps Run')
-        ->assertSee('GBP: every location')
         ->assertSee('Why does my sump pump run constantly?')
         ->assertSee('Usually a stuck float.')
         ->assertSee('GBP Q&amp;A to add by hand', false);
@@ -258,4 +259,72 @@ it('a Super Admin can set a channel aside — it leaves the row, sits under Igno
     $this->actingAs($siteAdmin);
     Livewire::test(OperateShares::class)->call('ignoreChannel', $channel->id);
     expect($channel->fresh()->ignored_at)->toBeNull();
+});
+
+it('a card lists the offices with a GBP as ticks (pre-ticked to the routing); approve posts the GBP share to the ticked offices only; GBP with no office is refused', function () {
+    Queue::fake();
+    $site = sharesSite();
+    $trooper = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper office']);
+    $montclair = Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair office']);
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Hoboken office']);   // no GBP: never offered
+    SocialChannel::withoutGlobalScopes()->create(['site_id' => $site->id, 'network' => SocialNetwork::Facebook, 'provider_channel_id' => 'fb']);
+    SocialChannel::withoutGlobalScopes()->create(['site_id' => $site->id, 'network' => SocialNetwork::Gbp, 'provider_channel_id' => 'g-trooper', 'location_id' => $trooper->id]);
+    SocialChannel::withoutGlobalScopes()->create(['site_id' => $site->id, 'network' => SocialNetwork::Gbp, 'provider_channel_id' => 'g-montclair', 'location_id' => $montclair->id]);
+    $s = app(SuggestionBoard::class)->suggest(sharesPost($site)->fresh(['site']), SocialTrigger::Manual, 'Picked');
+
+    $page = Livewire::test(OperateShares::class)
+        ->assertSee('GBP offices')
+        ->assertSee('Trooper')->assertSee('Montclair')->assertDontSee('Hoboken');
+    expect($page->get('offices')[$s->id])->toBe([$montclair->id => true, $trooper->id => true]);
+
+    // GBP ticked, every office unticked → refused, nothing queued.
+    $page->set("offices.{$s->id}.{$montclair->id}", false)->set("offices.{$s->id}.{$trooper->id}", false)
+        ->call('approve', $s->id)->assertNotified('Tick at least one office for the GBP share, or untick GBP');
+    expect(SocialPost::withoutGlobalScopes()->count())->toBe(0);
+
+    // Trooper only → the Page share + one GBP share, to Trooper.
+    $page->set("offices.{$s->id}.{$trooper->id}", true)->call('approve', $s->id)->assertNotified('Queued 2 share(s)');
+    $channels = SocialPost::withoutGlobalScopes()->with('channel')->get()->map(fn (SocialPost $p): string => (string) $p->channel->provider_channel_id)->sort()->values()->all();
+    expect($channels)->toBe(['fb', 'g-trooper'])
+        ->and($s->fresh()->location_ids)->toBe([$trooper->id]);
+});
+
+it('Plan ahead previews dated re-shares with editable copy, queues them, and the Scheduled strip moves or cancels one', function () {
+    Queue::fake();
+    Carbon::setTestNow('2026-11-19 10:00:00');
+    $site = sharesSite();
+    $trooper = Location::factory()->create(['site_id' => $site->id, 'name' => 'Trooper office']);
+    SocialChannel::withoutGlobalScopes()->create(['site_id' => $site->id, 'network' => SocialNetwork::Facebook, 'provider_channel_id' => 'fb', 'provider_name' => 'SPG Page']);
+    $gbp = SocialChannel::withoutGlobalScopes()->create(['site_id' => $site->id, 'network' => SocialNetwork::Gbp, 'provider_channel_id' => 'g1', 'provider_name' => 'SPG | Trooper', 'location_id' => $trooper->id]);
+    sharesPost($site, 'one')->forceFill(['title' => 'Post One', 'published_at' => now()->subDays(40)])->save();
+    sharesPost($site, 'two')->forceFill(['title' => 'Post Two', 'published_at' => now()->subDays(50)])->save();
+
+    $page = Livewire::test(OperateShares::class)
+        ->assertSee('Plan ahead')
+        ->assertSee('Nothing scheduled ahead.')
+        ->set('planDays', 4)->set('planCadence', 'alternate')->set('planStart', '2026-11-20')
+        ->set('planNetworks.facebook', true)->set('planNetworks.gbp', true)
+        ->call('previewPlan');
+    $plan = $page->get('plan');
+    expect($plan)->toHaveCount(2)
+        ->and(array_column($plan, 'title'))->toBe(['Post Two', 'Post One'])
+        ->and(array_column($plan, 'date'))->toBe(['2026-11-20', '2026-11-22'])
+        ->and($plan[0]['offices'][0]['town'])->toBe('Trooper')
+        ->and($page->get('planCopy')[0])->toHaveKeys(['facebook', 'gbp:'.$gbp->id]);
+    $page->assertSee('Queue 2 post(s)')->assertSee('Fri Nov 20')->assertSee('Sun Nov 22');
+
+    $page->set('planCopy.0.facebook', 'Edited for the Page.')->call('queuePlan')->assertNotified('2 post(s) planned, 4 share(s) queued');
+    expect($page->get('plan'))->toBe([]);
+    $rows = SocialPost::withoutGlobalScopes()->orderBy('scheduled_for')->get();
+    expect($rows)->toHaveCount(4)
+        ->and($rows->first(fn (SocialPost $p): bool => $p->network === SocialNetwork::Facebook)->copy)->toBe('Edited for the Page.')
+        ->and($rows->pluck('trigger')->unique()->all())->toBe([SocialTrigger::Planned]);
+
+    $fb = $rows->first(fn (SocialPost $p): bool => $p->network === SocialNetwork::Facebook);
+    $page->assertSee('Scheduled')->assertSee('Post Two')->assertDontSee('Nothing scheduled ahead.')
+        ->set("moveTo.{$fb->id}", '2026-11-28')->call('reschedulePlanned', $fb->id)->assertNotified('Moved to Nov 28, 2026')
+        ->call('cancelPlanned', $rows[1]->id)->assertNotified('Share cancelled');
+    expect($fb->fresh()->scheduled_for->toDateString())->toBe('2026-11-28')
+        ->and($rows[1]->fresh()->status)->toBe(SocialPostStatus::Skipped);
+    Carbon::setTestNow();
 });

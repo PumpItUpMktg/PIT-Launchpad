@@ -45,7 +45,12 @@ final class SocialComposer
         return $this->assemble(implode("\n\n", $lines), $hashtags, $photo, $link, $network, 'See the job');
     }
 
-    public function post(Content $post, SocialNetwork $network, SocialTrigger $trigger, ?string $lead = null): SocialCopy
+    /**
+     * @param  string|null  $lead  an opening line a rule or the planner puts first (the storm line, a spotlight town)
+     * @param  string|null  $linkTo  a page to send the click to instead of the post (the spotlight town's page);
+     *                               GBP has one button, so this replaces the post link there
+     */
+    public function post(Content $post, SocialNetwork $network, SocialTrigger $trigger, ?string $lead = null, ?string $linkTo = null): SocialCopy
     {
         $site = $post->site;
         $meta = is_array($post->meta) ? $post->meta : [];
@@ -56,7 +61,7 @@ final class SocialComposer
         $question = trim((string) ($mark['question'] ?? ''));
         $value = $answer !== '' ? $answer : ($description !== '' ? $description : $this->excerpt((string) $post->body, (int) config('launchpad.social.excerpt_chars', 320)));
         $title = trim((string) $post->title);
-        $rawLink = PublicUrl::forContent($site?->domain_url, $post);
+        $rawLink = $linkTo !== null && trim($linkTo) !== '' ? trim($linkTo) : PublicUrl::forContent($site?->domain_url, $post);
         $link = $rawLink !== null ? ShareLink::tag($rawLink, $network, (string) $post->slug, $trigger->value) : null;
         $hashtags = $network->usesHashtags() ? Hashtags::from([$post->silo?->name, $site?->brand_name]) : [];
         $lines = array_filter([
@@ -73,7 +78,7 @@ final class SocialComposer
             array_unshift($lines, trim($lead));
         }
 
-        return $this->assemble(implode("\n\n", $lines), $hashtags, $this->postImage($post), $link, $network, 'Read the answer');
+        return $this->assemble(implode("\n\n", $lines), $hashtags, $this->postImage($post), $link, $network, $linkTo !== null ? 'Learn more' : 'Read the answer');
     }
 
     /**

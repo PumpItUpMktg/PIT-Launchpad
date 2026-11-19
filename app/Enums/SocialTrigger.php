@@ -11,6 +11,7 @@ enum SocialTrigger: string
     case Momentum = 'momentum';
     case Weather = 'weather';
     case Manual = 'manual';
+    case Planned = 'planned';   // laid out ahead on the board's planner: a re-share with a date
 
     public function label(): string
     {
@@ -21,6 +22,7 @@ enum SocialTrigger: string
             self::Momentum => 'Upward movement',
             self::Weather => 'Weather',
             self::Manual => 'Manual',
+            self::Planned => 'Planned',
         };
     }
 }
