@@ -128,6 +128,10 @@ final class CitationSheetExport
             'status' => $status,
             'status_key' => $r->chip['key'],
             'live_url' => $liveUrl,
+            // What the scan found today, whatever its state — the builder corrects a mismatched listing
+            // rather than creating a second one, and checks a doubtful one before creating.
+            'current_url' => $r->listingUrl,
+            'found_as' => $r->chip['key'] === 'mismatch' && $r->napMatchSummary !== '' ? $r->napMatchSummary : ($r->listedFor !== null ? 'listed for '.$r->listedFor : null),
             'create_url' => $r->createUrl,
             'submittable' => $r->submittable,
             'tier' => $r->tierLabel,

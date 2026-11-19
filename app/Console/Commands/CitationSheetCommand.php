@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Citations\CitationSheetExport;
+use App\Citations\CitationWorkbook;
 use App\Models\Site;
 use Illuminate\Console\Command;
 
@@ -15,7 +16,8 @@ class CitationSheetCommand extends Command
     protected $signature = 'launchpad:citation-sheet
         {--site= : The site ULID}
         {--location= : One location ULID (default: every office)}
-        {--format=json : json (every office in one document) | csv (one office — the tracker tab\'s layout)}';
+        {--format=json : json (every office in one document) | csv (one office — the tracker tab\'s layout) | xlsx (the whole work order: a tab per office)}
+        {--out= : xlsx only — where to write the workbook (default: storage/app/<brand>-citations-<date>.xlsx)}';
 
     protected $description = 'Export the citation tracker per office from the platform: the NAP block + every directory with the scan\'s status, live URL and notes.';
 
@@ -28,6 +30,14 @@ class CitationSheetCommand extends Command
             return self::FAILURE;
         }
         $locationId = $this->option('location') !== null ? (string) $this->option('location') : null;
+        if ((string) $this->option('format') === 'xlsx') {
+            $out = trim((string) $this->option('out'));
+            $path = $out !== '' ? $out : storage_path('app/'.CitationWorkbook::filename($site));
+            app(CitationWorkbook::class)->build($site, $locationId, $path);
+            $this->info("Workbook written: {$path}");
+
+            return self::SUCCESS;
+        }
         $data = $export->forSite($site, $locationId);
         if ((string) $this->option('format') === 'csv') {
             if (count($data['locations']) !== 1) {

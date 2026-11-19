@@ -15,6 +15,23 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * a unique location_id). `phone_primary` is the location's own local number (canonical); `phone_secondary`
  * is a shared/corporate line, acceptable but never primary.
  *
+ * @property string $id
+ * @property string $site_id
+ * @property string $location_id
+ * @property string $business_name
+ * @property string $address_1
+ * @property string|null $address_2
+ * @property string $city
+ * @property string $state
+ * @property string $postal
+ * @property string $phone_primary
+ * @property string|null $phone_secondary
+ * @property string|null $website_url
+ * @property string|null $description_short
+ * @property string|null $description_long
+ * @property string|null $service_area_description
+ * @property string|null $logo_url
+ * @property string|null $verification_email
  * @property list<mixed>|null $hours
  * @property list<string>|null $categories
  * @property list<string>|null $photo_urls

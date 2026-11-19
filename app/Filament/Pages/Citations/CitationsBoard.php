@@ -3,6 +3,7 @@
 namespace App\Filament\Pages\Citations;
 
 use App\Citations\CitationDiagnostics;
+use App\Citations\CitationWorkbook;
 use App\Citations\DirectoryCatalog;
 use App\Citations\NapBackfiller;
 use App\Citations\NapHydrationResult;
@@ -23,6 +24,7 @@ use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\HtmlString;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Citations · Tenant board (§ Citations UI, PR B) — one card per physical location with its coverage broken
@@ -199,6 +201,18 @@ class CitationsBoard extends Page
      * Fan out a scan for every location in the tenant, building a NAP from the GBP for any that lack one.
      * Locations with no usable GBP data are counted as skipped.
      */
+    /** The whole work order as one workbook: Read me, All offices NAP, a tab per office. What a builder works from. */
+    public function downloadWorkbook(): ?BinaryFileResponse
+    {
+        $site = $this->siteId === null ? null : Site::withoutGlobalScopes()->find($this->siteId);
+        if ($site === null) {
+            return null;
+        }
+        $path = app(CitationWorkbook::class)->build($site);
+
+        return response()->download($path, CitationWorkbook::filename($site), ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])->deleteFileAfterSend(true);
+    }
+
     public function scanAll(): void
     {
         $site = $this->getSite();
