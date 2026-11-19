@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property string $site_id
  * @property string|null $location_id
  * @property bool $location_locked the operator assigned the location by hand; the sync keeps it
+ * @property Carbon|null $ignored_at set aside by the operator: listed under Ignored, never shared to, restorable
  * @property SocialNetwork $network
  * @property string $provider
  * @property string|null $provider_account the provider profile this channel posts through (a tenant can span several)
