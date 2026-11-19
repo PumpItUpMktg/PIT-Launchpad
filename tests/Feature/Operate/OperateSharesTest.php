@@ -69,7 +69,9 @@ it('shows the synced channels read-only with Sync now, no typing in', function (
         ->assertDontSee('Add channel')
         ->call('syncChannels')
         ->assertNotified('3 profile(s) synced')
-        ->assertSee('GBP · SPG Hackettstown → Hackettstown office')
+        ->assertSee('SPG · Hackettstown')
+        ->assertSee('1 GBP office')
+        ->assertSee('1 unmatched')
         ->assertSee('Facebook · SPG Page')
         ->assertSee('unmatched');
     expect(SocialChannel::withoutGlobalScopes()->where('provider_channel_id', 'g1')->value('location_id'))->toBe($loc->id);
@@ -234,7 +236,8 @@ it('a Super Admin can set a channel aside — it leaves the row, sits under Igno
     $channel = SocialChannel::withoutGlobalScopes()->where('provider_channel_id', 'locations/555')->firstOrFail();
 
     Livewire::test(OperateShares::class)
-        ->assertSee('GBP · Sump Pump Today | Pottstown')
+        ->assertSee('Sump Pump Today | Pottstown')
+        ->assertSee('1 unmatched')
         ->assertDontSee('Ignored (')
         ->call('ignoreChannel', $channel->id)
         ->assertNotified()

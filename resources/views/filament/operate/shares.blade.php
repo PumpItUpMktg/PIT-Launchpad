@@ -21,6 +21,11 @@
         .sh-chk { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:#334155; margin-right:12px; }
         .sh-act { display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
         .sh details summary { cursor:pointer; font-size:12px; color:#64748b; }
+        .sh-pill.sm { font-size:10.5px; padding:1px 7px; font-weight:700; }
+        .sh-gbp { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+        .sh-toggle { cursor:pointer; border:0; }
+        .sh-toggle .warn-txt { color:#b45309; }
+        [x-cloak] { display:none !important; }
         .sh-x { border:0; background:transparent; color:inherit; opacity:.55; cursor:pointer; font-size:11px; font-weight:800; padding:0 2px; margin-left:2px; }
         .sh-x:hover { opacity:1; color:#b91c1c; }
         .sh-qa textarea { width:100%; min-height:54px; font-size:12px; border:1px solid var(--line,#e5e7eb); border-radius:8px; padding:8px; margin-top:4px; }
@@ -35,27 +40,50 @@
         @if ($siteId === null)
             <div class="sub">Select a tenant.</div>
         @else
-            <div class="sh-panel" @if (in_array($this->syncState['state'], ['queued', 'running'], true)) wire:poll.10s @endif>
+            @php($channels = $this->channels)
+            @php($ignored = array_values(array_filter($channels, fn (array $c): bool => $c['ignored'])))
+            @php($live = array_values(array_filter($channels, fn (array $c): bool => ! $c['ignored'])))
+            @php($pages = array_values(array_filter($live, fn (array $c): bool => $c['network'] !== 'gbp')))
+            @php($gbp = array_values(array_filter($live, fn (array $c): bool => $c['network'] === 'gbp')))
+            @php($unmatched = count(array_filter($gbp, fn (array $c): bool => $c['unmatched'])))
+            @php($gone = count(array_filter($live, fn (array $c): bool => ! $c['enabled'])))
+            <div class="sh-panel" x-data="{ open: {{ ($unmatched > 0 && $this->canManageChannels) ? 'true' : 'false' }} }" @if (in_array($this->syncState['state'], ['queued', 'running'], true)) wire:poll.10s @endif>
                 <div class="sh-line">
                     <b style="font-size:13px">Channels</b>
-                    @php($ignored = array_values(array_filter($this->channels, fn (array $c): bool => $c['ignored'])))
-                    @forelse (array_filter($this->channels, fn (array $c): bool => ! $c['ignored']) as $ch)
-                        <span class="sh-pill {{ $ch['enabled'] ? $ch['network'] : 'off' }}" title="{{ $ch['address'] ?? $ch['provider_name'] }}">{{ $ch['label'] }}{{ $ch['enabled'] ? '' : ' · gone' }}@if ($this->canManageChannels) <button type="button" class="sh-x" title="Ignore this channel — it receives nothing until restored" wire:click="ignoreChannel('{{ $ch['id'] }}')">×</button>@endif</span>
-                        @if ($this->canManageChannels && ($ch['unmatched'] || $ch['locked']))
-                            <select class="sh-select" title="{{ $ch['unmatched'] ? 'This Business Profile could not be tied to an office by its name — it receives no shares until you pick one' : 'Assigned by hand; the sync keeps it' }}" wire:change="assignChannel('{{ $ch['id'] }}', $event.target.value)" style="font-size:11px;padding:2px 4px;border:1px solid {{ $ch['unmatched'] ? '#f59e0b' : '#cbd5e1' }};border-radius:6px;max-width:170px">
-                                <option value="">{{ $ch['unmatched'] ? 'unmatched — assign office…' : 'unassign' }}</option>
-                                @foreach ($this->locationOptions as $lid => $lname)
-                                    <option value="{{ $lid }}" @selected($ch['location_id'] === $lid)>{{ $lname }}</option>
-                                @endforeach
-                            </select>
-                        @elseif ($ch['unmatched'])
-                            <span class="sh-pill warn" title="This Business Profile is not tied to an office yet; a Super Admin assigns it">unmatched</span>
-                        @endif
-                    @empty
+                    @if ($channels === [])
                         <span class="sub">none connected yet — connect the profiles in the posting provider, then sync</span>
-                    @endforelse
+                    @endif
+                    @foreach ($pages as $ch)
+                        <span class="sh-pill {{ $ch['enabled'] ? $ch['network'] : 'off' }}" title="{{ $ch['network_label'] }} · {{ $ch['provider_name'] }}">{{ $ch['network_label'] }} · {{ $ch['short'] }}{{ $ch['enabled'] ? '' : ' · gone' }}@if ($this->canManageChannels) <button type="button" class="sh-x" title="Ignore this channel — it receives nothing until restored" wire:click="ignoreChannel('{{ $ch['id'] }}')">×</button>@endif</span>
+                    @endforeach
+                    @if ($gbp !== [])
+                        <button type="button" class="sh-pill gbp sh-toggle" @click="open = !open" :title="open ? 'Hide the offices' : 'Show every office'">
+                            {{ count($gbp) - $unmatched }} GBP office{{ count($gbp) - $unmatched === 1 ? '' : 's' }}@if ($unmatched > 0) · <span class="warn-txt">{{ $unmatched }} unmatched</span>@endif @if ($gone > 0) · {{ $gone }} gone @endif<span x-text="open ? ' ▴' : ' ▾'"></span>
+                        </button>
+                    @endif
+                    @if ($ignored !== [])
+                        <span class="sh-pill off" title="Set aside — receive nothing">{{ count($ignored) }} ignored</span>
+                    @endif
                     <button type="button" class="sh-btn" style="margin-left:auto" wire:click="syncChannels" wire:loading.attr="disabled" @disabled(in_array($this->syncState['state'], ['queued', 'running'], true))>{{ in_array($this->syncState['state'], ['queued', 'running'], true) ? 'Syncing…' : 'Sync now' }}</button>
                 </div>
+                @if ($gbp !== [])
+                    <div class="sh-gbp" x-show="open" x-cloak style="margin-top:8px">
+                        @foreach ($gbp as $ch)
+                            <span class="sh-pill sm {{ $ch['enabled'] ? ($ch['unmatched'] ? 'warn' : 'gbp') : 'off' }}" title="{{ $ch['provider_name'] }}{{ $ch['address'] ? ' · '.$ch['address'] : '' }}{{ $ch['location'] ? ' → '.$ch['location'] : '' }}">{{ $ch['short'] }}{{ $ch['enabled'] ? '' : ' · gone' }}@if ($this->canManageChannels) <button type="button" class="sh-x" title="Ignore this listing — it receives nothing until restored" wire:click="ignoreChannel('{{ $ch['id'] }}')">×</button>@endif</span>
+                            @if ($this->canManageChannels && ($ch['unmatched'] || $ch['locked']))
+                                <select class="sh-select" title="{{ $ch['unmatched'] ? 'This Business Profile could not be tied to an office by its name — it receives no shares until you pick one' : 'Assigned by hand; the sync keeps it' }}" wire:change="assignChannel('{{ $ch['id'] }}', $event.target.value)" style="font-size:11px;padding:2px 4px;border:1px solid {{ $ch['unmatched'] ? '#f59e0b' : '#cbd5e1' }};border-radius:6px;max-width:170px">
+                                    <option value="">{{ $ch['unmatched'] ? 'unmatched — assign office…' : 'unassign' }}</option>
+                                    @foreach ($this->locationOptions as $lid => $lname)
+                                        <option value="{{ $lid }}" @selected($ch['location_id'] === $lid)>{{ $lname }}</option>
+                                    @endforeach
+                                </select>
+                            @elseif ($ch['unmatched'])
+                                <span class="sh-pill sm warn" title="This Business Profile is not tied to an office yet; a Super Admin assigns it">unmatched</span>
+                            @endif
+                        @endforeach
+                        <div class="sub" style="margin-top:4px">Brand initials · the office each listing posts for. A listing whose Google title names another town shows both. Hover for Google's title and address.</div>
+                    </div>
+                @endif
                 @php($sync = $this->syncState)
                 @if ($sync['state'] === 'queued' || $sync['state'] === 'running')
                     <div class="sub" style="margin-top:6px"><span class="sh-pill queued">{{ $sync['state'] }}</span> Reading the provider's listings on the worker — this refreshes on its own.</div>
@@ -69,7 +97,7 @@
                         <summary>Ignored ({{ count($ignored) }}) — receive nothing{{ $this->canManageChannels ? '; restore any time' : '' }}</summary>
                         <div class="sh-line" style="margin-top:6px">
                             @foreach ($ignored as $ch)
-                                <span class="sh-pill off" title="{{ $ch['address'] ?? $ch['provider_name'] }}">{{ $ch['label'] }}@if ($this->canManageChannels) <button type="button" class="sh-x" title="Restore — it takes shares again" wire:click="restoreChannel('{{ $ch['id'] }}')">↶ restore</button>@endif</span>
+                                <span class="sh-pill off sm" title="{{ $ch['provider_name'] }}{{ $ch['address'] ? ' · '.$ch['address'] : '' }}">{{ $ch['network_label'] }} · {{ $ch['short'] }}@if ($this->canManageChannels) <button type="button" class="sh-x" title="Restore — it takes shares again" wire:click="restoreChannel('{{ $ch['id'] }}')">↶ restore</button>@endif</span>
                             @endforeach
                         </div>
                     </details>
