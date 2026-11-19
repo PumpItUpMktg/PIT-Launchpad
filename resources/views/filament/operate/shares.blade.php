@@ -28,11 +28,16 @@
         .sh-toggle { cursor:pointer; border:0; }
         .sh-toggle .warn-txt { color:#b45309; }
         [x-cloak] { display:none !important; }
+        .sh-in { border:1px solid var(--line,#e5e7eb); border-radius:6px; padding:3px 6px; font-size:12px; background:#fff; }
+        .sh-plan { border-top:1px dashed var(--line,#eef1f4); padding:8px 0; }
+        .sh-copy-edit { width:100%; min-height:64px; font-size:12px; border:1px solid var(--line,#e5e7eb); border-radius:8px; padding:6px 8px; margin-top:2px; font-family:inherit; }
+        .sh-day { border-top:1px dashed var(--line,#eef1f4); padding:6px 0; }
+        .sh-sched { padding:2px 0; }
         .sh-x { border:0; background:transparent; color:inherit; opacity:.55; cursor:pointer; font-size:11px; font-weight:800; padding:0 2px; margin-left:2px; }
         .sh-x:hover { opacity:1; color:#b91c1c; }
         .sh-qa textarea { width:100%; min-height:54px; font-size:12px; border:1px solid var(--line,#e5e7eb); border-radius:8px; padding:8px; margin-top:4px; }
         @media (prefers-color-scheme: dark) {
-            .sh-panel, .sh-btn, .sh select, .sh-qa textarea { background:#151b24; color:#cbd5e1; }
+            .sh-panel, .sh-btn, .sh select, .sh-qa textarea, .sh-in, .sh-copy-edit { background:#151b24; color:#cbd5e1; }
             .sh h3 { color:#e2e8f0; } .sh-copy { background:#0f141b; color:#cbd5e1; }
         }
         @media (max-width:640px) { .sh-card { grid-template-columns:1fr; } }
@@ -179,6 +184,91 @@
                     </select>
                     <button type="button" class="sh-btn" wire:click="suggestPost">Add to the board</button>
                 </div>
+            </div>
+
+            <div class="sh-panel">
+                <h3>Plan ahead</h3>
+                <div class="sub" style="margin-bottom:8px">Lay re-shares out over the next weeks: one published post per slot, the ticked networks and offices. Each GBP share spotlights one town the office serves — weighted to where you sit just off page one — and its button opens that town's page. The Page and Instagram get the brand copy. Review every line, then queue. Job shares keep flowing on their own beside these.</div>
+                <div class="sh-line" style="gap:10px">
+                    <label class="sub">Window <input type="number" min="1" max="90" wire:model="planDays" style="width:60px" class="sh-in"> days</label>
+                    <label class="sub">from <input type="date" wire:model="planStart" class="sh-in"></label>
+                    <select wire:model="planCadence" style="max-width:170px">
+                        @foreach ($this->cadences as $k => $label)<option value="{{ $k }}">{{ $label }}</option>@endforeach
+                    </select>
+                    @foreach ($this->planNetworkOptions as $n)
+                        <label class="sh-chk sm"><input type="checkbox" wire:model="planNetworks.{{ $n }}"> {{ \App\Enums\SocialNetwork::from($n)->label() }}</label>
+                    @endforeach
+                    <select wire:model="planGbpLink" style="max-width:220px" title="Where the GBP button sends people">
+                        <option value="town">GBP button → the spotlight town's page</option>
+                        <option value="post">GBP button → the post</option>
+                    </select>
+                </div>
+                @if ($this->planOfficeOptions !== [])
+                    <div class="sh-offices">
+                        <span class="sub" style="font-weight:700">GBP offices</span>
+                        @foreach ($this->planOfficeOptions as $o)
+                            <label class="sh-chk sm" title="{{ $o['name'] }}"><input type="checkbox" wire:model="planOffices.{{ $o['id'] }}"> {{ $o['town'] }}</label>
+                        @endforeach
+                        <span class="sub">(none ticked = every office)</span>
+                    </div>
+                @endif
+                <details style="margin-top:6px"><summary>Pick the posts by hand (none picked = auto-fill: never shared first, then longest since)</summary>
+                    <div class="sh-offices">
+                        @foreach ($this->pickable as $id => $title)
+                            <label class="sh-chk sm"><input type="checkbox" wire:model="planPosts.{{ $id }}"> {{ $title }}</label>
+                        @endforeach
+                    </div>
+                </details>
+                <div class="sh-act">
+                    <button type="button" class="sh-btn" wire:click="previewPlan" wire:loading.attr="disabled">Preview plan</button>
+                    @if ($plan !== [])
+                        <button type="button" class="sh-btn primary" wire:click="queuePlan" wire:loading.attr="disabled">Queue {{ count($plan) }} post(s)</button>
+                        <button type="button" class="sh-btn" wire:click="clearPlan">Clear</button>
+                        @if ($planMeta !== null)<span class="sub">{{ $planMeta['slots'] }} slot(s), {{ $planMeta['posts_available'] }} post(s) free to share @if ($planMeta['unfilled'] > 0), {{ $planMeta['unfilled'] }} slot(s) unfilled — no more posts outside the cooldown @endif</span>@endif
+                    @endif
+                </div>
+                @foreach ($plan as $item)
+                    <div class="sh-plan" wire:key="pl-{{ $item['index'] }}">
+                        <div class="sh-line"><b>{{ \Illuminate\Support\Carbon::parse($item['date'])->format('D M j') }}</b> <span>{{ $item['title'] }}</span>
+                            @foreach ($item['networks'] as $n)<span class="sh-pill sm {{ $n }}">{{ \App\Enums\SocialNetwork::from($n)->label() }}</span>@endforeach
+                            <button type="button" class="sh-x" style="margin-left:auto" wire:click="dropPlanItem({{ $item['index'] }})" title="Leave this slot out">×</button>
+                        </div>
+                        @foreach ($item['copy'] as $network => $text)
+                            <label class="sub" style="display:block;margin-top:4px">{{ \App\Enums\SocialNetwork::from($network)->label() }}
+                                <textarea class="sh-copy-edit" wire:model.blur="planCopy.{{ $item['index'] }}.{{ $network }}"></textarea>
+                            </label>
+                        @endforeach
+                        @foreach ($item['offices'] as $o)
+                            <label class="sub" style="display:block;margin-top:4px">GBP · {{ $o['town'] }}@if ($o['spotlight']) · spotlight <b>{{ $o['spotlight']['town'] }}</b>@if ($o['spotlight']['rank']) (ranks #{{ $o['spotlight']['rank'] }})@endif @endif · button → {{ $o['link_to'] ? 'town page' : 'the post' }}
+                                <textarea class="sh-copy-edit" wire:model.blur="planCopy.{{ $item['index'] }}.gbp:{{ $o['channel_id'] }}"></textarea>
+                            </label>
+                        @endforeach
+                    </div>
+                @endforeach
+            </div>
+
+            <div class="sh-panel">
+                <h3>Scheduled <span class="sub" style="font-weight:500">— the next 30 days, every network; move, rewrite or cancel until it sends</span></h3>
+                @forelse ($this->upcoming as $day)
+                    <div class="sh-day" wire:key="day-{{ $day['date'] }}">
+                        <b>{{ \Illuminate\Support\Carbon::parse($day['date'])->format('D M j') }}</b>
+                        @foreach ($day['posts'] as $p)
+                            <div class="sh-line sh-sched" wire:key="sp-{{ $p['id'] }}">
+                                <span class="sh-pill sm {{ $p['network'] }}">{{ $p['network_label'] }}@if ($p['office']) · {{ $p['office'] }}@endif</span>
+                                <span>{{ $p['title'] }}</span>
+                                <span class="sub">{{ $p['trigger_label'] }}@if ($p['spotlight']) · spotlight {{ $p['spotlight'] }}@endif · {{ \Illuminate\Support\Carbon::parse($p['at'])->format('g:i A') }}</span>
+                                <details class="sub"><summary>text</summary>
+                                    <textarea class="sh-copy-edit" wire:change="rewritePlanned('{{ $p['id'] }}', $event.target.value)">{{ $p['copy'] }}</textarea>
+                                </details>
+                                <input type="date" class="sh-in" wire:model="moveTo.{{ $p['id'] }}" title="Move to">
+                                <button type="button" class="sh-x" wire:click="reschedulePlanned('{{ $p['id'] }}')" title="Move to the date">move</button>
+                                <button type="button" class="sh-x" wire:click="cancelPlanned('{{ $p['id'] }}')" title="Cancel — nothing is sent">cancel</button>
+                            </div>
+                        @endforeach
+                    </div>
+                @empty
+                    <div class="sub">Nothing scheduled ahead.</div>
+                @endforelse
             </div>
 
             <div class="sh-panel" wire:poll.20s>
