@@ -59,7 +59,7 @@
                 @elseif ($sync['state'] === 'failed')
                     <div class="sub" style="margin-top:6px"><span class="sh-pill failed">sync failed</span> {{ $sync['error'] }}@if ($sync['at']) · {{ \Illuminate\Support\Carbon::parse($sync['at'])->diffForHumans() }}@endif</div>
                 @elseif ($sync['state'] === 'done' && is_array($sync['result']))
-                    <div class="sub" style="margin-top:6px"><span class="sh-pill sent">synced</span> {{ (int) ($sync['result']['synced'] ?? 0) }} profile(s), {{ (int) ($sync['result']['matched'] ?? 0) }} GBP matched@if (($sync['result']['unmatched'] ?? []) !== []) · unmatched: {{ implode(', ', (array) $sync['result']['unmatched']) }}@endif @if ($sync['at']) · {{ \Illuminate\Support\Carbon::parse($sync['at'])->diffForHumans() }}@endif</div>
+                    <div class="sub" style="margin-top:6px"><span class="sh-pill sent">synced</span> {{ (int) ($sync['result']['synced'] ?? 0) }} profile(s), {{ (int) ($sync['result']['matched'] ?? 0) }} GBP matched @if (($sync['result']['unmatched'] ?? []) !== []) · unmatched: {{ implode(', ', (array) $sync['result']['unmatched']) }}@endif @if ($sync['at']) · {{ \Illuminate\Support\Carbon::parse($sync['at'])->diffForHumans() }}@endif</div>
                 @endif
                 @if ($this->canManageChannels)
                     <div class="sh-line" style="margin-top:8px">
