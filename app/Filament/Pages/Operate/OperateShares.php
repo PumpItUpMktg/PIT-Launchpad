@@ -83,16 +83,16 @@ class OperateShares extends OperatePage
     /**
      * The tenant's posting-provider profiles with what is connected on each (Super Admin only).
      *
-     * @return array{profiles: list<array{name: string, summary: string, found: bool}>, error: string|null}
+     * @return array{profiles: list<array{name: string, summary: string, found: bool}>, error: string|null, warm: bool}
      */
     public function getProfilesProperty(): array
     {
         if (! $this->getCanManageChannelsProperty()) {
-            return ['profiles' => [], 'error' => null];
+            return ['profiles' => [], 'error' => null, 'warm' => true];
         }
         $site = app(ActiveTenant::class)->site();
 
-        return $site === null ? ['profiles' => [], 'error' => null] : app(ProfilePicker::class)->forShares($site);
+        return $site === null ? ['profiles' => [], 'error' => null, 'warm' => true] : app(ProfilePicker::class)->forShares($site);
     }
 
     /** @return array<string, string> */

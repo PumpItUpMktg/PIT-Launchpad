@@ -71,6 +71,8 @@
                         @endforelse
                         @if ($this->profiles['error'] !== null)
                             <span class="sub" style="color:#b91c1c">{{ $this->profiles['error'] }}</span>
+                        @elseif (! $this->profiles['warm'] && $this->profiles['profiles'] !== [])
+                            <span class="sub">connections show after the next sync</span>
                         @endif
                     </div>
                 @endif
