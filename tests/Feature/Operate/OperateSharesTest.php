@@ -8,6 +8,7 @@ use App\Enums\SocialTrigger;
 use App\Enums\UserRole;
 use App\Filament\Pages\Operate\OperateShares;
 use App\Jobs\SendSocialPost;
+use App\Jobs\SyncSocialChannels;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Membership;
@@ -177,4 +178,34 @@ it('a Super Admin sees the tenant\'s posting profiles with what each has connect
         ->assertSee('Google Business Profile: Eric Wright · Facebook: Sump Pump Gurus Corporate')
         ->assertSee('not in the provider account')
         ->assertDontSee('OtherClient');
+});
+
+it('Sync now queues the provider read on the worker and shows the state until it lands; the job records done or failed', function () {
+    $site = sharesSite();
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown office']);
+    /** @var MockSocialProvider $mock */
+    $mock = app(SocialProvider::class);
+    $mock->connect($site->id, [new SocialProfile('fb', SocialNetwork::Facebook, 'SPG Page')]);
+
+    Queue::fake();
+    Livewire::test(OperateShares::class)
+        ->call('syncChannels')
+        ->assertNotified('Sync queued')
+        ->assertSee('Syncing…')
+        ->assertSee('Reading the provider');
+    Queue::assertPushed(SyncSocialChannels::class, fn (SyncSocialChannels $j): bool => $j->siteId === (string) $site->id);
+    expect(SyncSocialChannels::status($site->id)['state'])->toBe('queued');
+
+    // A second click while one is in flight queues nothing more.
+    Livewire::test(OperateShares::class)->call('syncChannels');
+    Queue::assertPushed(SyncSocialChannels::class, 1);
+
+    (new SyncSocialChannels($site->id))->handle(app(ChannelSync::class));
+    $state = SyncSocialChannels::status($site->id);
+    expect($state['state'])->toBe('done')->and($state['result']['synced'])->toBe(1);
+    Livewire::test(OperateShares::class)->assertSee('Sync now')->assertSee('1 profile(s), 0 GBP matched')->assertSee('Facebook · SPG Page');
+
+    // A site that vanished before the worker got to it leaves no state behind.
+    (new SyncSocialChannels('01HZZZZZZZZZZZZZZZZZZZZZZZ'))->handle(app(ChannelSync::class));
+    expect(SyncSocialChannels::status('01HZZZZZZZZZZZZZZZZZZZZZZZ')['state'])->toBe('idle');
 });

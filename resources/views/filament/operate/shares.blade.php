@@ -33,7 +33,7 @@
         @if ($siteId === null)
             <div class="sub">Select a tenant.</div>
         @else
-            <div class="sh-panel">
+            <div class="sh-panel" @if (in_array($this->syncState['state'], ['queued', 'running'], true)) wire:poll.10s @endif>
                 <div class="sh-line">
                     <b style="font-size:13px">Channels</b>
                     @forelse ($this->channels as $ch)
@@ -51,8 +51,16 @@
                     @empty
                         <span class="sub">none connected yet — connect the profiles in the posting provider, then sync</span>
                     @endforelse
-                    <button type="button" class="sh-btn" style="margin-left:auto" wire:click="syncChannels" wire:loading.attr="disabled">Sync now</button>
+                    <button type="button" class="sh-btn" style="margin-left:auto" wire:click="syncChannels" wire:loading.attr="disabled" @disabled(in_array($this->syncState['state'], ['queued', 'running'], true))>{{ in_array($this->syncState['state'], ['queued', 'running'], true) ? 'Syncing…' : 'Sync now' }}</button>
                 </div>
+                @php($sync = $this->syncState)
+                @if ($sync['state'] === 'queued' || $sync['state'] === 'running')
+                    <div class="sub" style="margin-top:6px"><span class="sh-pill queued">{{ $sync['state'] }}</span> Reading the provider's listings on the worker — this refreshes on its own.</div>
+                @elseif ($sync['state'] === 'failed')
+                    <div class="sub" style="margin-top:6px"><span class="sh-pill failed">sync failed</span> {{ $sync['error'] }}@if ($sync['at']) · {{ \Illuminate\Support\Carbon::parse($sync['at'])->diffForHumans() }}@endif</div>
+                @elseif ($sync['state'] === 'done' && is_array($sync['result']))
+                    <div class="sub" style="margin-top:6px"><span class="sh-pill sent">synced</span> {{ (int) ($sync['result']['synced'] ?? 0) }} profile(s), {{ (int) ($sync['result']['matched'] ?? 0) }} GBP matched@if (($sync['result']['unmatched'] ?? []) !== []) · unmatched: {{ implode(', ', (array) $sync['result']['unmatched']) }}@endif @if ($sync['at']) · {{ \Illuminate\Support\Carbon::parse($sync['at'])->diffForHumans() }}@endif</div>
+                @endif
                 @if ($this->canManageChannels)
                     <div class="sh-line" style="margin-top:8px">
                         <b style="font-size:12px">Posting profiles</b>
