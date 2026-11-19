@@ -69,7 +69,7 @@ it('shows the synced channels read-only with Sync now, no typing in', function (
         ->assertDontSee('Add channel')
         ->call('syncChannels')
         ->assertNotified('3 profile(s) synced')
-        ->assertSee('Google Business Profile · Hackettstown office')
+        ->assertSee('Google Business Profile · SPG Hackettstown → Hackettstown office')
         ->assertSee('Facebook · SPG Page')
         ->assertSee('unmatched');
     expect(SocialChannel::withoutGlobalScopes()->where('provider_channel_id', 'g1')->value('location_id'))->toBe($loc->id);
