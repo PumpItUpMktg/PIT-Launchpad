@@ -3,18 +3,17 @@
 namespace App\Filament\Pages\Operate;
 
 use App\Enums\SocialTrigger;
+use App\Jobs\SyncSocialChannels;
 use App\Models\Content;
 use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\SocialChannel;
 use App\Models\SocialSuggestion;
 use App\Operator\ActiveTenant;
-use App\Social\ChannelSync;
 use App\Social\ProfilePicker;
 use App\Social\SuggestionBoard;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
-use Throwable;
 
 /**
  * Operate → Shares: the re-share board. Jobs share on their own and never appear here. A card per
@@ -188,6 +187,13 @@ class OperateShares extends OperatePage
             ->send();
     }
 
+    /** The state of the queued sync for this tenant (idle / queued / running / done / failed), for the panel. @return array<string, mixed> */
+    public function getSyncStateProperty(): array
+    {
+        return $this->siteId === null ? ['state' => 'idle', 'at' => null, 'result' => null, 'error' => null] : SyncSocialChannels::status($this->siteId);
+    }
+
+    /** Queue the provider read on the worker — a sync reads every listing and outruns a web request. */
     public function syncChannels(): void
     {
         if ($this->siteId === null) {
@@ -197,16 +203,22 @@ class OperateShares extends OperatePage
         if ($site === null) {
             return;
         }
-        ProfilePicker::forget();
-        try {
-            $r = app(ChannelSync::class)->sync($site);
-        } catch (Throwable $e) {
-            Notification::make()->danger()->title('Sync failed')->body($e->getMessage())->send();
+        SyncSocialChannels::start($site);
+        $state = SyncSocialChannels::status($this->siteId);
+        if ($state['state'] === 'done' && is_array($state['result'])) {
+            // The sync queue ran it at once.
+            $r = $state['result'];
+            Notification::make()->success()->title(sprintf('%d profile(s) synced', (int) ($r['synced'] ?? 0)))
+                ->body(($r['unmatched'] ?? []) !== [] ? 'Unmatched GBP: '.implode(', ', (array) $r['unmatched']) : null)->send();
 
             return;
         }
-        Notification::make()->success()->title(sprintf('%d profile(s) synced', $r['synced']))
-            ->body($r['unmatched'] !== [] ? 'Unmatched GBP: '.implode(', ', $r['unmatched']) : null)->send();
+        if ($state['state'] === 'failed') {
+            Notification::make()->danger()->title('Sync failed')->body($state['error'])->send();
+
+            return;
+        }
+        Notification::make()->success()->title('Sync queued')->body('The worker is reading the provider\'s listings — the channels refresh here as it finishes (a minute or two).')->send();
     }
 
     private function suggestion(string $id): ?SocialSuggestion

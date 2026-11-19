@@ -695,7 +695,9 @@ a job share queues when the job publishes (`JobPublisher` → `ShareJobSocially`
 (`SuggestionBoard`, Operate → Shares), except heavy rain, which sends on its own.
 
 - **Channels come from the posting provider, never typed in.** `SocialProvider::profiles()` →
-  `ChannelSync` (daily `launchpad:sync-social-channels --all`, or Sync now on the board) upserts
+  `ChannelSync` (daily `launchpad:sync-social-channels --all`, or Sync now on the board → the queued
+  `SyncSocialChannels` job, one per site, state shown on the panel — a sync reads every listing's record and
+  outruns a web request) upserts
   `SocialChannel` rows. A GBP profile is tied to a physical `Location` by place id, else address (street
   number + first street word), else the location's distinctive name words in the profile name, else the
   only location; an unplaceable GBP stays `unmatched` (location null) and never receives a share. A profile
