@@ -97,7 +97,7 @@ it('prunes rows older than the retention window when a worker starts', function 
 
     app(WorkerHeartbeat::class)->looping(new Looping('database', 'high'));
 
-    expect(QueueWorker::pluck('worker_id')->sort()->values()->all())->toBe(['recent#2', WorkerHeartbeat::workerId()]);
+    expect(QueueWorker::pluck('worker_id')->all())->toEqualCanonicalizing(['recent#2', WorkerHeartbeat::workerId()]);
 });
 
 it('is wired to the queue events', function () {
