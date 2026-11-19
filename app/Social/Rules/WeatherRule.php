@@ -71,7 +71,7 @@ final class WeatherRule
 
             return $out;
         }
-        $channels = SocialChannel::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('enabled', true)->with('location')->get();
+        $channels = SocialChannel::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->takesShares()->with('location')->get();
         $cooldown = (int) ($cfg['cooldown_days'] ?? 30);
         $snapshotBase = ['inches_1d' => $out['inches_1d'], 'inches_2d' => $out['inches_2d'], 'date' => $latest, 'stations' => array_values($this->rain->stations($site))];
 

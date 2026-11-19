@@ -738,6 +738,10 @@ a job share queues when the job publishes (`JobPublisher` → `ShareJobSocially`
   a job photo also goes to the location gallery. A new channel is capped at one post a day (overflow slides
   to the next days); a job share unsent after `stale_after_days` (7) is skipped. `SendSocialPost` retries a
   transient failure once after 10 minutes; a refusal fails at once. An unmatched GBP channel can be tied
-  to an office by hand on the Shares page (`location_locked`, kept through syncs).
+  to an office by hand on the Shares page (`location_locked`, kept through syncs). A channel the operator
+  sets aside (another brand's listing on the same Google account) is **ignored** (`ignored_at`, Super Admin,
+  Shares page): listed under "Ignored", restorable, kept through syncs, never shared to — every channel
+  pick goes through `SocialChannel::takesShares()` (enabled AND not ignored). The network label for Google
+  Business Profile reads "GBP" on the surfaces.
 - **Not yet:** share markers on the client position trend, Instagram image sizing, the GBP Q&A API, a
   forecast feed.

@@ -69,7 +69,7 @@ it('shows the synced channels read-only with Sync now, no typing in', function (
         ->assertDontSee('Add channel')
         ->call('syncChannels')
         ->assertNotified('3 profile(s) synced')
-        ->assertSee('Google Business Profile · SPG Hackettstown → Hackettstown office')
+        ->assertSee('GBP · SPG Hackettstown → Hackettstown office')
         ->assertSee('Facebook · SPG Page')
         ->assertSee('unmatched');
     expect(SocialChannel::withoutGlobalScopes()->where('provider_channel_id', 'g1')->value('location_id'))->toBe($loc->id);
@@ -185,7 +185,7 @@ it('a Super Admin sees the tenant\'s posting profiles with what each has connect
     Livewire::test(OperateShares::class)
         ->assertSee('Posting profiles')
         ->assertSee('SumpPumpGurus')
-        ->assertSee('Google Business Profile: Eric Wright · Facebook: Sump Pump Gurus Corporate')
+        ->assertSee('GBP: Eric Wright · Facebook: Sump Pump Gurus Corporate')
         ->assertSee('not in the provider account')
         ->assertDontSee('OtherClient');
 });
@@ -218,4 +218,41 @@ it('Sync now queues the provider read on the worker and shows the state until it
     // A site that vanished before the worker got to it leaves no state behind.
     (new SyncSocialChannels('01HZZZZZZZZZZZZZZZZZZZZZZZ'))->handle(app(ChannelSync::class), app(ProfilePicker::class));
     expect(SyncSocialChannels::status('01HZZZZZZZZZZZZZZZZZZZZZZZ')['state'])->toBe('idle');
+});
+
+it('a Super Admin can set a channel aside — it leaves the row, sits under Ignored, survives a sync, takes no share — and restore it; a Site Admin cannot', function () {
+    $site = sharesSite();
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Hackettstown office']);
+    Location::factory()->create(['site_id' => $site->id, 'name' => 'Montclair office']);
+    /** @var MockSocialProvider $mock */
+    $mock = app(SocialProvider::class);
+    $mock->connect($site->id, [
+        new SocialProfile('locations/555', SocialNetwork::Gbp, 'Sump Pump Today | Pottstown'),
+        new SocialProfile('fb', SocialNetwork::Facebook, 'SPG Page'),
+    ]);
+    app(ChannelSync::class)->sync($site);
+    $channel = SocialChannel::withoutGlobalScopes()->where('provider_channel_id', 'locations/555')->firstOrFail();
+
+    Livewire::test(OperateShares::class)
+        ->assertSee('GBP · Sump Pump Today | Pottstown')
+        ->assertDontSee('Ignored (')
+        ->call('ignoreChannel', $channel->id)
+        ->assertNotified()
+        ->assertSee('Ignored (1)')
+        ->assertDontSee('unmatched — assign office…');
+    expect($channel->fresh()->ignored_at)->not->toBeNull()
+        ->and(SocialChannel::withoutGlobalScopes()->takesShares()->pluck('provider_channel_id')->all())->toBe(['fb']);
+
+    // The sync keeps the operator's decision.
+    app(ChannelSync::class)->sync($site);
+    expect($channel->fresh()->ignored_at)->not->toBeNull();
+
+    Livewire::test(OperateShares::class)->call('restoreChannel', $channel->id)->assertNotified()->assertDontSee('Ignored (');
+    expect($channel->fresh()->ignored_at)->toBeNull();
+
+    $siteAdmin = User::factory()->create(['role' => UserRole::SiteAdmin]);
+    Membership::create(['user_id' => $siteAdmin->id, 'account_id' => $site->account_id, 'site_id' => $site->id, 'role' => UserRole::SiteAdmin]);
+    $this->actingAs($siteAdmin);
+    Livewire::test(OperateShares::class)->call('ignoreChannel', $channel->id);
+    expect($channel->fresh()->ignored_at)->toBeNull();
 });

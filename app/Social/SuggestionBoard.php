@@ -243,6 +243,8 @@ final class SuggestionBoard
                 'location' => $office,
                 'enabled' => $c->enabled,
                 'unmatched' => $c->unmatched(),
+                'ignored' => $c->ignored(),
+                'ignored_at' => $c->ignored_at?->toIso8601String(),
                 'synced_at' => $c->synced_at?->toIso8601String(),
             ];
         })->values()->all();

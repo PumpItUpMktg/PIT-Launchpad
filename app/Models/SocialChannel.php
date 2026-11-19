@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\SocialNetwork;
 use App\Models\Concerns\BelongsToSite;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property string $site_id
  * @property string|null $location_id
  * @property bool $location_locked the operator assigned the location by hand; the sync keeps it
+ * @property Carbon|null $ignored_at set aside by the operator: listed under Ignored, never shared to, restorable
  * @property SocialNetwork $network
  * @property string $provider
  * @property string|null $provider_account the provider profile this channel posts through (a tenant can span several)
@@ -42,9 +44,27 @@ class SocialChannel extends Model
             'network' => SocialNetwork::class,
             'enabled' => 'boolean',
             'location_locked' => 'boolean',
+            'ignored_at' => 'datetime',
             'max_per_day' => 'integer',
             'synced_at' => 'datetime',
         ];
+    }
+
+    /**
+     * The channels that take a share: enabled by the provider and not set aside by the operator.
+     *
+     * @param  Builder<SocialChannel>  $query
+     * @return Builder<SocialChannel>
+     */
+    public function scopeTakesShares(Builder $query): Builder
+    {
+        return $query->where('enabled', true)->whereNull('ignored_at');
+    }
+
+    /** Set aside by the operator — listed under "Ignored", never shared to, restorable. */
+    public function ignored(): bool
+    {
+        return $this->ignored_at !== null;
     }
 
     /** @return BelongsTo<Location, $this> */

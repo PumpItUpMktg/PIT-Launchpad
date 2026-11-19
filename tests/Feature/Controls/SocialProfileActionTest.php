@@ -37,7 +37,7 @@ test('the picker lists the account\'s profiles with what is connected, greys out
 
     $pick = app(ProfilePicker::class)->forSite($site);
     expect(array_keys($pick['options']))->toBe(['OtherClient', 'SPG-Pennsylvania', 'SumpPumpGurus', 'Gone-Profile'])
-        ->and($pick['descriptions']['SumpPumpGurus'])->toBe('Google Business Profile: Eric Wright · Facebook: Sump Pump Gurus Corporate · Instagram: sumppumpgurus')
+        ->and($pick['descriptions']['SumpPumpGurus'])->toBe('GBP: Eric Wright · Facebook: Sump Pump Gurus Corporate · Instagram: sumppumpgurus')
         ->and($pick['descriptions']['OtherClient'])->toBe('Facebook: Other Co · used by Other Co')
         ->and($pick['descriptions']['Gone-Profile'])->toBe('not in the provider account any more')
         ->and($pick['taken'])->toBe(['OtherClient' => 'Other Co'])
