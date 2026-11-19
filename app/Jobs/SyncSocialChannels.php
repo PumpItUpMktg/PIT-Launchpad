@@ -37,7 +37,7 @@ class SyncSocialChannels implements ShouldBeUnique, ShouldQueue
     }
 
     /** Stamp "queued" and dispatch (one in flight per site; a second click while it runs is a no-op). */
-    public static function queue(Site $site): void
+    public static function start(Site $site): void
     {
         $current = self::status((string) $site->id);
         if (in_array($current['state'], ['queued', 'running'], true) && $current['at'] !== null && strtotime($current['at']) > time() - 900) {

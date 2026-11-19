@@ -203,7 +203,7 @@ class OperateShares extends OperatePage
         if ($site === null) {
             return;
         }
-        SyncSocialChannels::queue($site);
+        SyncSocialChannels::start($site);
         $state = SyncSocialChannels::status($this->siteId);
         if ($state['state'] === 'done' && is_array($state['result'])) {
             // The sync queue ran it at once.
