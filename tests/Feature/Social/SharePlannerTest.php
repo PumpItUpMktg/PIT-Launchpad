@@ -25,6 +25,7 @@ use App\Social\SocialSharer;
 use App\Social\SpotlightTowns;
 use App\TownRank\TownRankPoints;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 
 /**
@@ -157,14 +158,17 @@ it('commits a plan: an approved Planned suggestion per item, shares queued for t
         ->and($days[0]['posts'])->toHaveCount(2)
         ->and(collect($days[0]['posts'])->firstWhere('network', 'gbp'))->toMatchArray(['office' => 'Trooper', 'spotlight' => 'Phoenixville', 'trigger' => 'planned']);
 
-    // Reschedule keeps the hour and re-arms the send job; the stale job wakes, sees the future time and re-queues itself.
+    // Reschedule keeps the hour. The job already queued for the old time wakes, sees the future time and re-queues
+    // itself instead of sending (the unique lock from the first dispatch is released before processing; the fake
+    // never releases it, so clear it here to see the re-queue).
     expect($planner->reschedule($gbpFirst, Carbon::parse('2026-11-25')))->toBeTrue()
         ->and($gbpFirst->fresh()->scheduled_for->toDateTimeString())->toBe('2026-11-25 '.sprintf('%02d', (int) config('launchpad.social.slot_hour')).':00:00');
+    Cache::flush();
     (new SendSocialPost($gbpFirst->id))->handle(app(SocialSharer::class));
     /** @var MockSocialProvider $mock */
     $mock = app(SocialProvider::class);
     expect($mock->published)->toBe([])->and($gbpFirst->fresh()->status)->toBe(SocialPostStatus::Queued);
-    Queue::assertPushed(SendSocialPost::class, 6);
+    Queue::assertPushed(SendSocialPost::class, 5);
 
     // Cancel takes it off; a rewrite changes the text; neither touches a share that already went.
     expect($planner->cancel($fbFirst))->toBeTrue()->and($fbFirst->fresh()->status)->toBe(SocialPostStatus::Skipped)
