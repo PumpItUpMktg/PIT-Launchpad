@@ -24,6 +24,17 @@ interface SocialProvider
      */
     public function profiles(Site $site): array;
 
+    /**
+     * Every profile in the agency's provider account, with what is connected on each — the list the operator
+     * picks a tenant's profile from. Tenant segmentation is the pick itself: a site only ever syncs and posts
+     * through the profiles named on its own row.
+     *
+     * @return list<AccountProfile>
+     *
+     * @throws SocialProviderException
+     */
+    public function accountProfiles(): array;
+
     /** @throws SocialProviderException when the provider refuses or the transport fails */
     public function publish(SocialChannel $channel, SocialPost $post): SocialPublishResult;
 }

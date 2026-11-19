@@ -38,19 +38,34 @@
                     <b style="font-size:13px">Channels</b>
                     @forelse ($this->channels as $ch)
                         <span class="sh-pill {{ $ch['enabled'] ? $ch['network'] : 'off' }}" title="{{ $ch['provider_name'] }}">{{ $ch['label'] }}{{ $ch['enabled'] ? '' : ' · gone' }}</span>
-                        @if ($ch['unmatched'] || $ch['locked'])
+                        @if ($this->canManageChannels && ($ch['unmatched'] || $ch['locked']))
                             <select class="sh-select" title="{{ $ch['unmatched'] ? 'This Business Profile could not be tied to an office by its name — it receives no shares until you pick one' : 'Assigned by hand; the sync keeps it' }}" wire:change="assignChannel('{{ $ch['id'] }}', $event.target.value)" style="font-size:11px;padding:2px 4px;border:1px solid {{ $ch['unmatched'] ? '#f59e0b' : '#cbd5e1' }};border-radius:6px;max-width:170px">
                                 <option value="">{{ $ch['unmatched'] ? 'unmatched — assign office…' : 'unassign' }}</option>
                                 @foreach ($this->locationOptions as $lid => $lname)
                                     <option value="{{ $lid }}" @selected($ch['location_id'] === $lid)>{{ $lname }}</option>
                                 @endforeach
                             </select>
+                        @elseif ($ch['unmatched'])
+                            <span class="sh-pill warn" title="This Business Profile is not tied to an office yet; a Super Admin assigns it">unmatched</span>
                         @endif
                     @empty
                         <span class="sub">none connected yet — connect the profiles in the posting provider, then sync</span>
                     @endforelse
                     <button type="button" class="sh-btn" style="margin-left:auto" wire:click="syncChannels" wire:loading.attr="disabled">Sync now</button>
                 </div>
+                @if ($this->canManageChannels)
+                    <div class="sh-line" style="margin-top:8px">
+                        <b style="font-size:12px">Posting profiles</b>
+                        @forelse ($this->profiles['profiles'] as $p)
+                            <span class="sh-pill {{ $p['found'] ? '' : 'warn' }}" title="{{ $p['summary'] }}">{{ $p['name'] }}@if ($p['summary'] !== '') <span style="font-weight:500">· {{ $p['summary'] }}</span>@endif</span>
+                        @empty
+                            <span class="sub">none set — Connections → "Set social posting profile"</span>
+                        @endforelse
+                        @if ($this->profiles['error'] !== null)
+                            <span class="sub" style="color:#b91c1c">{{ $this->profiles['error'] }}</span>
+                        @endif
+                    </div>
+                @endif
                 <div class="sub" style="margin-top:6px">Jobs share on their own when they publish — to the Business Profile of the location that serves the job's town, and the Pages. Posts share on first publish. Everything below is a re-share waiting on you, except rain, which goes on its own.</div>
             </div>
 
