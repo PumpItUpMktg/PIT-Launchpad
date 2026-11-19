@@ -353,7 +353,16 @@ class ConnectionsResource extends Resource
             ->modalDescription('The Upload-Post profile(s) this tenant posts through — pick from what the agency account has. Connect the client\'s Google Business (and Facebook / Instagram) to the profile in Upload-Post first; Operate → Shares → "Sync now" then pulls the locations and Pages. One profile belongs to one tenant.')
             ->schema(function (): array {
                 $site = app(ActiveTenant::class)->site();
-                $pick = $site !== null ? app(ProfilePicker::class)->forSite($site) : null;
+                $pick = null;
+                if ($site !== null) {
+                    // Whatever goes wrong building the pick (provider, cache, data), the modal still opens — on the text box.
+                    try {
+                        $pick = app(ProfilePicker::class)->forSite($site);
+                    } catch (Throwable $e) {
+                        report($e);
+                        $pick = ['options' => [], 'descriptions' => [], 'taken' => [], 'current' => UploadPostSocialProvider::profilesFor($site), 'error' => $e->getMessage()];
+                    }
+                }
                 if ($pick === null || $pick['options'] === []) {
                     // The account could not be listed (or has no profile yet): type the name, as before.
                     return [
@@ -382,7 +391,12 @@ class ConnectionsResource extends Resource
                 if ($site === null) {
                     return;
                 }
-                $taken = app(ProfilePicker::class)->forSite($site)['taken'];
+                try {
+                    $taken = app(ProfilePicker::class)->forSite($site)['taken'];
+                } catch (Throwable $e) {
+                    report($e);
+                    $taken = [];
+                }
                 $names = ProfilePicker::normalise($data['social_profiles'] ?? $data['social_profile'] ?? '', $taken);
                 $profile = implode(', ', $names);
                 $site->forceFill(['social_profile' => $profile !== '' ? $profile : null])->save();
