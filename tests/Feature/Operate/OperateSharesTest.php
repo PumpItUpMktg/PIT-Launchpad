@@ -310,7 +310,7 @@ it('Plan ahead previews dated re-shares with editable copy, queues them, and the
         ->and(array_column($plan, 'date'))->toBe(['2026-11-20', '2026-11-22'])
         ->and($plan[0]['offices'][0]['town'])->toBe('Trooper')
         ->and($page->get('planCopy')[0])->toHaveKeys(['facebook', 'gbp:'.$gbp->id]);
-    $page->assertSee('Queue 2 post(s)')->assertSee('Thu Nov 20')->assertSee('Sat Nov 22');
+    $page->assertSee('Queue 2 post(s)')->assertSee('Fri Nov 20')->assertSee('Sun Nov 22');
 
     $page->set('planCopy.0.facebook', 'Edited for the Page.')->call('queuePlan')->assertNotified('2 post(s) planned, 4 share(s) queued');
     expect($page->get('plan'))->toBe([]);
