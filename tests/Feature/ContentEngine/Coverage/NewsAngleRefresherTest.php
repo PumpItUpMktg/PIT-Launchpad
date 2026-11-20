@@ -8,6 +8,7 @@ use App\Jobs\RefreshPostForNewsAngle;
 use App\Models\Content;
 use App\Models\RefreshEvent;
 use App\Models\Site;
+use Illuminate\Support\Facades\Queue;
 use Tests\Support\FakeClaudeClient;
 
 const NA_GOOD = '{"update": "The Inquirer reports Philadelphia\'s century-old stormwater system is sending water into basements after every heavy rain. If your home sits in one of those low blocks, check that your sump pump\'s check valve closes and that the discharge line clears the foundation before the next storm.", "title": "Sump Pump Maintenance Checklist for Philadelphia Homeowners", "seo_title": "Sump Pump Maintenance Checklist — Philly Storm Edition", "meta_description": "A dated maintenance checklist for Philadelphia basements after the latest stormwater flooding."}';
@@ -100,10 +101,12 @@ it('writes nothing when the response carries no update, and the job records the 
         ->and(RefreshEvent::withoutGlobalScopes()->count())->toBe(0);
 
     // Through the job: enqueue stamps both rows, a failed refresh clears them with the cause.
+    Queue::fake();
     RefreshPostForNewsAngle::enqueue($post, $candidate);
-    expect($post->fresh()->isGenerating())->toBeTrue()->and($candidate->fresh()->meta['coverage']['folding_at'])->not->toBeNull();
+    Queue::assertPushed(RefreshPostForNewsAngle::class);
+    expect($post->fresh()->meta['generating_at'])->not->toBeNull()->and($candidate->fresh()->meta['coverage']['folding_at'])->not->toBeNull();
     (new RefreshPostForNewsAngle($post->id, $candidate->id))->handle(app(NewsAngleRefresher::class));
-    expect($post->fresh()->isGenerating())->toBeFalse()->and($post->fresh()->draftError())->toContain('no update text')
+    expect($post->fresh()->meta)->not->toHaveKey('generating_at')->and($post->fresh()->draftError())->toContain('no update text')
         ->and($candidate->fresh()->meta['coverage'])->not->toHaveKey('folding_at')
         ->and($candidate->fresh()->meta['coverage']['fold_error'])->toContain('no update text')
         ->and($candidate->fresh()->status)->toBe(ContentStatus::Candidate);

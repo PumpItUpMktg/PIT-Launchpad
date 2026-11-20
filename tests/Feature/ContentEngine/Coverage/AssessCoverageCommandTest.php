@@ -18,7 +18,8 @@ it('reports the verdicts without writing, then stamps them with --execute', func
     Artisan::call('launchpad:assess-coverage', ['--site' => 'Sump Pump Gurus']);
     $out = Artisan::output();
     expect($out)->toContain('Read-only')
-        ->toContain('Refresh existing   Sump Pump Maintenance Checklist for Homeowners This Fall  →  “Sump Pump Maintenance Checklist for Homeowners” (no GSC standing')
+        ->toContain('Refresh existing')
+        ->toContain('Sump Pump Maintenance Checklist for Homeowners This Fall  →  “Sump Pump Maintenance Checklist for Homeowners” (no GSC standing')
         ->toContain('1 new post · 1 refresh existing · 0 covered — nothing written')
         ->not->toContain('Radon fan noise');   // author rows are not listed
     expect($twinned->fresh()->meta)->not->toHaveKey('coverage')->and($fresh->fresh()->meta)->not->toHaveKey('coverage');

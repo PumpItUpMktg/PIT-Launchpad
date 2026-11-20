@@ -53,7 +53,7 @@ it('shows the coverage verdict on the candidate card, holds a plain Promote, let
 
     $page->call('foldIntoTwin', (string) $candidate->id);
     Queue::assertPushed(RefreshPostForNewsAngle::class, fn (RefreshPostForNewsAngle $j) => $j->postId === (string) $post->id && $j->candidateId === (string) $candidate->id);
-    expect($post->fresh()->isGenerating())->toBeTrue()->and($candidate->fresh()->meta['coverage']['folding_at'])->not->toBeNull();
+    expect($post->fresh()->meta['generating_at'])->not->toBeNull()->and($candidate->fresh()->meta['coverage']['folding_at'])->not->toBeNull();
 
     // While it folds the card shows the state and a second click is refused.
     Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)->assertSee('folding into the existing post')

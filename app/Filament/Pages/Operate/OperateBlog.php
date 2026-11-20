@@ -275,7 +275,8 @@ class OperateBlog extends OperatePage
 
             return;
         }
-        if ($post->isGenerating() || isset($candidate->meta['coverage']['folding_at'])) {
+        // A live post has a body, so isGenerating() reads "drafted" — the marker itself is the in-flight signal here.
+        if (($post->meta['generating_at'] ?? null) !== null || isset($candidate->meta['coverage']['folding_at'])) {
             Notification::make()->title('Already refreshing.')->send();
 
             return;
