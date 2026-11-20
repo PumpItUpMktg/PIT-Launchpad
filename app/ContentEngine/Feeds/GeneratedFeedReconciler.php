@@ -2,6 +2,8 @@
 
 namespace App\ContentEngine\Feeds;
 
+use App\ContentEngine\Geography\Footprint;
+use App\ContentEngine\Geography\UsStates;
 use App\Enums\FeedOrigin;
 use App\Enums\SourceType;
 use App\Models\Keyword;
@@ -12,7 +14,14 @@ use App\Models\Source;
 
 /**
  * Keeps the generated feeds current as a materialized projection of the §5
- * keyword map × the site's markets. One feed per (routable keyword × market).
+ * keyword map × the site's geography. Two shapes (`launchpad.feeds.generated.scope`):
+ *
+ *   - `states` (default): ONE feed per routable keyword, the search scoped to the tenant's footprint states
+ *     (`sump pump (Maryland OR "New Jersey" OR Pennsylvania)`). Checked live: a city-scoped search ("sump
+ *     pump Trooper PA") returns 0–3 items and a bare keyword returns 12–33 almost all out of market, while
+ *     the state-scoped search returns 5–17 with the clear majority anchored in the footprint. A tenant whose
+ *     footprint is unknown falls back to the market shape.
+ *   - `markets` (legacy): one feed per (routable keyword × market), the market's "City ST" in the query.
  *
  * Idempotent on TWO keys, which is what stops the regeneration that ballooned the
  * feed table (11k+ on SPG, most producing nothing):
@@ -44,7 +53,7 @@ class GeneratedFeedReconciler
     ) {}
 
     /**
-     * @return array{upserted: int, deactivated: int, held_markets_skipped: int, url_duplicates_skipped: int}
+     * @return array{upserted: int, deactivated: int, held_markets_skipped: int, url_duplicates_skipped: int, scope: string}
      */
     public function reconcile(Site $site): array
     {
@@ -67,22 +76,32 @@ class GeneratedFeedReconciler
         // markets are ALL held generates nothing — a held market must not silently become a national feed.
         $marketOptions = $allMarkets->isEmpty() ? [null] : $activeMarkets;
 
+        // The state shape: one search per keyword over the footprint states. The all-held rule above still
+        // applies (no feeds at all); an unknown footprint falls back to the market shape.
+        $states = [];
+        $scope = (string) config('launchpad.feeds.generated.scope', 'states');
+        if ($scope === 'states' && $marketOptions !== []) {
+            $states = Footprint::forSite($site)->states;
+        }
+        $shape = $states !== [] ? 'states' : 'markets';
+
         // PASS 1: compute the live set, de-duping by URL within the run so two signatures whose query
         // resolves to the same Google-News search never both hold an enabled feed. No DB writes yet.
-        /** @var array<string, array{keyword: Keyword, market: ?Market, url: string}> $live */
+        /** @var array<string, array{keyword: Keyword, market: ?Market, states: list<string>, url: string}> $live */
         $live = [];
         $claimedUrls = [];
         $urlDupsSkipped = 0;
         foreach ($keywords as $keyword) {
-            foreach ($marketOptions as $market) {
-                $url = $this->feedUrl($keyword, $market);
+            $options = $shape === 'states' ? [null] : $marketOptions;
+            foreach ($options as $market) {
+                $url = $this->feedUrl($keyword, $market, $states);
                 if (isset($claimedUrls[$url])) {
                     $urlDupsSkipped++;
 
                     continue; // another signature already owns this exact search — one feed is enough
                 }
                 $claimedUrls[$url] = true;
-                $live[$this->signature($keyword, $market)] = ['keyword' => $keyword, 'market' => $market, 'url' => $url];
+                $live[$this->signature($keyword, $market, $states)] = ['keyword' => $keyword, 'market' => $market, 'states' => $states, 'url' => $url];
             }
         }
 
@@ -99,7 +118,7 @@ class GeneratedFeedReconciler
                     'type' => SourceType::RssFeed->value,
                     'silo_id' => $spec['keyword']->silo_id,
                     'url' => $spec['url'],
-                    'label' => $this->label($spec['keyword'], $spec['market']),
+                    'label' => $this->label($spec['keyword'], $spec['market'], $spec['states']),
                     'enabled' => true,
                 ],
             );
@@ -110,17 +129,45 @@ class GeneratedFeedReconciler
             'deactivated' => $deactivated,
             'held_markets_skipped' => $heldSkipped,
             'url_duplicates_skipped' => $urlDupsSkipped,
+            'scope' => $shape,
         ];
     }
 
-    private function signature(Keyword $keyword, ?Market $market): string
+    /** @param  list<string>  $states */
+    private function signature(Keyword $keyword, ?Market $market, array $states = []): string
     {
+        if ($states !== []) {
+            return 'kw:'.$keyword->id.':states:'.implode('-', $states);
+        }
+
         return 'kw:'.$keyword->id.':mkt:'.($market !== null ? $market->id : 'national');
     }
 
-    private function feedUrl(Keyword $keyword, ?Market $market): string
+    /**
+     * The Google News `q`: the keyword, then the geography — the footprint states OR'd by full name (full
+     * names only: "PA" matches "repair"), or the legacy market's "City ST".
+     *
+     * @param  list<string>  $states
+     */
+    public static function query(string $keyword, ?string $marketLabel, array $states = []): string
     {
-        $query = trim($keyword->query.($market !== null ? ' '.$this->marketLabel($market) : ''));
+        if ($states !== []) {
+            $names = array_map(function (string $code): string {
+                $name = UsStates::name($code);
+
+                return str_contains($name, ' ') ? '"'.$name.'"' : $name;
+            }, $states);
+
+            return trim($keyword).' ('.implode(' OR ', $names).')';
+        }
+
+        return trim($keyword.($marketLabel !== null && $marketLabel !== '' ? ' '.$marketLabel : ''));
+    }
+
+    /** @param  list<string>  $states */
+    private function feedUrl(Keyword $keyword, ?Market $market, array $states = []): string
+    {
+        $query = self::query((string) $keyword->query, $market !== null ? $this->marketLabel($market) : null, $states);
 
         return rtrim($this->baseUrl, '/').'/rss/search?'.http_build_query([
             'q' => $query,
@@ -130,8 +177,13 @@ class GeneratedFeedReconciler
         ]);
     }
 
-    private function label(Keyword $keyword, ?Market $market): string
+    /** @param  list<string>  $states */
+    private function label(Keyword $keyword, ?Market $market, array $states = []): string
     {
+        if ($states !== []) {
+            return $keyword->query.' · '.implode(', ', $states).' (Google News)';
+        }
+
         return $keyword->query.($market !== null ? ' · '.$this->marketLabel($market) : '').' (Google News)';
     }
 

@@ -354,6 +354,11 @@ It lives under `app/ContentEngine/` and builds on §1 + §4.
   backup on an NJ/PA brand); `region` is kept `general`; a placeless how-to is `unknown` and never a geography
   drop. Stamped on `meta.story_place` / `meta.place_scope`. `launchpad:report-candidate-geography` (read-only)
   scores the current backlog against the footprint — one narrow `PlaceExtractor` call per un-stamped row.
+  **Generated feeds are state-scoped** (`feeds.generated.scope=states`, default): `GeneratedFeedReconciler`
+  makes ONE Google News search per routable keyword over the footprint states by full name (`sump pump
+  (Maryland OR "New Jersey" OR Pennsylvania)`) — a city-scoped search returns 0–3 items and a bare keyword
+  returns national noise. `markets` is the legacy keyword × "City ST" shape; an unknown footprint falls back
+  to it; every-market-held still generates nothing.
 - **Near-dup** (`NearDuplicateDetector`): semantic similarity (embeddings, scoped
   to the matched silo) + keyword overlap; very-high vs a live page → **refresh**
   mark (don't duplicate) + operator alert; moderate → operator flag; low →

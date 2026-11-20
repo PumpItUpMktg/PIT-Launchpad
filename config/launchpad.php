@@ -400,6 +400,10 @@ return [
         'ingest_budget_seconds' => (float) env('LAUNCHPAD_FEED_INGEST_BUDGET_SECONDS', 2400),
 
         'generated' => [
+            // Search shape: `states` = one feed per keyword scoped to the tenant's footprint states (full
+            // names OR'd — the shape that returns footprint-anchored items); `markets` = the legacy one feed
+            // per keyword × market with "City ST" in the query (returns almost nothing for a small town).
+            'scope' => env('LAUNCHPAD_FEED_SCOPE', 'states'),
             'base_url' => env('GOOGLE_NEWS_BASE_URL', 'https://news.google.com'),
             'hl' => env('GOOGLE_NEWS_HL', 'en-US'),
             'gl' => env('GOOGLE_NEWS_GL', 'US'),

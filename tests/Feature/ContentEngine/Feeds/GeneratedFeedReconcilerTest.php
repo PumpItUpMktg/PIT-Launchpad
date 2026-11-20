@@ -15,6 +15,9 @@ function reconciler(): GeneratedFeedReconciler
     return new GeneratedFeedReconciler('https://news.google.com', 'en-US', 'US', 'US:en');
 }
 
+// The market shape is the legacy one — these tests pin it; the state-shape tests below set the default back.
+beforeEach(fn () => config(['launchpad.feeds.generated.scope' => 'markets']));
+
 function generatedFeeds(string $siteId)
 {
     return Source::where('site_id', $siteId)->where('origin', FeedOrigin::Generated->value)->get();
@@ -163,4 +166,60 @@ it('the partial unique index rejects a second ENABLED feed at the same URL, but 
     // A DISABLED duplicate is fine — history/provenance is kept, only one may be live.
     $disabled = Source::factory()->create(['site_id' => $site->id, 'url' => $url, 'enabled' => false]);
     expect($disabled->exists)->toBeTrue();
+});
+
+it('the default state shape makes ONE feed per keyword, the search scoped to the footprint states by full name', function () {
+    config(['launchpad.feeds.generated.scope' => 'states']);
+    $site = Site::factory()->create(['corporate_state' => 'NJ']);
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    $sumpKeyword = Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'sump pump']);
+    Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'french drain']);
+    Market::factory()->create(['site_id' => $site->id, 'name' => 'Trooper', 'region' => 'PA']);
+    Market::factory()->create(['site_id' => $site->id, 'name' => 'Fallston', 'region' => 'MD']);
+    Market::factory()->create(['site_id' => $site->id, 'name' => 'Montclair', 'region' => 'NJ']);
+
+    $result = reconciler()->reconcile($site);
+
+    expect($result['upserted'])->toBe(2)->and($result['scope'])->toBe('states');
+    $feeds = generatedFeeds($site->id);
+    expect($feeds)->toHaveCount(2);
+    $sump = $feeds->firstWhere('label', 'sump pump · MD, NJ, PA (Google News)');
+    expect($sump)->not->toBeNull()
+        ->and($sump->silo_id)->toBe($silo->id)
+        ->and($sump->derived_from)->toBe('kw:'.$sumpKeyword->id.':states:MD-NJ-PA')
+        ->and(urldecode($sump->url))->toContain('q=sump pump (Maryland OR "New Jersey" OR Pennsylvania)');
+
+    // Switching shapes retires the other shape's feeds (deactivation, never deletion) and re-running is idempotent.
+    config(['launchpad.feeds.generated.scope' => 'markets']);
+    $legacy = reconciler()->reconcile($site);
+    expect($legacy['scope'])->toBe('markets')->and($legacy['upserted'])->toBe(6)->and($legacy['deactivated'])->toBe(2);
+    expect(generatedFeeds($site->id)->where('enabled', true))->toHaveCount(6)
+        ->and(generatedFeeds($site->id)->where('enabled', false))->toHaveCount(2);
+    config(['launchpad.feeds.generated.scope' => 'states']);
+    reconciler()->reconcile($site);
+    reconciler()->reconcile($site);
+    expect(generatedFeeds($site->id)->where('enabled', true))->toHaveCount(2)->and(generatedFeeds($site->id))->toHaveCount(8);
+});
+
+it('the state shape falls back to the market shape when the footprint is unknown, and still makes nothing when every market is held', function () {
+    config(['launchpad.feeds.generated.scope' => 'states']);
+    $site = Site::factory()->create(['corporate_state' => null]);
+    $silo = Silo::factory()->create(['site_id' => $site->id]);
+    Keyword::factory()->create(['site_id' => $site->id, 'silo_id' => $silo->id, 'query' => 'sump pump']);
+
+    // No geography at all → national, as before.
+    $result = reconciler()->reconcile($site);
+    expect($result['scope'])->toBe('markets')->and(generatedFeeds($site->id)->first()->derived_from)->toEndWith(':mkt:national');
+
+    // Every market held → nothing, as before (the held market's state must not quietly become a state feed).
+    Market::factory()->create(['site_id' => $site->id, 'name' => 'Trooper', 'region' => 'PA', 'on_hold' => true]);
+    $held = reconciler()->reconcile($site);
+    expect($held['upserted'])->toBe(0)->and($held['held_markets_skipped'])->toBe(1)
+        ->and(generatedFeeds($site->id)->where('enabled', true))->toHaveCount(0);
+});
+
+it('builds the state query with full state names, quoting the two-word ones', function () {
+    expect(GeneratedFeedReconciler::query('sump pump', null, ['MD', 'NJ', 'PA']))->toBe('sump pump (Maryland OR "New Jersey" OR Pennsylvania)')
+        ->and(GeneratedFeedReconciler::query('sump pump', 'Austin TX'))->toBe('sump pump Austin TX')
+        ->and(GeneratedFeedReconciler::query('sump pump', null))->toBe('sump pump');
 });
