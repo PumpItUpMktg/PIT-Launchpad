@@ -51,23 +51,28 @@ final class DuplicatePostResolver
      *
      * @param  list<string>  $keep  content ids to pin as keepers (per group)
      * @return list<array{
-     *   title: string, key: string, resolvable: bool, reason: string,
+     *   title: string, key: string, kind: string, signals: list<string>, resolvable: bool, reason: string,
      *   keeper: ?array{content_id:string, slug:string, path:string, url:?string, impressions:int},
      *   losers: list<array{content_id:string, slug:string, from:string, to:string, url:?string, impressions:int}>,
      *   members: list<array{content_id:string, slug:string, impressions:int, position:?float, numbered:bool}>
      * }>
      */
-    public function plan(Site $site, int $days = 28, array $keep = []): array
+    public function plan(Site $site, int $days = 28, array $keep = [], bool $includeNear = false): array
     {
         $rows = [];
         foreach ($this->metrics->report($site, $days) as $group) {
             $members = $group['members'];
+            $kind = (string) ($group['kind'] ?? 'slug');
+            $signals = (array) ($group['signals'] ?? []);
             $maxImpr = max(array_map(fn (array $m): int => $m['impressions'], $members));
             $topEarners = array_values(array_filter($members, fn (array $m): bool => $m['impressions'] === $maxImpr));
 
             // A per-group operator override wins over the rule; two overrides in one group can't be settled.
             $pinned = array_values(array_filter($members, fn (array $m): bool => in_array($m['content_id'], $keep, true)));
             [$keeperMember, $reason] = match (true) {
+                // A near-duplicate (different slugs, grouped by title / shared queries) is reported, never
+                // resolved, until the operator opts in: a wrong merge deletes a real post.
+                $kind !== 'slug' && ! $includeNear && count($pinned) !== 1 => [null, 'near-duplicate (pass --include-near, or pin with --keep)'],
                 count($pinned) === 1 => [$pinned[0], 'operator-override'],
                 count($pinned) > 1 => [null, 'override-conflict'],
                 default => $this->selectKeeper($members, $maxImpr, $topEarners),
@@ -80,7 +85,7 @@ final class DuplicatePostResolver
 
             if ($keeperMember === null) {
                 $rows[] = [
-                    'title' => $group['title'], 'key' => $group['key'], 'resolvable' => false, 'reason' => $reason,
+                    'title' => $group['title'], 'key' => $group['key'], 'kind' => $kind, 'signals' => $signals, 'resolvable' => false, 'reason' => $reason,
                     'keeper' => null, 'losers' => [], 'members' => $memberView,
                 ];
 
@@ -101,7 +106,7 @@ final class DuplicatePostResolver
             }
 
             $rows[] = [
-                'title' => $group['title'], 'key' => $group['key'], 'resolvable' => true, 'reason' => $reason,
+                'title' => $group['title'], 'key' => $group['key'], 'kind' => $kind, 'signals' => $signals, 'resolvable' => true, 'reason' => $reason,
                 'keeper' => [
                     'content_id' => $keeperMember['content_id'], 'slug' => $keeperMember['slug'],
                     'path' => $toPath, 'url' => $keeperMember['url'], 'impressions' => $keeperMember['impressions'],
@@ -140,10 +145,10 @@ final class DuplicatePostResolver
      * @param  list<string>  $keep  content ids to pin as keepers (per group), threaded to {@see plan()}
      * @return list<array{title:string, from:string, to:string, redirected:bool, verified:bool, removed:bool, note:string}>
      */
-    public function apply(Site $site, int $days = 28, array $keep = []): array
+    public function apply(Site $site, int $days = 28, array $keep = [], bool $includeNear = false): array
     {
         $out = [];
-        foreach ($this->plan($site, $days, $keep) as $group) {
+        foreach ($this->plan($site, $days, $keep, $includeNear) as $group) {
             if (! $group['resolvable']) {
                 continue;
             }

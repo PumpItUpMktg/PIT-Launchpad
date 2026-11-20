@@ -4,6 +4,7 @@ use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Models\Content;
 use App\Models\GscUrlDaily;
+use App\Models\GscUrlQueryDaily;
 use App\Models\PageIndexState;
 use App\Models\Site;
 use App\Operator\Coverage\DuplicatePostMetrics;
@@ -125,4 +126,52 @@ it('reports a clean tenant as a real "nothing" result', function () {
     $code = Artisan::call('launchpad:report-duplicate-posts', ['--site' => $site->id]);
 
     expect($code)->toBe(0)->and(Artisan::output())->toContain('No live duplicate blog posts found.');
+});
+
+function dupGscQuery(Site $s, string $url, string $query, int $impr): void
+{
+    GscUrlQueryDaily::create([
+        'site_id' => $s->id, 'grain_hash' => hash('sha256', $url.'|'.$query), 'date' => now()->subDay()->toDateString(),
+        'url' => $url, 'query' => $query, 'country' => 'usa', 'device' => 'DESKTOP', 'impressions' => $impr, 'clicks' => 0, 'ctr' => 0, 'position' => 8.0,
+    ]);
+}
+
+it('groups near-duplicates with different slugs by title similarity, and at a lower similarity only when they share ranking queries; unrelated posts stay apart', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    // Same story, two slugs — the title pass alone catches it (Jaccard 1.0 once stopwords go).
+    $ventA = dupPost($site, 'Sump Pump Vent: What It Does and Why It Matters', 'sump-pump-vent-what-it-does-and-why-it-matters', 'published', '2026-07-01');
+    $ventB = dupPost($site, 'Sump Pump Vent: What It Is and Why It Matters', 'sump-pump-vent-what-it-is-and-why-it-matters', 'published', '2026-08-01');
+    // Titles only half alike — grouped because both take impressions for the same two queries.
+    $costA = dupPost($site, 'Sump Pump Renovation Cost: A Complete Homeowner Guide', 'sump-pump-renovation-cost-a-complete-homeowner-guide', 'published', '2026-07-05');
+    $costB = dupPost($site, 'What Does It Cost to Renovate a Sump Pump Pit in 2026', 'what-does-it-cost-to-renovate-a-sump-pump-pit-in-2026', 'published', '2026-09-01');
+    dupGscQuery($site, 'https://spg.example/sump-pump-renovation-cost-a-complete-homeowner-guide/', 'sump pump renovation cost', 90);
+    dupGscQuery($site, 'https://spg.example/sump-pump-renovation-cost-a-complete-homeowner-guide/', 'how to remodel sump pump', 4);
+    dupGscQuery($site, 'https://spg.example/what-does-it-cost-to-renovate-a-sump-pump-pit-in-2026/', 'sump pump renovation cost', 30);
+    dupGscQuery($site, 'https://spg.example/what-does-it-cost-to-renovate-a-sump-pump-pit-in-2026/', 'how to remodel sump pump', 2);
+    dupGscDay($site, 'https://spg.example/sump-pump-renovation-cost-a-complete-homeowner-guide/', now()->subDay()->toDateString(), 94, 0, 9.0);
+    // Related topic, different story — shares two words, no shared queries: stays its own post.
+    dupPost($site, 'Best Sump Pump Brands to Protect Your Basement', 'best-sump-pump-brands-to-protect-your-basement', 'published', '2026-06-01');
+    // Half-alike titles with NO shared queries — not grouped.
+    dupPost($site, 'Sump Pump Alarm Going Off: Causes and What to Do Now', 'sump-pump-alarm-going-off-causes', 'published', '2026-06-02');
+    dupPost($site, 'Sump Pump Alarm Keeps Beeping at Night: Causes and Fixes', 'sump-pump-alarm-keeps-beeping', 'published', '2026-06-03');
+
+    $report = app(DuplicatePostMetrics::class)->report($site, 28);
+    $byKind = collect($report)->groupBy('kind');
+
+    expect($report)->toHaveCount(2);
+    $vent = collect($report)->first(fn (array $g): bool => in_array($ventA->id, array_column($g['members'], 'content_id'), true));
+    expect($vent['kind'])->toBe('title')
+        ->and(collect($vent['members'])->pluck('content_id')->sort()->values()->all())->toBe(collect([$ventA->id, $ventB->id])->sort()->values()->all())
+        ->and($vent['signals'][0])->toStartWith('title: 1.00')
+        ->and($vent['key'])->toBe('sump-pump-vent-what-it-does-and-why-it-matters')
+        ->and($vent['members'][0]['numbered'])->toBeFalse();
+
+    $cost = collect($report)->first(fn (array $g): bool => in_array($costA->id, array_column($g['members'], 'content_id'), true));
+    expect($cost['kind'])->toBe('title+queries')
+        ->and(collect($cost['members'])->pluck('content_id')->sort()->values()->all())->toBe(collect([$costA->id, $costB->id])->sort()->values()->all())
+        ->and($cost['signals'])->toHaveCount(2)
+        ->and($cost['signals'][1])->toContain('queries: 2 shared')->toContain('sump pump renovation cost')
+        ->and($cost['earner_id'])->toBe($costA->id);
+
+    expect(DuplicatePostMetrics::titleTokens('Sump Pump Design Ideas 2025: Smarter Setups'))->toBe(['sump', 'pump', 'design', 'idea', 'smarter', 'setup']);
 });

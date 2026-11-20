@@ -187,3 +187,34 @@ it('command is report-only by default, prints blocked members with their content
         ->and(Redirect::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->count())->toBe(0)
         ->and(Content::withoutGlobalScope(SiteScope::class)->find($original->id))->not->toBeNull();
 });
+
+it('a near-duplicate group (different slugs) is reported but not resolved until --include-near, or a --keep pin', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    $a = rPost($site, 'Sump Pump Vent: What It Does and Why It Matters', 'sump-pump-vent-what-it-does-and-why-it-matters', 300);
+    $b = rPost($site, 'Sump Pump Vent: What It Is and Why It Matters', 'sump-pump-vent-what-it-is-and-why-it-matters', 301);
+    rGsc($site, 'https://spg.example/sump-pump-vent-what-it-does-and-why-it-matters/', 250, 5.0);
+    rGsc($site, 'https://spg.example/sump-pump-vent-what-it-is-and-why-it-matters/', 40, 7.0);
+
+    $plan = app(DuplicatePostResolver::class)->plan($site, 28);
+    expect($plan)->toHaveCount(1)
+        ->and($plan[0]['kind'])->toBe('title')
+        ->and($plan[0]['resolvable'])->toBeFalse()
+        ->and($plan[0]['reason'])->toContain('near-duplicate');
+
+    $opted = app(DuplicatePostResolver::class)->plan($site, 28, [], includeNear: true);
+    expect($opted[0]['resolvable'])->toBeTrue()
+        ->and($opted[0]['reason'])->toBe('earner')
+        ->and($opted[0]['keeper']['content_id'])->toBe($a->id)
+        ->and($opted[0]['losers'][0]['from'])->toBe('/sump-pump-vent-what-it-is-and-why-it-matters')
+        ->and($opted[0]['losers'][0]['to'])->toBe('/sump-pump-vent-what-it-does-and-why-it-matters');
+
+    // A pin settles it without the flag — the operator named the winner.
+    $pinned = app(DuplicatePostResolver::class)->plan($site, 28, [$b->id]);
+    expect($pinned[0]['resolvable'])->toBeTrue()->and($pinned[0]['reason'])->toBe('operator-override')->and($pinned[0]['keeper']['content_id'])->toBe($b->id);
+
+    // Nothing is written without the flag, even with --execute.
+    rFakeWp();
+    Artisan::call('launchpad:resolve-duplicate-posts', ['--site' => $site->id, '--days' => 28, '--execute' => true]);
+    expect(Redirect::withoutGlobalScope(SiteScope::class)->count())->toBe(0)
+        ->and(Artisan::output())->toContain('BLOCKED')->toContain('near-duplicate');
+});
