@@ -344,7 +344,9 @@ final class DuplicatePostMetrics
     }
 
     /**
-     * Jaccard on token sets where each token counts its rarity weight (an unseen token counts as rare).
+     * Jaccard on token sets where each token counts its rarity weight (an unseen token counts as rare). When the
+     * weights carry no information — every token of both titles sits in every title on the site, as on a two-post
+     * site — the plain token Jaccard decides instead of a zero-by-zero.
      *
      * @param  list<string>  $a  @param  list<string>  $b
      * @param  array<string, float>  $weights
@@ -365,7 +367,7 @@ final class DuplicatePostMetrics
             $union += $w($t);
         }
 
-        return $union > 0 ? $inter / $union : 0.0;
+        return $union > 0 ? $inter / $union : QuestionCluster::jaccard($a, $b);
     }
 
     /** Title tokens for similarity: the question tokenizer, minus years ("2025", "2026") and bare numbers. @return list<string> */

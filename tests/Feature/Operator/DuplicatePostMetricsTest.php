@@ -190,7 +190,7 @@ it('never chains: a post joins a group only when it pairs with every member, and
     $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
     // Filler so the common words earn their low weight.
     foreach (['Radon Fan Installation Explained', 'Basement Waterproofing Membrane Options', 'Sewer Line Camera Inspection Explained', 'Crawl Space Dehumidifier Sizing', 'Downspout Extension Ideas for Wet Yards', 'French Drain Depth and Gravel'] as $i => $t) {
-        dupPost($site, $t, 'filler-'.$i, 'published', '2026-05-01');
+        dupPost($site, $t, 'filler-'.chr(97 + $i), 'published', '2026-05-01');
     }
     // A–B cannibalise, B–C cannibalise, A–C do not. Chaining would make one group of three.
     $a = dupPost($site, 'Sump Pump Float Switch Problems', 'sump-pump-float-switch-problems', 'published', '2026-06-01');
@@ -208,7 +208,7 @@ it('never chains: a post joins a group only when it pairs with every member, and
     $oil = dupPost($site, 'Sump Pump Oil: What Every Homeowner Needs to Know', 'sump-pump-oil-what-every-homeowner-needs-to-know', 'published', '2026-06-10');
     $elec = dupPost($site, 'Sump Pump Electrical Requirements: What Every Homeowner Should Know', 'sump-pump-electrical-requirements-every-homeowner-should-know', 'published', '2026-06-11');
     foreach (['Sump Pump Codes: What Every Homeowner Should Know', 'Sump Pump Excavation: What Every Homeowner Should Know', 'Sump Pump Warranty: What Every Homeowner Should Know', 'Sump Pump Radon Mitigation: What Every Homeowner Should Know'] as $i => $t) {
-        dupPost($site, $t, 'boiler-'.$i, 'published', '2026-06-12');
+        dupPost($site, $t, 'boiler-'.chr(97 + $i), 'published', '2026-06-12');
     }
 
     $report = app(DuplicatePostMetrics::class)->report($site, 28);
@@ -222,12 +222,15 @@ it('never chains: a post joins a group only when it pairs with every member, and
         ->and(in_array($elec->id, $members, true))->toBeFalse()
         ->and($report[0]['kind'])->toBe('title+queries');
     expect(DuplicatePostMetrics::weightedJaccard(['sump', 'pump', 'oil', 'what', 'every', 'homeowner', 'know'], ['sump', 'pump', 'electrical', 'requirement', 'what', 'every', 'homeowner', 'know'], ['sump' => 0.0, 'pump' => 0.0, 'what' => 0.1, 'every' => 0.1, 'homeowner' => 0.1, 'know' => 0.1, 'oil' => 1.6, 'electrical' => 1.6, 'requirement' => 1.6]))->toBeLessThan(0.1);
+    // Weights that carry no information (every token in every title — a two-post site) fall back to the plain Jaccard.
+    expect(DuplicatePostMetrics::weightedJaccard(['sump', 'pump', 'vent'], ['sump', 'pump', 'vent'], ['sump' => 0.0, 'pump' => 0.0, 'vent' => 0.0]))->toBe(1.0)
+        ->and(DuplicatePostMetrics::weightedJaccard(['sump', 'pump', 'vent'], ['sump', 'pump', 'alarm'], ['sump' => 0.0, 'pump' => 0.0, 'vent' => 0.0, 'alarm' => 0.0]))->toBe(0.5);
 });
 
 it('flags a near group above the size cap as oversized — a chain the operator splits by hand', function () {
     $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
     for ($i = 0; $i < 5; $i++) {
-        dupPost($site, 'Flood Watch NJ: What It Means', 'flood-watch-nj-variant-'.$i, 'published', '2026-06-0'.($i + 1));
+        dupPost($site, 'Flood Watch NJ: What It Means', 'flood-watch-nj-take-'.chr(97 + $i), 'published', '2026-06-0'.($i + 1));
     }
     $report = app(DuplicatePostMetrics::class)->report($site, 28);
     expect($report)->toHaveCount(1)->and($report[0]['members'])->toHaveCount(5)->and($report[0]['oversized'])->toBeTrue();
