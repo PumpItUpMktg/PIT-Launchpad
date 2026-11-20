@@ -61,7 +61,7 @@ class ReportDuplicatePostsCommand extends Command
                 if ($g['age_conflict']) {
                     $grandConflicts++;
                 }
-                $kind = ($g['kind'] ?? 'slug') === 'slug' ? '' : ' <fg=magenta>near-duplicate · '.implode(' · ', (array) ($g['signals'] ?? [])).'</>';
+                $kind = $g['kind'] === 'slug' ? '' : ' <fg=magenta>near-duplicate · '.implode(' · ', $g['signals']).'</>';
                 $this->line("  <comment>{$g['title']}</comment> — ".count($g['members'])." live posts:{$kind}{$conflict}");
                 foreach ($g['members'] as $m) {
                     $pos = $m['position'] !== null ? (string) $m['position'] : '—';

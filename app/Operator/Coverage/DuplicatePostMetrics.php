@@ -178,7 +178,7 @@ final class DuplicatePostMetrics
         foreach ($posts as $post) {
             $parent[(string) $post->id] = (string) $post->id;
         }
-        $find = function (string $x) use (&$parent, &$find): string {
+        $find = function (string $x) use (&$parent): string {
             while ($parent[$x] !== $x) {
                 $parent[$x] = $parent[$parent[$x]];
                 $x = $parent[$x];

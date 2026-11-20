@@ -79,7 +79,7 @@ class ResolveDuplicatePostsCommand extends Command
 
                 if (! $g['resolvable']) {
                     $grandBlocked++;
-                    $near = ($g['kind'] ?? 'slug') !== 'slug' ? ' <fg=magenta>'.implode(' · ', (array) ($g['signals'] ?? [])).'</>' : '';
+                    $near = $g['kind'] !== 'slug' ? ' <fg=magenta>'.implode(' · ', $g['signals']).'</>' : '';
                     $this->line("  · <fg=yellow>BLOCKED</> ({$g['reason']}) <comment>{$g['title']}</comment>{$near} — decide by hand, then pass --keep=<id>:");
                     foreach ($g['members'] as $m) {
                         $pos = $m['position'] !== null ? (string) $m['position'] : '—';
@@ -91,7 +91,7 @@ class ResolveDuplicatePostsCommand extends Command
 
                 $keeper = $g['keeper'];
                 $tag = $g['reason'] === 'operator-override' ? '<fg=cyan>[--keep]</>' : "[{$g['reason']}]";
-                $near = ($g['kind'] ?? 'slug') !== 'slug' ? ' <fg=magenta>near-duplicate · '.implode(' · ', (array) ($g['signals'] ?? [])).'</>' : '';
+                $near = $g['kind'] !== 'slug' ? ' <fg=magenta>near-duplicate · '.implode(' · ', $g['signals']).'</>' : '';
                 $this->line("  · <comment>{$g['title']}</comment> — keep {$tag} <info>{$keeper['path']}</info> (impr {$keeper['impressions']}):{$near}");
                 foreach ($g['losers'] as $loser) {
                     $grandRedirects++;

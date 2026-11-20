@@ -62,8 +62,8 @@ final class DuplicatePostResolver
         $rows = [];
         foreach ($this->metrics->report($site, $days) as $group) {
             $members = $group['members'];
-            $kind = (string) ($group['kind'] ?? 'slug');
-            $signals = (array) ($group['signals'] ?? []);
+            $kind = $group['kind'];
+            $signals = $group['signals'];
             $maxImpr = max(array_map(fn (array $m): int => $m['impressions'], $members));
             $topEarners = array_values(array_filter($members, fn (array $m): bool => $m['impressions'] === $maxImpr));
 
