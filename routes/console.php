@@ -107,6 +107,9 @@ Schedule::command('sandhog:sync-ga4')->daily()->withoutOverlapping()->onOneServe
 // table. Daily; withoutOverlapping so a slow multi-tenant pull can't stack. This
 // is what stops the rolling 16-month window from erasing history.
 Schedule::command('launchpad:sync-gsc')->daily()->withoutOverlapping()->onOneServer();
+// Coverage verdicts go stale as posts publish and standings move: re-stamp every open blog candidate daily,
+// after the GSC sync so the twin's standing is current (embeddings are cached by text — a cheap pass).
+Schedule::command('launchpad:assess-coverage --all --execute')->dailyAt('05:40')->withoutOverlapping()->onOneServer();
 
 // Social: channels come from the posting provider (daily); the re-share rules run after the Search Console
 // sync — upward movement → the board, heavy rain → an automatic share drawn from the rain pool.

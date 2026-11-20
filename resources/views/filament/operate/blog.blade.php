@@ -145,6 +145,21 @@
                     @endforeach
                 </div>
             @endif
+            @php $cov = $this->coverageCheckState; $covBusy = in_array($cov['state'], ['queued', 'running'], true); @endphp
+            @if ($siteFilter)
+                {{-- Coverage re-check: every open candidate against the live posts, on the worker; polls while it runs. --}}
+                <div class="ob-card" style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center" @if ($covBusy) wire:poll.visible.10s @endif>
+                    <span class="ob-chip">Coverage</span>
+                    <span class="ob-muted">
+                        @if ($covBusy) Checking every open candidate against the live posts…
+                        @elseif ($cov['state'] === 'done' && is_array($cov['result'])) Last check: {{ $cov['result']['checked'] ?? 0 }} candidate(s) · {{ $cov['result']['author'] ?? 0 }} new post · {{ $cov['result']['refresh'] ?? 0 }} refresh existing · {{ $cov['result']['covered'] ?? 0 }} covered @if ($cov['at']) · {{ \Illuminate\Support\Carbon::parse($cov['at'])->diffForHumans() }}@endif
+                        @elseif ($cov['state'] === 'failed') <span style="color:#dc2626">Last check failed: {{ $cov['error'] }}</span>
+                        @else Verdicts are stamped at ingest and re-checked daily; re-check now after a post publishes.
+                        @endif
+                    </span>
+                    <button type="button" class="ob-btn" style="margin-left:auto" wire:click="recheckCoverage" wire:loading.attr="disabled" wire:target="recheckCoverage" @disabled($covBusy)>{{ $covBusy ? 'Checking…' : 'Re-check coverage' }}</button>
+                </div>
+            @endif
             <div class="ob-grid">
                 @forelse ($this->candidates as $c)
                     <div class="ob-card" wire:key="obc-{{ $c['id'] }}">

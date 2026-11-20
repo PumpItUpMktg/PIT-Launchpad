@@ -371,7 +371,9 @@ It lives under `app/ContentEngine/` and builds on §1 + §4.
   same-topic title scores 0.68–0.80 on the live model, an unrelated neighbour 0.61–0.67; overlap never clears
   0.31 for news). `launchpad:assess-coverage --nearest` prints every candidate's closest live post with both
   scores, floors ignored. Stamped on `meta.coverage` at ingest (`launchpad:assess-coverage`
-  backfills, report-first). The Candidates card shows the pill + twin + standing; a plain Promote is HELD on
+  backfills, report-first); re-stamped daily (`--all --execute`, 05:40, after the GSC sync) and on demand from
+  the Candidates board's **Re-check coverage** (`RecheckCandidateCoverage`, one queued job per site, state on
+  the panel, polls while it runs — never inside a web request). The Candidates card shows the pill + twin + standing; a plain Promote is HELD on
   refresh/covered ("Promote anyway" overrides; `launchpad:generate-post --force` likewise). **"Refresh
   existing post"** → `RefreshPostForNewsAngle` → `NewsAngleRefresher`: ONE model call → a dated
   `.lp-news-update` block at the top (after the question-answer block when present) citing the outlet, a
