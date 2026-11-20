@@ -359,6 +359,18 @@ It lives under `app/ContentEngine/` and builds on §1 + §4.
   (Maryland OR "New Jersey" OR Pennsylvania)`) — a city-scoped search returns 0–3 items and a bare keyword
   returns national noise. `markets` is the legacy keyword × "City ST" shape; an unknown footprint falls back
   to it; every-market-held still generates nothing.
+- **Coverage verdict** (`app/ContentEngine/Coverage/`): before any draft, `CandidateCoverage` checks every
+  candidate for a LIVE post whose title reads as its topic (title against title, each detector signal to its
+  own floor — `coverage.twin_semantic` / `twin_overlap`; the funnel's `near_dup_of_content_id` counts when
+  it points at a live post) and that post's Search Console standing (`PostStanding`, `gsc_url_daily` by path).
+  No twin → `author`; twin near the top (`covered_max_position`, `covered_min_impressions`) and no topical hook
+  → `covered`; any other twin → `refresh`. Stamped on `meta.coverage` at ingest (`launchpad:assess-coverage`
+  backfills, report-first). The Candidates card shows the pill + twin + standing; a plain Promote is HELD on
+  refresh/covered ("Promote anyway" overrides; `launchpad:generate-post --force` likewise). **"Refresh
+  existing post"** → `RefreshPostForNewsAngle` → `NewsAngleRefresher`: ONE model call → a dated
+  `.lp-news-update` block at the top (after the question-answer block when present) citing the outlet, a
+  title/SEO proposal kept in `meta.news_refresh.proposal`, version +1, `RefreshEvent` NewsDevelopment,
+  `needs_review`; the candidate is rejected "Folded into …" (`meta.coverage.folded_into`). Never automatic.
 - **Near-dup** (`NearDuplicateDetector`): semantic similarity (embeddings, scoped
   to the matched silo) + keyword overlap; very-high vs a live page → **refresh**
   mark (don't duplicate) + operator alert; moderate → operator flag; low →

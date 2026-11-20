@@ -2,6 +2,7 @@
 
 namespace App\ContentEngine;
 
+use App\ContentEngine\Coverage\CandidateCoverage;
 use App\ContentEngine\Geography\Footprint;
 use App\Enums\AlertType;
 use App\Enums\ContentKind;
@@ -39,6 +40,7 @@ class CandidateFunnel
         private readonly BackfillSplitter $splitter,
         private readonly ReactiveTopicGate $topicGate,
         private readonly DuplicateGuard $guard,
+        private readonly CandidateCoverage $coverage,
     ) {}
 
     /**
@@ -232,6 +234,9 @@ class CandidateFunnel
             $flagged = $dup->tier === NearDupTier::OperatorFlag;
             $status = $relevance->band === RelevanceBand::Borderline || $flagged ? ContentStatus::InReview : ContentStatus::Candidate;
             $content = $this->createCandidate($site, $item, $relevance, $status, $flagged ? $dup->similarToContentId : null);
+            // Coverage verdict (author / refresh / covered) against the posts already live — stamped on the row so
+            // the board can steer the operator to the existing post before a second one is drafted.
+            $this->coverage->stamp($site, $content);
             // Both candidate + in_review are "unreviewed" — count this new row toward the silo's backlog.
             $backlog[$siloId] = $siloBacklog + 1;
 

@@ -482,7 +482,8 @@ test('a story the scorer anchors beyond the region ring is dropped as out_of_foo
     expect($by('Buffalo')->meta['place_scope'])->toBe('region')->and($by('Buffalo')->meta['story_place'])->toBe('Buffalo, NY')
         ->and($by('Buffalo')->meta['scope'])->toBe('general')->and($by('Buffalo')->local_relevance)->toBeFalse()
         ->and($by('Camden')->meta['place_scope'])->toBe('footprint')->and($by('Camden')->meta['scope'])->toBe('local')->and($by('Camden')->local_relevance)->toBeTrue()
-        ->and($by('gadget')->meta['place_scope'])->toBe('unknown')->and($by('gadget')->meta['story_place'])->toBeNull();
+        ->and($by('gadget')->meta['place_scope'])->toBe('unknown')->and($by('gadget')->meta['story_place'])->toBeNull()
+        ->and($by('gadget')->meta['coverage']['verdict'])->toBe('author');   // the coverage verdict is stamped at ingest too
 
     // With the drop switched off the out-of-market story is kept, stamped `outside`, so the board can still show it.
     config(['launchpad.reactive.geography.drop_outside' => false]);

@@ -3,14 +3,17 @@
 namespace App\Filament\Pages\Operate;
 
 use App\ContentEngine\BlogQueue\BlogTargetQueue;
+use App\ContentEngine\Coverage\CoverageDecision;
 use App\ContentEngine\Feeds\BlogPopulator;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\CoverageVerdict;
 use App\Filament\Resources\ContentReviewResource;
 use App\Jobs\GeneratePost;
 use App\Jobs\PopulateBlog;
 use App\Jobs\PublishContent;
+use App\Jobs\RefreshPostForNewsAngle;
 use App\Jobs\RefreshPostForQuestion;
 use App\Models\BlogTarget;
 use App\Models\Content;
@@ -188,11 +191,25 @@ class OperateBlog extends OperatePage
 
     // ── Candidate actions ───────────────────────────────────────────────────
 
-    /** Promote → drafting, via the existing queued generate path. */
-    public function promote(string $contentId): void
+    /**
+     * Promote → drafting, via the existing queued generate path. A candidate whose coverage verdict names a
+     * live twin (refresh / covered) is held unless the operator promotes it anyway — the default is the
+     * existing post, never a second one on the same topic.
+     */
+    public function promote(string $contentId, bool $force = false): void
     {
         $content = $this->ownedPost($contentId);
         if ($content === null) {
+            return;
+        }
+
+        $decision = CoverageDecision::fromMeta($content->meta['coverage'] ?? null);
+        if (! $force && $decision !== null && $decision->verdict !== CoverageVerdict::Author) {
+            Notification::make()->warning()
+                ->title($decision->verdict->label().' — “'.($decision->twinTitle ?? 'an existing post').'” already covers this')
+                ->body($decision->reason.' Use “Refresh existing post” to fold the hook into it, or “Promote anyway” for a separate post.')
+                ->send();
+
             return;
         }
 
@@ -235,6 +252,42 @@ class OperateBlog extends OperatePage
     }
 
     /** Dismiss at triage — recorded as a rejection so the pipeline never resurfaces it. */
+    /**
+     * Fold a candidate's news hook into the live post its coverage verdict named: queues the news-angle
+     * refresh (one model call on the worker). The post comes back to the Review tab as a refresh card with
+     * the headline diff; the candidate closes as "folded into …".
+     */
+    public function foldIntoTwin(string $candidateId): void
+    {
+        $candidate = $this->ownedPost($candidateId);
+        if ($candidate === null) {
+            return;
+        }
+        $decision = CoverageDecision::fromMeta($candidate->meta['coverage'] ?? null);
+        if ($decision === null || $decision->twinId === null) {
+            Notification::make()->warning()->title('No existing post to refresh — this candidate has no coverage twin.')->send();
+
+            return;
+        }
+        $post = $this->ownedPost($decision->twinId);
+        if ($post === null || $post->status !== ContentStatus::Published) {
+            Notification::make()->warning()->title('The existing post is not live right now — it is already in the pipeline.')->send();
+
+            return;
+        }
+        if ($post->isGenerating() || isset($candidate->meta['coverage']['folding_at'])) {
+            Notification::make()->title('Already refreshing.')->send();
+
+            return;
+        }
+
+        RefreshPostForNewsAngle::enqueue($post, $candidate, actorId: Auth::id());
+        Notification::make()->success()
+            ->title("Refreshing '{$post->title}'")
+            ->body('The news hook is being folded in on the worker — the post lands on the Review tab with the diff; this candidate closes as folded.')
+            ->send();
+    }
+
     public function dismissCandidate(string $contentId): void
     {
         $content = $this->ownedPost($contentId);
