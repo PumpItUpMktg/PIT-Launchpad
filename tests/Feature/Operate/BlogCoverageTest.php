@@ -48,8 +48,10 @@ it('shows the coverage verdict on the candidate card, holds a plain Promote, let
     Queue::assertNotPushed(GeneratePost::class);
     expect($candidate->fresh()->isGenerating())->toBeFalse();
 
-    $page->call('promote', (string) $candidate->id, true);
-    Queue::assertPushed(GeneratePost::class, fn (GeneratePost $j) => $j->contentId === (string) $candidate->id);
+    // Promote anyway drafts a separate post (and, as any promote does, marks that row generating — so it uses its own row here).
+    $separate = Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Candidate, 'title' => 'Sump Pump Maintenance Checklist in Winter', 'body' => null, 'meta' => $candidate->meta]);
+    $page->call('promote', (string) $separate->id, true);
+    Queue::assertPushed(GeneratePost::class, fn (GeneratePost $j) => $j->contentId === (string) $separate->id);
 
     $page->call('foldIntoTwin', (string) $candidate->id);
     Queue::assertPushed(RefreshPostForNewsAngle::class, fn (RefreshPostForNewsAngle $j) => $j->postId === (string) $post->id && $j->candidateId === (string) $candidate->id);
