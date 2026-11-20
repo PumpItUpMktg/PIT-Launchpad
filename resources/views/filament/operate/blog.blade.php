@@ -152,7 +152,7 @@
                     <span class="ob-chip">Coverage</span>
                     <span class="ob-muted">
                         @if ($covBusy) Checking every open candidate against the live posts…
-                        @elseif ($cov['state'] === 'done' && is_array($cov['result'])) Last check: {{ $cov['result']['checked'] ?? 0 }} candidate(s) · {{ $cov['result']['author'] ?? 0 }} new post · {{ $cov['result']['refresh'] ?? 0 }} refresh existing · {{ $cov['result']['covered'] ?? 0 }} covered@if ($cov['at']) · {{ \Illuminate\Support\Carbon::parse($cov['at'])->diffForHumans() }}@endif
+                        @elseif ($cov['state'] === 'done' && is_array($cov['result'])) Last check: {{ $cov['result']['checked'] ?? 0 }} candidate(s) · {{ $cov['result']['author'] ?? 0 }} new post · {{ $cov['result']['refresh'] ?? 0 }} refresh existing · {{ $cov['result']['covered'] ?? 0 }} covered @if ($cov['at']) · {{ \Illuminate\Support\Carbon::parse($cov['at'])->diffForHumans() }}@endif
                         @elseif ($cov['state'] === 'failed') <span style="color:#dc2626">Last check failed: {{ $cov['error'] }}</span>
                         @else Verdicts are stamped at ingest and re-checked daily; re-check now after a post publishes.
                         @endif
