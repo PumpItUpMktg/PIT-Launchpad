@@ -70,6 +70,8 @@ final class DuplicatePostResolver
             // A per-group operator override wins over the rule; two overrides in one group can't be settled.
             $pinned = array_values(array_filter($members, fn (array $m): bool => in_array($m['content_id'], $keep, true)));
             [$keeperMember, $reason] = match (true) {
+                // A near group this large is a chain, whatever the signals say — a human splits it.
+                $group['oversized'] => [null, 'oversized near-duplicate group — split it by hand'],
                 // A near-duplicate (different slugs, grouped by title / shared queries) is reported, never
                 // resolved, until the operator opts in: a wrong merge deletes a real post.
                 $kind !== 'slug' && ! $includeNear && count($pinned) !== 1 => [null, 'near-duplicate (pass --include-near, or pin with --keep)'],
