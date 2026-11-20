@@ -4,11 +4,13 @@ use App\Enums\ContentStatus;
 use App\Enums\UserRole;
 use App\Filament\Pages\Operate\OperateBlog;
 use App\Jobs\GeneratePost;
+use App\Jobs\RecheckCandidateCoverage;
 use App\Jobs\RefreshPostForNewsAngle;
 use App\Models\Content;
 use App\Models\Site;
 use App\Models\User;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
@@ -78,4 +80,24 @@ it('refuses the fold when the twin is not live, and shows the news refresh diff 
         ->assertSee('Sump Pump Maintenance Checklist for Philly')
         ->call('foldIntoTwin', (string) $candidate->id);
     Queue::assertNotPushed(RefreshPostForNewsAngle::class);
+});
+
+it('Re-check coverage queues the per-site job and the board shows the state, then the last result', function () {
+    Queue::fake();
+    [$site] = coverageFixture();
+
+    $page = Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)
+        ->assertSee('Re-check coverage')
+        ->assertSee('re-checked daily')
+        ->call('recheckCoverage');
+    Queue::assertPushed(RecheckCandidateCoverage::class, fn (RecheckCandidateCoverage $j) => $j->siteId === (string) $site->id);
+    expect(RecheckCandidateCoverage::status($site->id)['state'])->toBe('queued');
+    Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)->assertSee('Checking…')->assertSee('Checking every open candidate');
+
+    Cache::put('coverage.recheck.'.$site->id, ['state' => 'done', 'at' => now()->toIso8601String(), 'result' => ['checked' => 20, 'author' => 11, 'refresh' => 9, 'covered' => 0]], 60);
+    Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)->assertSee('Last check: 20 candidate(s) · 11 new post · 9 refresh existing · 0 covered');
+
+    // Without a tenant the panel is not shown and the action only warns.
+    Livewire::test(OperateBlog::class)->assertDontSee('Re-check coverage')->call('recheckCoverage');
+    Queue::assertPushed(RecheckCandidateCoverage::class, 1);
 });

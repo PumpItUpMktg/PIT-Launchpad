@@ -13,6 +13,7 @@ use App\Filament\Resources\ContentReviewResource;
 use App\Jobs\GeneratePost;
 use App\Jobs\PopulateBlog;
 use App\Jobs\PublishContent;
+use App\Jobs\RecheckCandidateCoverage;
 use App\Jobs\RefreshPostForNewsAngle;
 use App\Jobs\RefreshPostForQuestion;
 use App\Models\BlogTarget;
@@ -28,6 +29,7 @@ use App\Publishing\RepushPublished;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Url;
+use Throwable;
 
 /**
  * Operate · Blog — ONE surface for the whole post pipeline: Candidates → Review → Published,
@@ -252,6 +254,54 @@ class OperateBlog extends OperatePage
     }
 
     /** Dismiss at triage — recorded as a rejection so the pipeline never resurfaces it. */
+    /**
+     * Re-check the coverage verdict on every open candidate of the active tenant — on the worker (the first
+     * pass embeds every live title). The board shows the state and polls until the verdicts land.
+     */
+    public function recheckCoverage(): void
+    {
+        if ($this->siteFilter === null) {
+            Notification::make()->warning()->title('Pick a tenant first')->body('Coverage is checked per tenant — choose one from the Portfolio.')->send();
+
+            return;
+        }
+        $site = Site::query()->find($this->siteFilter);
+        if ($site === null) {
+            return;
+        }
+        RecheckCandidateCoverage::start($site);
+        $state = RecheckCandidateCoverage::status($this->siteFilter);
+        if ($state['state'] === 'done' && is_array($state['result'])) {
+            // The sync queue ran it at once.
+            $r = $state['result'];
+            Notification::make()->success()->title(sprintf('%d candidate(s) checked', $r['checked'] ?? 0))
+                ->body(sprintf('%d new post · %d refresh existing · %d covered', $r['author'] ?? 0, $r['refresh'] ?? 0, $r['covered'] ?? 0))->send();
+
+            return;
+        }
+        if ($state['state'] === 'failed') {
+            Notification::make()->danger()->title('Coverage check failed')->body($state['error'])->send();
+
+            return;
+        }
+        Notification::make()->title('Checking coverage on the worker')->body('The cards update themselves as the verdicts land.')->send();
+    }
+
+    /** @return array{state: string, at: string|null, result: array<string, int>|null, error: string|null} */
+    public function getCoverageCheckStateProperty(): array
+    {
+        if ($this->siteFilter === null) {
+            return ['state' => 'idle', 'at' => null, 'result' => null, 'error' => null];
+        }
+        try {
+            return RecheckCandidateCoverage::status($this->siteFilter);
+        } catch (Throwable $e) {
+            report($e);
+
+            return ['state' => 'failed', 'at' => null, 'result' => null, 'error' => 'coverage state unreadable: '.get_class($e).': '.$e->getMessage()];
+        }
+    }
+
     /**
      * Fold a candidate's news hook into the live post its coverage verdict named: queues the news-angle
      * refresh (one model call on the worker). The post comes back to the Review tab as a refresh card with
