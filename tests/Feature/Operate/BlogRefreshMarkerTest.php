@@ -89,7 +89,7 @@ it('the "Refreshed posts" choice narrows every tab to refreshed posts', function
     Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)->set('siloFilter', $filter)->set('tab', 'published')
         ->assertSee('Live refreshed post')->assertDontSee('Live plain post');
 
-    // Without the choice every post shows.
-    Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)->set('tab', 'published')
+    // Without the choice every post shows (the filter is remembered across visits, so it is cleared explicitly).
+    Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)->set('siloFilter', '')->set('tab', 'published')
         ->assertSee('Live refreshed post')->assertSee('Live plain post');
 });
