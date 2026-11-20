@@ -218,3 +218,14 @@ it('a near-duplicate group (different slugs) is reported but not resolved until 
     expect(Redirect::withoutGlobalScope(SiteScope::class)->count())->toBe(0)
         ->and(Artisan::output())->toContain('BLOCKED')->toContain('near-duplicate');
 });
+
+it('an oversized near group is blocked even with --include-near', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    for ($i = 0; $i < 5; $i++) {
+        rPost($site, 'Flood Watch NJ: What It Means', 'flood-watch-nj-variant-'.$i, 400 + $i);
+    }
+    rGsc($site, 'https://spg.example/flood-watch-nj-variant-0/', 50, 9.0);
+
+    $plan = app(DuplicatePostResolver::class)->plan($site, 28, [], includeNear: true);
+    expect($plan)->toHaveCount(1)->and($plan[0]['resolvable'])->toBeFalse()->and($plan[0]['reason'])->toContain('oversized');
+});

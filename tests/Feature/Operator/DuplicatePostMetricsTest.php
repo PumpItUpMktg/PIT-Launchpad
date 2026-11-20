@@ -136,25 +136,34 @@ function dupGscQuery(Site $s, string $url, string $query, int $impr): void
     ]);
 }
 
-it('groups near-duplicates with different slugs by title similarity, and at a lower similarity only when they share ranking queries; unrelated posts stay apart', function () {
+it('groups near-duplicates with different slugs by rarity-weighted title similarity, or by observed cannibalisation (the smaller post earns most of its impressions on shared queries); unrelated posts stay apart', function () {
     $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
-    // Same story, two slugs — the title pass alone catches it (Jaccard 1.0 once stopwords go).
+    // Same story, two slugs — the title pass alone catches it (every token shared).
     $ventA = dupPost($site, 'Sump Pump Vent: What It Does and Why It Matters', 'sump-pump-vent-what-it-does-and-why-it-matters', 'published', '2026-07-01');
     $ventB = dupPost($site, 'Sump Pump Vent: What It Is and Why It Matters', 'sump-pump-vent-what-it-is-and-why-it-matters', 'published', '2026-08-01');
-    // Titles only half alike — grouped because both take impressions for the same two queries.
+    // Titles only part alike — grouped because the smaller post takes every impression on queries the other ranks for.
     $costA = dupPost($site, 'Sump Pump Renovation Cost: A Complete Homeowner Guide', 'sump-pump-renovation-cost-a-complete-homeowner-guide', 'published', '2026-07-05');
-    // Tokens: {sump, pump, renovation, cost, complete, homeowner, guide} vs {how, much, sump, pump, renovation, cost} → 4/9 = 0.44.
-    $costB = dupPost($site, 'How Much Does a Sump Pump Renovation Cost in 2026', 'how-much-does-a-sump-pump-renovation-cost-in-2026', 'published', '2026-09-01');
+    $costB = dupPost($site, 'Sump Pump Renovation Cost: How Much Homeowners Pay', 'sump-pump-renovation-cost-how-much-homeowners-pay', 'published', '2026-09-01');
     dupGscQuery($site, 'https://spg.example/sump-pump-renovation-cost-a-complete-homeowner-guide/', 'sump pump renovation cost', 90);
     dupGscQuery($site, 'https://spg.example/sump-pump-renovation-cost-a-complete-homeowner-guide/', 'how to remodel sump pump', 4);
-    dupGscQuery($site, 'https://spg.example/how-much-does-a-sump-pump-renovation-cost-in-2026/', 'sump pump renovation cost', 30);
-    dupGscQuery($site, 'https://spg.example/how-much-does-a-sump-pump-renovation-cost-in-2026/', 'how to remodel sump pump', 2);
-    dupGscDay($site, 'https://spg.example/sump-pump-renovation-cost-a-complete-homeowner-guide/', now()->subDay()->toDateString(), 94, 0, 9.0);
-    // Related topic, different story — shares two words, no shared queries: stays its own post.
+    dupGscQuery($site, 'https://spg.example/sump-pump-renovation-cost-a-complete-homeowner-guide/', 'sump pump pit makeover', 20);
+    dupGscQuery($site, 'https://spg.example/sump-pump-renovation-cost-how-much-homeowners-pay/', 'sump pump renovation cost', 30);
+    dupGscQuery($site, 'https://spg.example/sump-pump-renovation-cost-how-much-homeowners-pay/', 'how to remodel sump pump', 2);
+    dupGscDay($site, 'https://spg.example/sump-pump-renovation-cost-a-complete-homeowner-guide/', now()->subDay()->toDateString(), 114, 0, 9.0);
+    // Related topic, different story — no rare word in common, no shared queries: stays its own post.
     dupPost($site, 'Best Sump Pump Brands to Protect Your Basement', 'best-sump-pump-brands-to-protect-your-basement', 'published', '2026-06-01');
-    // Half-alike titles with NO shared queries — not grouped.
+    // Alike only in the common words — not grouped.
     dupPost($site, 'Sump Pump Alarm Going Off: Causes and What to Do Now', 'sump-pump-alarm-going-off-causes', 'published', '2026-06-02');
     dupPost($site, 'Sump Pump Alarm Keeps Beeping at Night: Causes and Fixes', 'sump-pump-alarm-keeps-beeping', 'published', '2026-06-03');
+    // Two posts that share THREE queries but the smaller one earns most of its impressions elsewhere — not cannibalising.
+    $loud = dupPost($site, 'How Loud Is a Sump Pump and When Should You Worry', 'how-loud-is-a-sump-pump', 'published', '2026-06-04');
+    $often = dupPost($site, 'How Often Should a Sump Pump Run and When to Worry', 'how-often-should-a-sump-pump-run', 'published', '2026-06-05');
+    foreach (['sump pump runs every 30 seconds' => [5, 200], 'how long should a sump pump run' => [3, 150], 'how often should a sump pump run' => [2, 400]] as $q => [$a, $b]) {
+        dupGscQuery($site, 'https://spg.example/how-loud-is-a-sump-pump/', $q, $a);
+        dupGscQuery($site, 'https://spg.example/how-often-should-a-sump-pump-run/', $q, $b);
+    }
+    dupGscQuery($site, 'https://spg.example/how-loud-is-a-sump-pump/', 'how loud is a sump pump', 180);
+    dupGscQuery($site, 'https://spg.example/how-loud-is-a-sump-pump/', 'sump pump noise', 60);
 
     $report = app(DuplicatePostMetrics::class)->report($site, 28);
 
@@ -162,17 +171,64 @@ it('groups near-duplicates with different slugs by title similarity, and at a lo
     $vent = collect($report)->first(fn (array $g): bool => in_array($ventA->id, array_column($g['members'], 'content_id'), true));
     expect($vent['kind'])->toBe('title')
         ->and(collect($vent['members'])->pluck('content_id')->sort()->values()->all())->toBe(collect([$ventA->id, $ventB->id])->sort()->values()->all())
-        ->and($vent['signals'][0])->toStartWith('title: 1.00')
-        ->and($vent['key'])->toBe('sump-pump-vent-what-it-does-and-why-it-matters')
-        ->and($vent['members'][0]['numbered'])->toBeFalse();
+        ->and($vent['signals'][0])->toBe('title: 1.00')
+        ->and($vent['oversized'])->toBeFalse();
 
     $cost = collect($report)->first(fn (array $g): bool => in_array($costA->id, array_column($g['members'], 'content_id'), true));
     expect($cost['kind'])->toBe('title+queries')
         ->and(collect($cost['members'])->pluck('content_id')->sort()->values()->all())->toBe(collect([$costA->id, $costB->id])->sort()->values()->all())
-        ->and($cost['signals'])->toHaveCount(2)
-        ->and($cost['signals'][0])->toBe('title: 0.44')
-        ->and($cost['signals'][1])->toContain('queries: 2 shared')->toContain('sump pump renovation cost')
+        ->and($cost['signals'][1])->toContain('queries: 2 shared, 100% of the smaller post')->toContain('sump pump renovation cost')
         ->and($cost['earner_id'])->toBe($costA->id);
 
+    expect(collect($report)->contains(fn (array $g): bool => in_array($loud->id, array_column($g['members'], 'content_id'), true)))->toBeFalse()
+        ->and(collect($report)->contains(fn (array $g): bool => in_array($often->id, array_column($g['members'], 'content_id'), true)))->toBeFalse();
+
     expect(DuplicatePostMetrics::titleTokens('Sump Pump Design Ideas 2025: Smarter Setups'))->toBe(['sump', 'pump', 'design', 'idea', 'smarter', 'setup']);
+});
+
+it('never chains: a post joins a group only when it pairs with every member, and boilerplate titles do not make a pair', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    // Filler so the common words earn their low weight.
+    foreach (['Radon Fan Installation Explained', 'Basement Waterproofing Membrane Options', 'Sewer Line Camera Inspection Explained', 'Crawl Space Dehumidifier Sizing', 'Downspout Extension Ideas for Wet Yards', 'French Drain Depth and Gravel'] as $i => $t) {
+        dupPost($site, $t, 'filler-'.$i, 'published', '2026-05-01');
+    }
+    // A–B cannibalise, B–C cannibalise, A–C do not. Chaining would make one group of three.
+    $a = dupPost($site, 'Sump Pump Float Switch Problems', 'sump-pump-float-switch-problems', 'published', '2026-06-01');
+    $b = dupPost($site, 'Sump Pump Float Switch Fixes', 'sump-pump-float-switch-fixes', 'published', '2026-06-02');
+    $c = dupPost($site, 'Sump Pump Float Switch Replacement Cost', 'sump-pump-float-switch-replacement-cost', 'published', '2026-06-03');
+    foreach (['float switch stuck' => [40, 300], 'sump pump float switch problems' => [60, 200]] as $q => [$x, $y]) {
+        dupGscQuery($site, 'https://spg.example/sump-pump-float-switch-problems/', $q, $x);
+        dupGscQuery($site, 'https://spg.example/sump-pump-float-switch-fixes/', $q, $y);
+    }
+    foreach (['float switch replacement' => [100, 30], 'sump pump switch cost' => [80, 20]] as $q => [$x, $y]) {
+        dupGscQuery($site, 'https://spg.example/sump-pump-float-switch-fixes/', $q, $x);
+        dupGscQuery($site, 'https://spg.example/sump-pump-float-switch-replacement-cost/', $q, $y);
+    }
+    // Boilerplate: "what every homeowner should know" on six different stories — none of them pair.
+    $oil = dupPost($site, 'Sump Pump Oil: What Every Homeowner Needs to Know', 'sump-pump-oil-what-every-homeowner-needs-to-know', 'published', '2026-06-10');
+    $elec = dupPost($site, 'Sump Pump Electrical Requirements: What Every Homeowner Should Know', 'sump-pump-electrical-requirements-every-homeowner-should-know', 'published', '2026-06-11');
+    foreach (['Sump Pump Codes: What Every Homeowner Should Know', 'Sump Pump Excavation: What Every Homeowner Should Know', 'Sump Pump Warranty: What Every Homeowner Should Know', 'Sump Pump Radon Mitigation: What Every Homeowner Should Know'] as $i => $t) {
+        dupPost($site, $t, 'boiler-'.$i, 'published', '2026-06-12');
+    }
+
+    $report = app(DuplicatePostMetrics::class)->report($site, 28);
+
+    expect($report)->toHaveCount(1);
+    $members = collect($report[0]['members'])->pluck('content_id')->sort()->values()->all();
+    // The stronger pair forms the group; the third post fails against one member and stays out.
+    expect(count($members))->toBe(2)
+        ->and(in_array($b->id, $members, true))->toBeTrue()
+        ->and(in_array($oil->id, $members, true))->toBeFalse()
+        ->and(in_array($elec->id, $members, true))->toBeFalse()
+        ->and($report[0]['kind'])->toBe('title+queries');
+    expect(DuplicatePostMetrics::weightedJaccard(['sump', 'pump', 'oil', 'what', 'every', 'homeowner', 'know'], ['sump', 'pump', 'electrical', 'requirement', 'what', 'every', 'homeowner', 'know'], ['sump' => 0.0, 'pump' => 0.0, 'what' => 0.1, 'every' => 0.1, 'homeowner' => 0.1, 'know' => 0.1, 'oil' => 1.6, 'electrical' => 1.6, 'requirement' => 1.6]))->toBeLessThan(0.1);
+});
+
+it('flags a near group above the size cap as oversized — a chain the operator splits by hand', function () {
+    $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
+    for ($i = 0; $i < 5; $i++) {
+        dupPost($site, 'Flood Watch NJ: What It Means', 'flood-watch-nj-variant-'.$i, 'published', '2026-06-0'.($i + 1));
+    }
+    $report = app(DuplicatePostMetrics::class)->report($site, 28);
+    expect($report)->toHaveCount(1)->and($report[0]['members'])->toHaveCount(5)->and($report[0]['oversized'])->toBeTrue();
 });
