@@ -43,7 +43,7 @@ it('resolves state codes and names, and the adjacency table is symmetric', funct
 
     foreach (UsStates::NEIGHBORS as $state => $neighbors) {
         foreach ($neighbors as $n) {
-            expect(UsStates::NEIGHBORS[$n])->toContain($state, "{$n} should list {$state}");
+            expect(in_array($state, UsStates::NEIGHBORS[$n], true))->toBeTrue("{$n} should list {$state}");
         }
     }
 });
