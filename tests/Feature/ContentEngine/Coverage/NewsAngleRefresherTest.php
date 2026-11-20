@@ -10,9 +10,9 @@ use App\Models\RefreshEvent;
 use App\Models\Site;
 use Tests\Support\FakeClaudeClient;
 
-const NEWS_GOOD = '{"update": "The Inquirer reports Philadelphia\'s century-old stormwater system is sending water into basements after every heavy rain. If your home sits in one of those low blocks, check that your sump pump\'s check valve closes and that the discharge line clears the foundation before the next storm.", "title": "Sump Pump Maintenance Checklist for Philadelphia Homeowners", "seo_title": "Sump Pump Maintenance Checklist — Philly Storm Edition", "meta_description": "A dated maintenance checklist for Philadelphia basements after the latest stormwater flooding."}';
+const NA_GOOD = '{"update": "The Inquirer reports Philadelphia\'s century-old stormwater system is sending water into basements after every heavy rain. If your home sits in one of those low blocks, check that your sump pump\'s check valve closes and that the discharge line clears the foundation before the next storm.", "title": "Sump Pump Maintenance Checklist for Philadelphia Homeowners", "seo_title": "Sump Pump Maintenance Checklist — Philly Storm Edition", "meta_description": "A dated maintenance checklist for Philadelphia basements after the latest stormwater flooding."}';
 
-function newsPost(Site $site, array $overrides = []): Content
+function naPost(Site $site, array $overrides = []): Content
 {
     return Content::factory()->post()->create(array_merge([
         'site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'sump-pump-maintenance-checklist',
@@ -23,7 +23,7 @@ function newsPost(Site $site, array $overrides = []): Content
     ], $overrides));
 }
 
-function newsCandidate(Site $site, Content $post): Content
+function naCandidate(Site $site, Content $post): Content
 {
     return Content::factory()->post()->create([
         'site_id' => $site->id, 'status' => ContentStatus::Candidate, 'title' => 'Philly has 100-year-old stormwater infrastructure and 72,000 easily clogged inlets',
@@ -33,10 +33,10 @@ function newsCandidate(Site $site, Content $post): Content
 }
 
 it('folds the hook into the live post: a dated update block after the answer block, the outlet cited, a headline proposal with the diff, the refresh shape, and the candidate closed as folded', function () {
-    app()->instance(ClaudeClient::class, $fake = new FakeClaudeClient(NEWS_GOOD));
+    app()->instance(ClaudeClient::class, $fake = new FakeClaudeClient(NA_GOOD));
     $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
-    $post = newsPost($site);
-    $candidate = newsCandidate($site, $post);
+    $post = naPost($site);
+    $candidate = naCandidate($site, $post);
 
     $result = app(NewsAngleRefresher::class)->refresh($post, $candidate);
     $post->refresh();
@@ -75,8 +75,8 @@ it('folds the hook into the live post: a dated update block after the answer blo
 it('a re-run replaces the earlier update block; a post with no answer block gets the update first; the title stays when the model returns it unchanged', function () {
     app()->instance(ClaudeClient::class, new FakeClaudeClient('{"update": "Second update.", "title": "", "seo_title": "", "meta_description": ""}'));
     $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
-    $post = newsPost($site, ['body' => '<div class="lp-news-update"><p><strong>Update (Oct 2026):</strong> First update.</p></div><p>Core paragraph.</p>']);
-    $candidate = newsCandidate($site, $post);
+    $post = naPost($site, ['body' => '<div class="lp-news-update"><p><strong>Update (Oct 2026):</strong> First update.</p></div><p>Core paragraph.</p>']);
+    $candidate = naCandidate($site, $post);
 
     app(NewsAngleRefresher::class)->refresh($post, $candidate);
     $post->refresh();
@@ -91,8 +91,8 @@ it('a re-run replaces the earlier update block; a post with no answer block gets
 it('writes nothing when the response carries no update, and the job records the failure on both rows', function () {
     app()->instance(ClaudeClient::class, new FakeClaudeClient('{"update": "", "title": "x"}'));
     $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
-    $post = newsPost($site, ['meta' => ['seo' => ['title' => 'S', 'meta_description' => 'M']]]);
-    $candidate = newsCandidate($site, $post);
+    $post = naPost($site, ['meta' => ['seo' => ['title' => 'S', 'meta_description' => 'M']]]);
+    $candidate = naCandidate($site, $post);
 
     expect(fn () => app(NewsAngleRefresher::class)->refresh($post, $candidate))->toThrow(RuntimeException::class, 'no update text');
     expect($post->fresh()->status)->toBe(ContentStatus::Published)->and($post->fresh()->version)->toBe(2)
@@ -110,12 +110,12 @@ it('writes nothing when the response carries no update, and the job records the 
 });
 
 it('refuses a post that is not live, and a candidate that is the post itself', function () {
-    app()->instance(ClaudeClient::class, new FakeClaudeClient(NEWS_GOOD));
+    app()->instance(ClaudeClient::class, new FakeClaudeClient(NA_GOOD));
     $site = Site::factory()->create(['domain_url' => 'https://spg.example']);
-    $draft = newsPost($site, ['status' => ContentStatus::NeedsReview]);
-    $candidate = newsCandidate($site, $draft);
+    $draft = naPost($site, ['status' => ContentStatus::NeedsReview]);
+    $candidate = naCandidate($site, $draft);
     expect(fn () => app(NewsAngleRefresher::class)->refresh($draft, $candidate))->toThrow(InvalidArgumentException::class, 'not a live post');
 
-    $live = newsPost($site, ['slug' => 'live']);
+    $live = naPost($site, ['slug' => 'live']);
     expect(fn () => app(NewsAngleRefresher::class)->refresh($live, $live))->toThrow(InvalidArgumentException::class, 'not a blog candidate');
 });
