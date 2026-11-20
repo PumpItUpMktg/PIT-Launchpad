@@ -21,6 +21,8 @@ final class CoverageDecision
         public readonly ?float $position,
         public readonly string $reason,
         public readonly ?string $checkedAt = null,
+        /** What paired the candidate with the twin: title | angle | link; null for author. */
+        public readonly ?string $matchedOn = null,
     ) {}
 
     public static function author(string $reason = 'No live post reads as this topic.'): self
@@ -41,6 +43,7 @@ final class CoverageDecision
             'clicks' => $this->clicks,
             'position' => $this->position,
             'reason' => $this->reason,
+            'matched_on' => $this->matchedOn,
             'checked_at' => $this->checkedAt ?? now()->toIso8601String(),
         ];
     }
@@ -67,6 +70,7 @@ final class CoverageDecision
             isset($meta['position']) && is_numeric($meta['position']) ? (float) $meta['position'] : null,
             (string) ($meta['reason'] ?? ''),
             isset($meta['checked_at']) && is_string($meta['checked_at']) ? $meta['checked_at'] : null,
+            isset($meta['matched_on']) && is_string($meta['matched_on']) ? $meta['matched_on'] : null,
         );
     }
 }
