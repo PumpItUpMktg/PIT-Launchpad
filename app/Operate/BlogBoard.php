@@ -583,7 +583,10 @@ class BlogBoard
                 $kind = $k;
             }
         }
-        $at = $latest !== null ? (string) $latest['refreshed_at'] : $c->last_refreshed_at?->toIso8601String();
+        $last = $c->last_refreshed_at;
+        $at = $latest !== null
+            ? (string) $latest['refreshed_at']
+            : ($last !== null ? Carbon::parse($last)->toIso8601String() : null);
         $when = $at !== null ? Carbon::parse($at)->format('M j') : null;
         $times = max($count, $latest !== null ? 1 : 0);
 
