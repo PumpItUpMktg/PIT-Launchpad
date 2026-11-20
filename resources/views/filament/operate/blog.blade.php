@@ -166,11 +166,32 @@
                         @elseif ($c['angle'])
                             <span class="ob-muted">{{ $c['angle'] }}</span>
                         @endif
+                        @php $cv = $c['coverage'] ?? null; @endphp
+                        @if ($cv)
+                            {{-- Coverage verdict: a live post already reads as this topic — steer to it before a second post is drafted. --}}
+                            <div class="ob-excerpt" style="border-left:3px solid {{ $cv['verdict'] === 'covered' ? '#dc2626' : '#d97706' }};padding-left:10px;margin-top:6px" title="{{ $cv['reason'] }}">
+                                <span class="ob-chip {{ $cv['verdict'] === 'covered' ? 'danger' : 'warn' }}">{{ $cv['label'] }}</span>
+                                @if ($cv['twin_url'])<a href="{{ $cv['twin_url'] }}" target="_blank" rel="noopener"><strong>{{ $cv['twin_title'] }}</strong></a>@else<strong>{{ $cv['twin_title'] }}</strong>@endif
+                                <span class="ob-muted"> · @if ($cv['position'] !== null)pos {{ number_format($cv['position'], 1) }} · {{ number_format($cv['impressions']) }} impr @else no Search Console standing @endif</span>
+                                @if ($cv['fold_error'])<div class="ob-muted" style="margin-top:4px;color:#dc2626">Refresh failed: {{ $cv['fold_error'] }}</div>@endif
+                            </div>
+                        @endif
                         <div class="ob-actions">
-                            <button class="ob-btn primary" wire:click="promote('{{ $c['id'] }}')" wire:loading.attr="disabled" wire:target="promote('{{ $c['id'] }}')">
-                                <span wire:loading.remove wire:target="promote('{{ $c['id'] }}')">Promote</span>
-                                <span wire:loading wire:target="promote('{{ $c['id'] }}')"><span class="ob-spinner"></span> Promoting…</span>
-                            </button>
+                            @if ($cv && $cv['folding'])
+                                <span class="ob-chip" style="background:rgba(79,70,229,.12);color:#6366f1">✍ folding into the existing post…</span>
+                            @elseif ($cv)
+                                <button class="ob-btn primary" wire:click="foldIntoTwin('{{ $c['id'] }}')" wire:loading.attr="disabled" wire:target="foldIntoTwin('{{ $c['id'] }}')">
+                                    <span wire:loading.remove wire:target="foldIntoTwin('{{ $c['id'] }}')">{{ $cv['fold_error'] ? 'Retry refresh' : 'Refresh existing post' }}</span>
+                                    <span wire:loading wire:target="foldIntoTwin('{{ $c['id'] }}')"><span class="ob-spinner"></span> Queuing…</span>
+                                </button>
+                                <button class="ob-btn" wire:click="promote('{{ $c['id'] }}', true)" wire:loading.attr="disabled" wire:target="promote('{{ $c['id'] }}', true)"
+                                    wire:confirm="Draft a SEPARATE post on a topic “{{ $cv['twin_title'] }}” already covers? The two will compete for the same searches.">Promote anyway</button>
+                            @else
+                                <button class="ob-btn primary" wire:click="promote('{{ $c['id'] }}')" wire:loading.attr="disabled" wire:target="promote('{{ $c['id'] }}')">
+                                    <span wire:loading.remove wire:target="promote('{{ $c['id'] }}')">Promote</span>
+                                    <span wire:loading wire:target="promote('{{ $c['id'] }}')"><span class="ob-spinner"></span> Promoting…</span>
+                                </button>
+                            @endif
                             <button class="ob-btn danger" wire:click="dismissCandidate('{{ $c['id'] }}')" wire:loading.attr="disabled" wire:target="dismissCandidate('{{ $c['id'] }}')">Dismiss</button>
                             @if ($c['score'] !== null)<span class="ob-muted" style="margin-left:auto">score {{ $c['score'] }}</span>@endif
                         </div>
@@ -214,7 +235,11 @@
                             @if (! empty($d['refresh']))
                                 @php $rf = $d['refresh']; @endphp
                                 <div class="ob-excerpt" style="border-left:3px solid #6366f1;padding-left:10px">
-                                    <strong>Refreshed for “{{ $rf['query'] }}”</strong> — direct answer added at the top{{ $rf['faq_count'] > 0 ? ', '.$rf['faq_count'].' Q&A '.\Illuminate\Support\Str::plural('pair', $rf['faq_count']).' with FAQ schema at the end' : '' }}.
+                                    @if (($rf['kind'] ?? 'question') === 'news')
+                                        <strong>Updated with “{{ $rf['query'] }}”</strong>{{ ! empty($rf['source']) ? ' ('.$rf['source'].')' : '' }} — a dated Update block added at the top; the rest of the post is untouched.
+                                    @else
+                                        <strong>Refreshed for “{{ $rf['query'] }}”</strong> — direct answer added at the top{{ $rf['faq_count'] > 0 ? ', '.$rf['faq_count'].' Q&A '.\Illuminate\Support\Str::plural('pair', $rf['faq_count']).' with FAQ schema at the end' : '' }}.
+                                    @endif
                                     <div style="margin-top:4px">{{ $rf['answer'] }}</div>
                                     @forelse ($rf['changes'] as $ch)
                                         <div style="margin-top:4px"><span class="ob-muted">{{ $ch['field'] }}:</span> <s class="ob-muted">{{ $ch['before'] }}</s> → <strong>{{ $ch['after'] }}</strong></div>

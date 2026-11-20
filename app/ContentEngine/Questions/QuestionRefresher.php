@@ -241,6 +241,12 @@ class QuestionRefresher
     /** The body with any earlier lane blocks removed (idempotent re-runs). */
     public function withoutLaneBlocks(string $body): string
     {
+        return self::stripLaneBlocks($body);
+    }
+
+    /** The lane's two blocks removed — shared with the news refresher, whose prompt excerpt reads the core body only. */
+    public static function stripLaneBlocks(string $body): string
+    {
         $body = (string) preg_replace('/<div class="'.preg_quote(self::ANSWER_CLASS, '/').'">.*?<\/div>\s*/s', '', $body);
 
         return (string) preg_replace('/\s*<section class="'.preg_quote(self::FAQ_CLASS, '/').'">.*?<\/section>/s', '', $body);

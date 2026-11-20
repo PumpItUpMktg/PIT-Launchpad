@@ -4,9 +4,11 @@ namespace App\Console\Commands;
 
 use App\ContentEngine\BlogQueue\BlogTargetQueue;
 use App\ContentEngine\BlogQueue\DirectedIntake;
+use App\ContentEngine\Coverage\CoverageDecision;
 use App\ContentEngine\Drafting\DraftFailedException;
 use App\ContentEngine\Generation\PostGenerator;
 use App\Enums\ContentKind;
+use App\Enums\CoverageVerdict;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
@@ -14,7 +16,7 @@ use Illuminate\Console\Command;
 
 class GeneratePostCommand extends Command
 {
-    protected $signature = 'launchpad:generate-post {content? : The routed candidate Content id} {--title= : Resolve the candidate by its exact title, or its original revival label, within --site (case-insensitive)} {--regenerate : Allow --title to overwrite an already-drafted post} {--market= : Market id for local injection} {--directed : pull the top queued blog target instead of a candidate id} {--site= : the tenant id or brand name (required with --directed or --title)} {--silo= : limit the directed pull to one silo}';
+    protected $signature = 'launchpad:generate-post {content? : The routed candidate Content id} {--title= : Resolve the candidate by its exact title, or its original revival label, within --site (case-insensitive)} {--regenerate : Allow --title to overwrite an already-drafted post} {--force : Draft even when the coverage verdict names a live post that already covers the topic} {--market= : Market id for local injection} {--directed : pull the top queued blog target instead of a candidate id} {--site= : the tenant id or brand name (required with --directed or --title)} {--silo= : limit the directed pull to one silo}';
 
     protected $description = 'Generate a blog post from a routed candidate (or, with --directed, the top queued blog target): draft (Sonnet) + image (fal) → review queue.';
 
@@ -50,6 +52,16 @@ class GeneratePostCommand extends Command
 
         if ($candidate === null) {
             $this->error('Candidate not found.');
+
+            return self::FAILURE;
+        }
+
+        // The coverage verdict: a live post already reads as this topic — the default is to refresh THAT post,
+        // not to draft a second one. --force drafts anyway (the board's "Promote anyway").
+        $decision = CoverageDecision::fromMeta($candidate->meta['coverage'] ?? null);
+        if (! $this->option('force') && $decision !== null && $decision->verdict !== CoverageVerdict::Author && ! $candidate->hasDraft()) {
+            $this->error($decision->verdict->label().' — “'.($decision->twinTitle ?? 'an existing post').'” already covers this topic. '.$decision->reason);
+            $this->line('Fold the hook into it from the Candidates board ("Refresh existing post"), or pass --force to draft a separate post.');
 
             return self::FAILURE;
         }

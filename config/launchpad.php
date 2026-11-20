@@ -966,6 +966,32 @@ return [
     // first-party, already synced daily) for question-shaped queries real searchers typed, drops machine
     // traffic with three generic rules, clusters near-identical phrasings, and files the top N as "Questions"
     // candidates (or marks the post already ranking for a refresh). Report-first; the operator generates.
+    /*
+    |--------------------------------------------------------------------------
+    | Coverage verdict (blog candidates against the posts already live)
+    |--------------------------------------------------------------------------
+    | Before any draft, every candidate is checked for a live post that already reads as its topic (title
+    | against title, each detector signal to its own floor) and that post's Search Console standing. No twin →
+    | author; a twin near the top with no fresh hook on the candidate → covered; any other twin → refresh (fold
+    | the hook into the post that already earns). The verdict is a stamp (meta.coverage) + a board pill; the
+    | operator still decides (Promote anyway / Refresh existing post / Dismiss).
+    */
+    'coverage' => [
+        'twin_semantic' => (float) env('LAUNCHPAD_COVERAGE_TWIN_SEMANTIC', 0.85),
+        'twin_overlap' => (float) env('LAUNCHPAD_COVERAGE_TWIN_OVERLAP', 0.6),
+        'standing_days' => (int) env('LAUNCHPAD_COVERAGE_STANDING_DAYS', 90),
+        'covered_max_position' => (float) env('LAUNCHPAD_COVERAGE_COVERED_MAX_POSITION', 5),
+        'covered_min_impressions' => (int) env('LAUNCHPAD_COVERAGE_COVERED_MIN_IMPRESSIONS', 30),
+        // The Refresh action (fold a news hook into the live post): one narrow model call, an "Update (Mon YYYY)"
+        // block at the top of the body with the outlet cited, a title / SEO proposal kept beside the old values.
+        'refresh' => [
+            'update_max_chars' => (int) env('LAUNCHPAD_COVERAGE_REFRESH_UPDATE_MAX', 700),
+            'title_max_chars' => (int) env('LAUNCHPAD_COVERAGE_REFRESH_TITLE_MAX', 70),
+            'meta_max_chars' => (int) env('LAUNCHPAD_COVERAGE_REFRESH_META_MAX', 160),
+            'body_excerpt_chars' => (int) env('LAUNCHPAD_COVERAGE_REFRESH_BODY_EXCERPT', 6000),
+        ],
+    ],
+
     'questions' => [
         'window_days' => (int) env('LAUNCHPAD_QUESTIONS_WINDOW_DAYS', 90),
         'top' => (int) env('LAUNCHPAD_QUESTIONS_TOP', 15),

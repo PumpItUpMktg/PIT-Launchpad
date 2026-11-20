@@ -2,11 +2,13 @@
 
 namespace App\Operate;
 
+use App\ContentEngine\Coverage\CoverageDecision;
 use App\ContentEngine\Questions\QuestionIntake;
 use App\Enums\BlogTargetStatus;
 use App\Enums\CandidateClassification;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
+use App\Enums\CoverageVerdict;
 use App\Enums\RenderStatus;
 use App\Guided\LiveBoards;
 use App\Models\BlogTarget;
@@ -96,8 +98,36 @@ class BlogBoard
                 'revived' => $this->revivedUrls($c) !== [],
                 'revived_impressions' => $this->revivedImpressions($c),
                 'revived_urls' => count($this->revivedUrls($c)),
+                // Coverage verdict against the posts already live (meta.coverage): author / refresh / covered,
+                // the twin and its standing — the card steers to the existing post before a second is drafted.
+                'coverage' => $this->coverageFacts($c),
             ])
             ->all();
+    }
+
+    /**
+     * @return array{verdict: string, label: string, twin_id: ?string, twin_title: ?string, twin_url: ?string, impressions: int, position: ?float, reason: string, folding: bool, fold_error: ?string}|null
+     */
+    private function coverageFacts(Content $c): ?array
+    {
+        $raw = is_array($c->meta['coverage'] ?? null) ? $c->meta['coverage'] : null;
+        $decision = CoverageDecision::fromMeta($raw);
+        if ($decision === null || $decision->verdict === CoverageVerdict::Author) {
+            return null;
+        }
+
+        return [
+            'verdict' => $decision->verdict->value,
+            'label' => $decision->verdict->label(),
+            'twin_id' => $decision->twinId,
+            'twin_title' => $decision->twinTitle,
+            'twin_url' => $decision->twinUrl,
+            'impressions' => $decision->impressions,
+            'position' => $decision->position,
+            'reason' => $decision->reason,
+            'folding' => isset($raw['folding_at']),
+            'fold_error' => isset($raw['fold_error']) && is_string($raw['fold_error']) ? $raw['fold_error'] : null,
+        ];
     }
 
     /**
@@ -278,7 +308,7 @@ class BlogBoard
                 'image' => $this->thumbnail($c),
                 // A questions-lane Refresh in review: the question, the direct answer, the Q&A count and
                 // the title / SEO diff — the reviewer sees what changed before approving.
-                'refresh' => $this->questionRefreshDiff($c),
+                'refresh' => $this->questionRefreshDiff($c) ?? $this->newsRefreshDiff($c),
             ])
             ->all();
     }
@@ -557,10 +587,44 @@ class BlogBoard
         }
 
         return [
+            'kind' => 'question',
             'query' => (string) ($m['query'] ?? ''),
             'answer' => (string) ($m['answer'] ?? ''),
             'faq_count' => is_array($m['faq'] ?? null) ? count($m['faq']) : 0,
             'changes' => $changes,
+        ];
+    }
+
+    /**
+     * The news-angle refresh (meta.news_refresh): the hook folded in, the update text and the headline diff —
+     * the same card shape as the question refresh. Null when the row carries none.
+     *
+     * @return array{kind: string, query: string, answer: string, faq_count: int, changes: list<array{field: string, before: string, after: string}>, source: ?string}|null
+     */
+    private function newsRefreshDiff(Content $c): ?array
+    {
+        $m = $c->meta['news_refresh'] ?? null;
+        if (! is_array($m) || ! isset($m['refreshed_at']) || ! is_array($m['proposal'] ?? null)) {
+            return null;
+        }
+        $labels = ['title' => 'Title', 'seo_title' => 'SEO title', 'meta_description' => 'Meta description'];
+        $changes = [];
+        foreach ((array) ($m['proposal']['changed'] ?? []) as $field) {
+            $field = (string) $field;
+            $changes[] = [
+                'field' => $labels[$field] ?? $field,
+                'before' => (string) ($m['proposal']['before'][$field] ?? ''),
+                'after' => (string) ($m['proposal']['after'][$field] ?? ''),
+            ];
+        }
+
+        return [
+            'kind' => 'news',
+            'query' => (string) ($m['candidate_title'] ?? ''),
+            'answer' => (string) ($m['update'] ?? ''),
+            'faq_count' => 0,
+            'changes' => $changes,
+            'source' => isset($m['source_name']) && is_string($m['source_name']) ? $m['source_name'] : null,
         ];
     }
 
