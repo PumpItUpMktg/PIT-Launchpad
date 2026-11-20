@@ -2,16 +2,17 @@
 
 namespace App\ContentEngine;
 
+use App\ContentEngine\Geography\Footprint;
 use App\Enums\AlertType;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\IntakeType;
 use App\Enums\NearDupTier;
+use App\Enums\PlaceVerdict;
 use App\Enums\RelevanceBand;
 use App\Integrations\News\NewsItem;
 use App\Integrations\News\NewsProvider;
 use App\Models\Content;
-use App\Models\Location;
 use App\Models\Scopes\SiteScope;
 use App\Models\Silo;
 use App\Models\Site;
@@ -78,7 +79,12 @@ class CandidateFunnel
     {
         $silos = Silo::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->get();
         $gateOn = (bool) config('launchpad.reactive.enabled', true);
-        $footprint = $gateOn ? $this->footprintStates($site) : [];
+        $area = Footprint::forSite($site);
+        $footprint = $gateOn ? $area->states : [];
+        // The scorer names the story's place against the known service area; a place beyond the region ring
+        // drops here (an Omaha sewer backup is not an NJ/PA homeowner's news) — the dateline-only pre-gate
+        // above catches almost none of these (city-only headlines name no state).
+        $dropOutside = (bool) config('launchpad.reactive.geography.drop_outside', true);
 
         // Article-identity dedup: the hourly ingest re-serves the same articles, and Haiku may route the
         // same story to a different silo each run — so the silo-scoped near-dup net can miss it. Skip any
@@ -145,7 +151,13 @@ class CandidateFunnel
 
         foreach ($this->clusterer->cluster($filtered) as $cluster) {
             $item = $cluster->representative;
-            $relevance = $this->scorer->score($item, $silos, $routingHint);
+            $relevance = $this->scorer->score($item, $silos, $routingHint, $area);
+
+            if ($dropOutside && $relevance->placeVerdict === PlaceVerdict::Outside) {
+                $dropped[] = ['title' => $item->title, 'reason' => 'out_of_footprint', 'place' => $relevance->storyPlace];
+
+                continue;
+            }
 
             if ($relevance->band === RelevanceBand::Dropped) {
                 $dropped[] = ['title' => $item->title, 'reason' => $this->dropReason($relevance)];
@@ -292,6 +304,8 @@ class CandidateFunnel
                 'classification' => $relevance->classification->value,
                 'shelf_life' => $relevance->shelfLife->value,   // evergreen | topical (decay axis)
                 'scope' => $relevance->scope->value,             // general | local (place axis)
+                'story_place' => $relevance->storyPlace,          // "Camden, NJ" | null — the place the scorer anchored the story to
+                'place_scope' => $relevance->placeVerdict->value, // footprint | region | outside | unknown
                 'source_published_at' => $item->publishedAt->format('Y-m-d'),
             ],
             'version' => 1,
@@ -380,25 +394,6 @@ class CandidateFunnel
             $relevance->matchedSiloId === null => 'no_silo_match',
             default => 'below_threshold',
         };
-    }
-
-    /**
-     * The tenant's own states (2-letter upper) — every physical Location's state + the corporate state.
-     * Empty when unknown, in which case the geography gate never guesses a boundary.
-     *
-     * @return list<string>
-     */
-    private function footprintStates(Site $site): array
-    {
-        $states = Location::withoutGlobalScope(SiteScope::class)
-            ->where('site_id', $site->id)->get()
-            ->map(fn (Location $l): string => strtoupper(trim((string) $l->cityState()['state'])))
-            ->all();
-
-        return collect($states)
-            ->push(strtoupper(trim((string) $site->corporate_state)))
-            ->filter(fn (string $s): bool => $s !== '')
-            ->unique()->values()->all();
     }
 
     private function uniqueSlug(string $siteId, string $title): string

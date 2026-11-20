@@ -17,6 +17,9 @@ class ScriptedClaudeClient implements ClaudeClient
 
     private string $fallback = '{"relevance":0,"matched_silo":null,"brand_safe":true}';
 
+    /** Every prompt asked, in order — so a test can assert what the model was told. @var list<string> */
+    public array $prompts = [];
+
     public function on(string $needle, string $response): static
     {
         $this->map[$needle] = $response;
@@ -38,6 +41,7 @@ class ScriptedClaudeClient implements ClaudeClient
 
     public function completeDetailed(string $prompt, ?string $system = null): CompletionResult
     {
+        $this->prompts[] = $prompt;
         foreach ($this->map as $needle => $response) {
             if (str_contains($prompt, $needle)) {
                 return new CompletionResult($response, 'end_turn');

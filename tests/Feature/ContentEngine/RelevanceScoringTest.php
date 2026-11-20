@@ -1,7 +1,10 @@
 <?php
 
+use App\ContentEngine\Geography\Footprint;
 use App\ContentEngine\RelevanceScorer;
 use App\Enums\CandidateClassification;
+use App\Enums\CandidateScope;
+use App\Enums\PlaceVerdict;
 use App\Enums\RelevanceBand;
 use App\Models\Silo;
 use App\Models\Site;
@@ -116,4 +119,48 @@ test('it derives a classification from numeric signals when the model omits one'
     $result = (new RelevanceScorer($claude))->score(News::item('Township basement flooding after storm'), $silos);
 
     expect($result->classification)->toBe(CandidateClassification::Local);
+});
+
+test('with a footprint the scorer names the service area, and the extracted place decides local relevance in code', function () {
+    $site = Site::factory()->create();
+    $silos = collect([siloFor($site)]);
+    $footprint = new Footprint(['NJ', 'PA'], ['DE', 'MD', 'NY', 'OH', 'WV'], ['Montclair NJ', 'Trooper PA']);
+    $json = fn (?string $place, ?string $state, bool $local) => json_encode([
+        'relevance' => 0.8, 'matched_silo' => 'Water Heaters', 'angle' => 'x', 'advisory_value' => 0.7, 'timeliness' => 0.6,
+        'local_relevance' => $local, 'brand_safe' => true, 'story_place' => $place, 'story_state' => $state,
+    ]);
+    $claude = (new ScriptedClaudeClient)
+        ->on('Omaha', $json('Omaha, NE', 'NE', true))          // the model's "local" opinion is overruled by the place
+        ->on('Camden', $json('Camden, NJ', 'NJ', false))        // and the other way round
+        ->on('Buffalo', $json('Buffalo, NY', 'NY', true))
+        ->on('five-minute check', $json(null, null, true));    // placeless: the model's flag stands
+
+    $scorer = new RelevanceScorer($claude);
+    $omaha = $scorer->score(News::item('Omaha homeowners report sewer backups'), $silos, null, $footprint);
+    $camden = $scorer->score(News::item('Camden crews clear storm drains'), $silos, null, $footprint);
+    $buffalo = $scorer->score(News::item('Buffalo basements flood after lake-effect storm'), $silos, null, $footprint);
+    $howto = $scorer->score(News::item('This five-minute check saves your basement'), $silos, null, $footprint);
+
+    expect($omaha->placeVerdict)->toBe(PlaceVerdict::Outside)->and($omaha->storyPlace)->toBe('Omaha, NE')
+        ->and($omaha->localRelevance)->toBeFalse()->and($omaha->scope)->toBe(CandidateScope::General)
+        ->and($camden->placeVerdict)->toBe(PlaceVerdict::Footprint)->and($camden->localRelevance)->toBeTrue()
+        ->and($camden->scope)->toBe(CandidateScope::Local)
+        ->and($buffalo->placeVerdict)->toBe(PlaceVerdict::Region)->and($buffalo->localRelevance)->toBeFalse()
+        ->and($howto->placeVerdict)->toBe(PlaceVerdict::Unknown)->and($howto->storyPlace)->toBeNull()->and($howto->localRelevance)->toBeTrue();
+
+    expect($claude->prompts[0])->toContain('Service area (states): New Jersey (NJ), Pennsylvania (PA).')
+        ->toContain('Montclair NJ; Trooper PA')
+        ->toContain('"story_place"')
+        ->toContain('never infer a place from the outlet alone');
+});
+
+test('without a footprint the prompt and the result are unchanged', function () {
+    $site = Site::factory()->create();
+    $silos = collect([siloFor($site)]);
+    $claude = (new ScriptedClaudeClient)->fallback(json_encode(['relevance' => 0.8, 'matched_silo' => 'Water Heaters', 'local_relevance' => true, 'brand_safe' => true]));
+
+    $result = (new RelevanceScorer($claude))->score(News::item('Tankless rebate'), $silos);
+
+    expect($result->placeVerdict)->toBe(PlaceVerdict::Unknown)->and($result->storyPlace)->toBeNull()->and($result->localRelevance)->toBeTrue()
+        ->and($claude->prompts[0])->not->toContain('Service area')->not->toContain('story_place');
 });

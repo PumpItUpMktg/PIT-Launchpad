@@ -400,6 +400,10 @@ return [
         'ingest_budget_seconds' => (float) env('LAUNCHPAD_FEED_INGEST_BUDGET_SECONDS', 2400),
 
         'generated' => [
+            // Search shape: `states` = one feed per keyword scoped to the tenant's footprint states (full
+            // names OR'd — the shape that returns footprint-anchored items); `markets` = the legacy one feed
+            // per keyword × market with "City ST" in the query (returns almost nothing for a small town).
+            'scope' => env('LAUNCHPAD_FEED_SCOPE', 'states'),
             'base_url' => env('GOOGLE_NEWS_BASE_URL', 'https://news.google.com'),
             'hl' => env('GOOGLE_NEWS_HL', 'en-US'),
             'gl' => env('GOOGLE_NEWS_GL', 'US'),
@@ -1117,6 +1121,18 @@ return [
         // article's publish date (meta.source_published_at) when known, else the ingest date. Evergreen
         // candidates never expire.
         'topical_expiry_days' => (int) env('LAUNCHPAD_TOPICAL_EXPIRY_DAYS', 30),
+
+        // Geography (per tenant, read from its own records — offices, corporate state, markets, coverage
+        // towns; see App\ContentEngine\Geography\Footprint). The scorer is told the service area and names
+        // the place each story is anchored to; the footprint decides the verdict in code.
+        'geography' => [
+            // Drop a story anchored to a named place beyond the region ring before any draft. A placeless
+            // how-to / national piece is never a geography drop (it has no place) — it stays `general`.
+            'drop_outside' => (bool) env('LAUNCHPAD_GEOGRAPHY_DROP_OUTSIDE', true),
+            // The region ring kept as general (never local) content: `neighbors` = the states sharing a land
+            // border with a footprint state (the mid-Atlantic for an NJ/PA/MD brand); `none` = footprint only.
+            'ring' => env('LAUNCHPAD_GEOGRAPHY_RING', 'neighbors'),
+        ],
         'allow' => [
             'flood', 'flooding', 'flooded', 'floodwater', 'flash flood', 'groundwater', 'ground water',
             'storm', 'stormwater', 'hurricane', 'nor\'easter', 'heavy rain', 'rainfall', 'snowmelt',

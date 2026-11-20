@@ -15,7 +15,7 @@ final class FunnelResult
      * @param  list<Content>  $parked
      * @param  list<RefreshMark>  $refreshMarked
      * @param  list<OperatorAlert>  $alerts
-     * @param  list<array{title: string, reason: string}>  $dropped
+     * @param  list<array{title: string, reason: string, place?: ?string}>  $dropped
      */
     public function __construct(
         public readonly array $created,

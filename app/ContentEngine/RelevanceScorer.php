@@ -2,8 +2,10 @@
 
 namespace App\ContentEngine;
 
+use App\ContentEngine\Geography\Footprint;
 use App\Enums\CandidateClassification;
 use App\Enums\CandidateScope;
+use App\Enums\PlaceVerdict;
 use App\Enums\RelevanceBand;
 use App\Enums\ShelfLife;
 use App\Integrations\Claude\ClaudeClient;
@@ -37,15 +39,27 @@ class RelevanceScorer
      *                                   precisely while an untagged feed still
      *                                   routes purely by content. The score still
      *                                   gates band (brand-safety + thresholds).
+     * @param  Footprint|null  $footprint  The tenant's service footprint. When given, the prompt names the
+     *                                     service area and asks for the story's place; the verdict on that
+     *                                     place is decided here ({@see Footprint::classify()}) and local
+     *                                     relevance follows it. Without one the scorer behaves as before.
      */
-    public function score(NewsItem $item, Collection $silos, ?string $hintSiloId = null): RelevanceResult
+    public function score(NewsItem $item, Collection $silos, ?string $hintSiloId = null, ?Footprint $footprint = null): RelevanceResult
     {
-        $data = $this->parse($this->claude->complete($this->prompt($item, $silos), $this->system()));
+        $data = $this->parse($this->claude->complete($this->prompt($item, $silos, $footprint), $this->system()));
 
         $brandSafe = (bool) ($data['brand_safe'] ?? true);
         $score = (float) ($data['relevance'] ?? 0.0);
         $timeliness = (float) ($data['timeliness'] ?? 0.0);
         $localRelevance = (bool) ($data['local_relevance'] ?? false);
+        // The story's place, and the footprint's verdict on it. A named place decides local relevance (in
+        // footprint = local, anything else = not); the model's own flag only counts when no place is named.
+        $storyPlace = isset($data['story_place']) && is_string($data['story_place']) && trim($data['story_place']) !== '' ? trim($data['story_place']) : null;
+        $storyState = isset($data['story_state']) && is_string($data['story_state']) ? trim($data['story_state']) : null;
+        $placeVerdict = $footprint?->classify($storyState) ?? PlaceVerdict::Unknown;
+        if ($footprint !== null && $footprint->isKnown() && $storyState !== null && $storyState !== '') {
+            $localRelevance = $placeVerdict === PlaceVerdict::Footprint;
+        }
         // A competitor's OWN announcement / press release / promo is not a news hook for us — drop it.
         $competitorPromo = (bool) ($data['competitor_promo'] ?? false);
         $classification = CandidateClassification::tryFrom((string) ($data['classification'] ?? ''))
@@ -91,6 +105,8 @@ class RelevanceScorer
             // (e.g.) local AND topical, which the single `classification` lane could not represent.
             shelfLife: ShelfLife::fromTimeliness($timeliness),
             scope: CandidateScope::fromLocal($localRelevance),
+            storyPlace: $storyPlace,
+            placeVerdict: $placeVerdict,
         );
     }
 
@@ -111,7 +127,7 @@ class RelevanceScorer
     /**
      * @param  Collection<int, Silo>  $silos
      */
-    private function prompt(NewsItem $item, Collection $silos): string
+    private function prompt(NewsItem $item, Collection $silos, ?Footprint $footprint = null): string
     {
         $siloLines = $silos->map(function (Silo $silo) {
             $rules = RuleSet::fromArray($silo->rule_set ?? []);
@@ -123,12 +139,24 @@ class RelevanceScorer
             return $line;
         })->implode("\n");
 
+        $area = $footprint?->promptLine();
+        $areaBlock = $area !== null ? $area."\n\n" : '';
+        $placeFields = $area !== null
+            ? '"story_place":"<City, ST the story is anchored to, or null>","story_state":"<2-letter US state of that place, or null>",'
+            : '';
+        $placeRule = $area !== null
+            ? 'story_place is the place the news EVENT happened or the municipality/region the piece is about (a dateline, a named town or county, a state program) — null for a placeless how-to or a national piece; never infer a place from the outlet alone. local_relevance is true ONLY when story_state is one of the service-area states. '
+            : '';
+
         return "Score this news item for a home-services brand's advisory blog.\n\n"
+            .$areaBlock
             ."Title: {$item->title}\nSummary: {$item->summary}\nSource: {$item->sourceName}\n\n"
             ."Silos (route to the best match by its include terms; NEVER route to a silo when the item matches its [NOT: …] terms; null if none fits):\n{$siloLines}\n\n"
             .'Return ONLY JSON: {"relevance":0..1,"matched_silo":"<silo name|null>","angle":"<advisory angle>",'
             .'"advisory_value":0..1,"timeliness":0..1,"local_relevance":true|false,"brand_safe":true|false,'
+            .$placeFields
             .'"classification":"local|time_sensitive|evergreen","competitor_promo":true|false,"rationale":"..."}. '
+            .$placeRule
             .'brand_safe is false for off-brand, controversial, or tragedy-exploitative items. '
             .'classification: "local" if the story is anchored to a specific place in/near the brand\'s service area; '
             .'else "time_sensitive" if it is a timely event/news hook whose value decays quickly; else "evergreen" for durable advisory topics. '
