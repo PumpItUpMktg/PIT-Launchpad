@@ -345,6 +345,15 @@ It lives under `app/ContentEngine/` and builds on §1 + §4.
   routing (against §4 rule_sets, passed in-prompt) + advisory-angle hint, with a
   silo-match gate, a brand-safety/sensitivity gate, and a draft/borderline/drop
   band.
+- **Geography** (`app/ContentEngine/Geography/`): `Footprint::forSite` reads the tenant's states + towns
+  from its own records (offices, corporate state, markets, coverage towns) and rings them with the bordering
+  states (`reactive.geography.ring`). The scorer prompt names the service area and asks for the story's
+  `story_place`/`story_state`; `Footprint::classify` decides the `PlaceVerdict` IN CODE (footprint / region /
+  outside / unknown — the model names the place, never the verdict). A named place sets `local_relevance`;
+  `outside` drops at ingest (`reactive.geography.drop_outside`, reason `out_of_footprint`, the Omaha sewer
+  backup on an NJ/PA brand); `region` is kept `general`; a placeless how-to is `unknown` and never a geography
+  drop. Stamped on `meta.story_place` / `meta.place_scope`. `launchpad:report-candidate-geography` (read-only)
+  scores the current backlog against the footprint — one narrow `PlaceExtractor` call per un-stamped row.
 - **Near-dup** (`NearDuplicateDetector`): semantic similarity (embeddings, scoped
   to the matched silo) + keyword overlap; very-high vs a live page → **refresh**
   mark (don't duplicate) + operator alert; moderate → operator flag; low →

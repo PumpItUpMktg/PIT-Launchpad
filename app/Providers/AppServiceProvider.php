@@ -7,6 +7,7 @@ use App\ContentEngine\Feeds\FeedFetcher;
 use App\ContentEngine\Feeds\FeedHealth;
 use App\ContentEngine\Feeds\FeedValidator;
 use App\ContentEngine\Feeds\GeneratedFeedReconciler;
+use App\ContentEngine\Geography\PlaceExtractor;
 use App\ContentEngine\Reconcile\AiSiloRouter;
 use App\ContentEngine\RelevanceScorer;
 use App\Enums\AuditAction;
@@ -683,6 +684,10 @@ class AppServiceProvider extends ServiceProvider
         // thinking. Both clients come from the one factory so the probe can build
         // the identical client (see ClaudeClientFactory).
         $this->app->when(RelevanceScorer::class)
+            ->needs(ClaudeClient::class)
+            ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
+        // The geography report's place extraction rides the same cheap scoring client.
+        $this->app->when(PlaceExtractor::class)
             ->needs(ClaudeClient::class)
             ->give(fn ($app) => $app->make(ClaudeClientFactory::class)->scoring());
 

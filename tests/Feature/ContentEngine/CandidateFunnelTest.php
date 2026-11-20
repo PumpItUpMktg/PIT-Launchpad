@@ -446,3 +446,46 @@ test('a moderate near-duplicate is HELD in review naming its twin — never a dr
     $alertTypes = array_map(fn ($a) => $a->type, $result->alerts);
     expect($alertTypes)->toContain(AlertType::NearDuplicateFlag);
 });
+
+test('a story the scorer anchors beyond the region ring is dropped as out_of_footprint; region and footprint stories are kept and stamped', function () {
+    $site = Site::factory()->create(['corporate_state' => 'NJ']);
+    Silo::factory()->create([
+        'site_id' => $site->id,
+        'name' => 'Basement Waterproofing',
+        'rule_set' => ['include_patterns' => ['flooding', 'sump pump', 'basement'], 'exclude_patterns' => []],
+    ]);
+    $json = fn (?string $place, ?string $state) => json_encode([
+        'relevance' => 0.82, 'matched_silo' => 'Basement Waterproofing', 'angle' => 'x', 'advisory_value' => 0.7,
+        'timeliness' => 0.6, 'local_relevance' => false, 'brand_safe' => true, 'story_place' => $place, 'story_state' => $state,
+    ]);
+    $claude = (new ScriptedClaudeClient)
+        ->on('Omaha', $json('Omaha, NE', 'NE'))
+        ->on('Buffalo', $json('Buffalo, NY', 'NY'))
+        ->on('Camden', $json('Camden, NJ', 'NJ'))
+        ->on('gadget', $json(null, null));
+    $this->app->instance(RelevanceScorer::class, new RelevanceScorer($claude));
+    $this->app->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+
+    $result = app(CandidateFunnel::class)->process($site, [
+        News::item('Omaha homeowners report sewer backups after basement flooding'),
+        News::item('Buffalo basements flood after lake-effect storm'),
+        News::item('Camden crews clear storm drains ahead of basement flooding'),
+        News::item('Plumbers say this $10 gadget stops a basement flood'),
+    ]);
+
+    expect($result->created)->toHaveCount(3);
+    $omaha = collect($result->dropped)->firstWhere('reason', 'out_of_footprint');
+    expect($omaha)->not->toBeNull()->and($omaha['title'])->toContain('Omaha')->and($omaha['place'])->toBe('Omaha, NE');
+    expect(implode(' ', $claude->prompts))->toContain('Service area (states): New Jersey (NJ).');
+
+    $by = fn (string $needle) => Content::withoutGlobalScope(SiteScope::class)->where('site_id', $site->id)->where('title', 'like', "%{$needle}%")->first();
+    expect($by('Buffalo')->meta['place_scope'])->toBe('region')->and($by('Buffalo')->meta['story_place'])->toBe('Buffalo, NY')
+        ->and($by('Buffalo')->meta['scope'])->toBe('general')->and($by('Buffalo')->local_relevance)->toBeFalse()
+        ->and($by('Camden')->meta['place_scope'])->toBe('footprint')->and($by('Camden')->meta['scope'])->toBe('local')->and($by('Camden')->local_relevance)->toBeTrue()
+        ->and($by('gadget')->meta['place_scope'])->toBe('unknown')->and($by('gadget')->meta['story_place'])->toBeNull();
+
+    // With the drop switched off the out-of-market story is kept, stamped `outside`, so the board can still show it.
+    config(['launchpad.reactive.geography.drop_outside' => false]);
+    $again = app(CandidateFunnel::class)->process($site, [News::item('Omaha homeowners report sewer backups after basement flooding, part two')]);
+    expect($again->created)->toHaveCount(1)->and($again->created[0]->meta['place_scope'])->toBe('outside');
+});

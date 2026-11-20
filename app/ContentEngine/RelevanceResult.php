@@ -4,6 +4,7 @@ namespace App\ContentEngine;
 
 use App\Enums\CandidateClassification;
 use App\Enums\CandidateScope;
+use App\Enums\PlaceVerdict;
 use App\Enums\RelevanceBand;
 use App\Enums\ShelfLife;
 
@@ -31,5 +32,9 @@ final class RelevanceResult
         // single `classification`. Derived from timeliness + local_relevance; stamped on the candidate.
         public readonly ShelfLife $shelfLife = ShelfLife::Evergreen,
         public readonly CandidateScope $scope = CandidateScope::General,
+        // The place the story is anchored to ("Omaha, NE" / null for a placeless piece) and the footprint's
+        // verdict on it — decided in code from the extracted state, never from the model's in/out opinion.
+        public readonly ?string $storyPlace = null,
+        public readonly PlaceVerdict $placeVerdict = PlaceVerdict::Unknown,
     ) {}
 }
