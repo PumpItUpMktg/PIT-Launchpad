@@ -25,7 +25,7 @@ class ReportDuplicatePostsCommand extends Command
         {--site= : Limit to one site id or brand name}
         {--days=28 : GSC window in days}';
 
-    protected $description = 'Report (read-only) live duplicate blog posts (the -N slug family) with GSC impressions + position on both sides.';
+    protected $description = 'Report (read-only) live duplicate blog posts — the -N slug families and the near-duplicates (same story, different slugs: similar titles / shared queries) — with GSC impressions + position on both sides.';
 
     public function handle(DuplicatePostMetrics $metrics): int
     {
@@ -61,7 +61,8 @@ class ReportDuplicatePostsCommand extends Command
                 if ($g['age_conflict']) {
                     $grandConflicts++;
                 }
-                $this->line("  <comment>{$g['title']}</comment> — ".count($g['members'])." live posts:{$conflict}");
+                $kind = $g['kind'] === 'slug' ? '' : ' <fg=magenta>near-duplicate · '.implode(' · ', $g['signals']).'</>';
+                $this->line("  <comment>{$g['title']}</comment> — ".count($g['members'])." live posts:{$kind}{$conflict}");
                 foreach ($g['members'] as $m) {
                     $pos = $m['position'] !== null ? (string) $m['position'] : '—';
                     $earns = $m['top_impressions'] && $m['impressions'] > 0 ? ' <fg=green>← earns</>' : '';

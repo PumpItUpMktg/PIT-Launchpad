@@ -28,6 +28,7 @@ class ResolveDuplicatePostsCommand extends Command
         {--site= : Limit to one site id or brand name}
         {--days=28 : GSC window in days}
         {--keep=* : Pin a keeper by content id (per group; repeatable) — settles an ambiguous group}
+        {--include-near : Also resolve near-duplicates (different slugs grouped by title / shared queries); without it they are reported only}
         {--execute : Apply (default: report-only — writes nothing)}';
 
     protected $description = 'Resolve live duplicate blog posts: 301 the redundant one → the earner, verify serving, then remove it (report-only by default; --execute to apply).';
@@ -51,6 +52,7 @@ class ResolveDuplicatePostsCommand extends Command
         /** @var list<string> $keep */
         $keep = array_values(array_filter(array_map('strval', (array) $this->option('keep'))));
         $execute = (bool) $this->option('execute');
+        $includeNear = (bool) $this->option('include-near');
 
         $this->info($execute
             ? 'EXECUTE · resolving live duplicate blog posts (write redirect → push → verify → remove).'
@@ -61,7 +63,7 @@ class ResolveDuplicatePostsCommand extends Command
         $grandRedirects = 0;
         $grandBlocked = 0;
         foreach ($sites as $site) {
-            $plan = $resolver->plan($site, $days, $keep);
+            $plan = $resolver->plan($site, $days, $keep, $includeNear);
             if ($plan === []) {
                 continue;
             }
@@ -77,7 +79,8 @@ class ResolveDuplicatePostsCommand extends Command
 
                 if (! $g['resolvable']) {
                     $grandBlocked++;
-                    $this->line("  · <fg=yellow>BLOCKED</> ({$g['reason']}) <comment>{$g['title']}</comment> — decide by hand, then pass --keep=<id>:");
+                    $near = $g['kind'] !== 'slug' ? ' <fg=magenta>'.implode(' · ', $g['signals']).'</>' : '';
+                    $this->line("  · <fg=yellow>BLOCKED</> ({$g['reason']}) <comment>{$g['title']}</comment>{$near} — decide by hand, then pass --keep=<id>:");
                     foreach ($g['members'] as $m) {
                         $pos = $m['position'] !== null ? (string) $m['position'] : '—';
                         $this->line("      {$m['content_id']}  {$m['slug']}  · impr {$m['impressions']} · pos {$pos}");
@@ -88,7 +91,8 @@ class ResolveDuplicatePostsCommand extends Command
 
                 $keeper = $g['keeper'];
                 $tag = $g['reason'] === 'operator-override' ? '<fg=cyan>[--keep]</>' : "[{$g['reason']}]";
-                $this->line("  · <comment>{$g['title']}</comment> — keep {$tag} <info>{$keeper['path']}</info> (impr {$keeper['impressions']}):");
+                $near = $g['kind'] !== 'slug' ? ' <fg=magenta>near-duplicate · '.implode(' · ', $g['signals']).'</>' : '';
+                $this->line("  · <comment>{$g['title']}</comment> — keep {$tag} <info>{$keeper['path']}</info> (impr {$keeper['impressions']}):{$near}");
                 foreach ($g['losers'] as $loser) {
                     $grandRedirects++;
                     $this->line("      301 {$loser['from']} → {$loser['to']} (impr {$loser['impressions']}), then remove the post.");
@@ -97,7 +101,7 @@ class ResolveDuplicatePostsCommand extends Command
 
             if ($execute) {
                 $base = rtrim((string) $site->domain_url, '/');
-                foreach ($resolver->apply($site, $days, $keep) as $r) {
+                foreach ($resolver->apply($site, $days, $keep, $includeNear) as $r) {
                     $icon = $r['removed'] ? '<fg=green>✓</>' : '<fg=red>✗</>';
                     $this->line("      {$icon} {$r['from']} → {$r['to']} — {$r['note']}");
                     if ($r['removed'] && $base !== '') {
@@ -121,7 +125,7 @@ class ResolveDuplicatePostsCommand extends Command
             return self::SUCCESS;
         }
         if ($grandBlocked > 0) {
-            $this->warn("{$grandBlocked} group(s) left for a human (ambiguous earner or no clean keeper) — pin one with --keep=<content id>.");
+            $this->warn("{$grandBlocked} group(s) left for a human (near-duplicate without --include-near, ambiguous earner, or no clean keeper) — pin one with --keep=<content id>.");
         }
 
         if (! $execute) {
