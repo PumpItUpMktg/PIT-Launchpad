@@ -46,6 +46,7 @@
             @isset($row['type_label'])<span class="lp-cc-type">{{ $row['type_label'] }}</span>@endisset
             <a class="cc-tt" href="{{ $row['url'] }}" target="_blank" rel="noopener">{{ $row['title'] }}</a>
             @if (! empty($row['locked'])) <x-lp.chip tone="neutral" label="🔒 Locked" /> @endif
+            @if (! empty($row['refreshed'])) <x-lp.chip tone="info" :label="$row['refreshed']['label']" :title="$row['refreshed']['title'] ?? null" /> @endif
             @isset($row['days_live'])@if ($row['days_live'] !== null)<span class="lp-cc-live">Live · {{ $row['days_live'] }}d</span>@endif @endisset
         </div>
         <div class="lp-cc-flags">

@@ -82,8 +82,8 @@
                     @endif
                     <div class="ob-publishing-list">
                         @foreach ($this->publishing as $p)
-                            <span class="ob-chip" wire:key="obp-{{ $p['id'] }}">
-                                {{ $p['title'] }} · {{ $p['state'] }}@if(! $siteFilter && $p['tenant']) · {{ $p['tenant'] }}@endif
+                            <span class="ob-chip" wire:key="obp-{{ $p['id'] }}" @if (! empty($p['refresh'])) title="{{ $p['refresh']['title'] }}" @endif>
+                                @if (! empty($p['refresh']))<span style="color:#6366f1">{{ $p['refresh']['label'] }} ·</span> @endif{{ $p['title'] }} · {{ $p['state'] }}@if(! $siteFilter && $p['tenant']) · {{ $p['tenant'] }}@endif
                                 @if ($p['stalled'])
                                     <button class="ob-btn primary" style="margin-left:6px;padding:1px 7px;font-size:11px"
                                             wire:click="publishNowSync('{{ $p['id'] }}')"
@@ -308,6 +308,7 @@
                     <div class="ob-card" wire:key="oba-{{ $a['id'] }}">
                         <div class="ob-chips">
                             <span class="ob-chip">approved · not published</span>
+                            @if (! empty($a['refresh']))<span class="ob-chip" style="background:rgba(79,70,229,.12);color:#6366f1" title="{{ $a['refresh']['title'] }}">{{ $a['refresh']['label'] }}</span>@endif
                             <span class="ob-chip kw">{{ $a['keyword'] ?? 'reactive' }}</span>
                             @if ($a['silo'])<span class="ob-chip">{{ $a['silo'] }}</span>@endif
                             @if (! $siteFilter && $a['tenant'])<span class="ob-chip warn">{{ $a['tenant'] }}</span>@endif

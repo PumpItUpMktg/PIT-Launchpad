@@ -84,6 +84,8 @@ final class ContentCard
         public array $queries = [],
         public ?string $trafficPending = null,
         public ?bool $marketPriority = null,
+        /** A refresh marker (label + hover title + kind + count + at) once a refresh has landed on the row; not a metric. */
+        public ?array $refreshed = null,
         // The raw LiveMetrics block, carried ONLY to feed the legacy pages partial's nested `metrics` view
         // unchanged during the migration (Step 1). It retires with the partial (Step 2); the flat view above
         // is the real contract. `index` is overridden with the durable verdict in toArray, never this block's.
@@ -191,6 +193,7 @@ final class ContentCard
             'local_market' => $this->localMarket,
             'series' => $this->series,
             'refresh_count' => $this->refreshCount,
+            'refreshed' => $this->refreshed,
             'queries' => $this->queries,
             'search_position' => $this->searchPosition,
             'position_pending' => $this->positionPending,
