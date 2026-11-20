@@ -379,6 +379,10 @@ It lives under `app/ContentEngine/` and builds on §1 + §4.
   `.lp-news-update` block at the top (after the question-answer block when present) citing the outlet, a
   title/SEO proposal kept in `meta.news_refresh.proposal`, version +1, `RefreshEvent` NewsDevelopment,
   `needs_review`; the candidate is rejected "Folded into …" (`meta.coverage.folded_into`). Never automatic.
+  A refreshed post carries a **refresh chip** through Approved → Publishing → Published
+  (`BlogBoard::refreshBadge`: the latest of `meta.news_refresh` / `meta.question_refresh` names the kind, the
+  row's `refresh_count` the count, "↻ Refreshed ×2 · news hook · Nov 20", detail on hover; the shared
+  `ContentCard` carries it as `refreshed`). The Review card shows the full diff.
 - **Near-dup** (`NearDuplicateDetector`): semantic similarity (embeddings, scoped
   to the matched silo) + keyword overlap; very-high vs a live page → **refresh**
   mark (don't duplicate) + operator alert; moderate → operator flag; low →

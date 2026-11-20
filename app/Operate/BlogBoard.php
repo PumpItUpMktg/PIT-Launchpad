@@ -19,6 +19,7 @@ use App\Models\Silo;
 use App\Models\Site;
 use App\Publishing\Redirects\LegacyContentReviver;
 use App\Publishing\TenantStorage;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
@@ -241,6 +242,8 @@ class BlogBoard
             'keyword' => $c->targetKeyword?->query,
             'excerpt' => $this->excerpt($c),
             'score' => $c->relevance_score !== null ? round((float) $c->relevance_score, 2) : null,
+            // A refreshed post carries its refresh through Approved → Publish → Published (what refreshed it, when, how often).
+            'refresh' => $this->refreshBadge($c),
             'state' => match ($c->status) {
                 ContentStatus::Rendering => 'rendering image',
                 ContentStatus::Publishing => 'pushing to WordPress',
@@ -543,7 +546,70 @@ class BlogBoard
             publishedAt: $c->published_at?->toDateString(),
             daysLive: $c->published_at !== null ? (int) $c->published_at->diffInDays(now()) : null,
             indexnowAt: $c->indexnow_submitted_at?->toDateString(),
+            refreshed: $this->refreshBadge($c),
         ))->toArray();
+    }
+
+    /**
+     * The refresh marker a post carries once a refresh has landed on it — the questions lane's direct answer
+     * (`meta.question_refresh`), a folded news hook (`meta.news_refresh`), or an older drafting-engine refresh
+     * (`refresh_count` alone). The latest mark names the kind; the count is the row's `refresh_count`. Null for
+     * a post never refreshed. Shown as one chip on the Approved, Publishing and Published cards; the Review
+     * card shows the full diff.
+     *
+     * @return array{count: int, at: ?string, kind: string, label: string, title: string}|null
+     */
+    public function refreshBadge(Content $c): ?array
+    {
+        $meta = is_array($c->meta) ? $c->meta : [];
+        $marks = [];
+        foreach (['news' => 'news_refresh', 'question' => 'question_refresh'] as $kind => $key) {
+            $m = $meta[$key] ?? null;
+            if (is_array($m) && isset($m['refreshed_at']) && is_string($m['refreshed_at'])) {
+                $marks[$kind] = $m;
+            }
+        }
+        $count = (int) $c->refresh_count;
+        if ($marks === [] && $count === 0) {
+            return null;
+        }
+
+        $kind = 'refresh';
+        $latest = null;
+        foreach ($marks as $k => $m) {
+            $at = (string) $m['refreshed_at'];
+            if ($latest === null || strcmp($at, (string) $latest['refreshed_at']) > 0) {
+                $latest = $m;
+                $kind = $k;
+            }
+        }
+        $last = $c->last_refreshed_at;
+        $at = $latest !== null
+            ? (string) $latest['refreshed_at']
+            : ($last !== null ? Carbon::parse($last)->toIso8601String() : null);
+        $when = $at !== null ? Carbon::parse($at)->format('M j') : null;
+        $times = max($count, $latest !== null ? 1 : 0);
+
+        $what = match ($kind) {
+            'news' => 'news hook',
+            'question' => 'search question',
+            default => 'content',
+        };
+        $title = match ($kind) {
+            'news' => 'Updated with “'.(string) ($latest['candidate_title'] ?? '').'”'
+                .(! empty($latest['source_name']) ? ' ('.(string) $latest['source_name'].')' : '')
+                .' — a dated Update block at the top; title/SEO proposal kept beside the old values.',
+            'question' => 'Refreshed for the search question “'.(string) ($latest['query'] ?? '').'” — direct answer at the top, Q&A with FAQ schema at the end.',
+            default => 'Refreshed by the drafting engine.',
+        };
+
+        return [
+            'count' => $times,
+            'at' => $at,
+            'kind' => $kind,
+            'label' => '↻ Refreshed'.($times > 1 ? ' ×'.$times : '').' · '.$what.($when !== null ? ' · '.$when : ''),
+            'title' => $title.($times > 1 ? " Refreshed {$times} times in all." : ''),
+        ];
     }
 
     /**
