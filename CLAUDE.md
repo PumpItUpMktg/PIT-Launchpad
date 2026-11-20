@@ -365,8 +365,12 @@ It lives under `app/ContentEngine/` and builds on §1 + §4.
   an evergreen title, its angle usually does; each detector signal to its own floor — `coverage.twin_semantic`
   / `twin_overlap`; the funnel's `near_dup_of_content_id` counts when neither pairs; `meta.coverage.matched_on`
   records title | angle | link) and that post's Search Console standing (`PostStanding`, `gsc_url_daily` by path).
-  No twin → `author`; twin near the top (`covered_max_position`, `covered_min_impressions`) and no topical hook
-  → `covered`; any other twin → `refresh`. Stamped on `meta.coverage` at ingest (`launchpad:assess-coverage`
+  No twin → `author`; a STRONG twin (`covered_semantic` 0.85 / `covered_overlap` 0.6) near the top
+  (`covered_max_position`, `covered_min_impressions`) and no topical hook → `covered`; any other twin →
+  `refresh`. The twin floor is `twin_semantic` 0.70 — read from a production `--nearest` pass (angle against a
+  same-topic title scores 0.68–0.80 on the live model, an unrelated neighbour 0.61–0.67; overlap never clears
+  0.31 for news). `launchpad:assess-coverage --nearest` prints every candidate's closest live post with both
+  scores, floors ignored. Stamped on `meta.coverage` at ingest (`launchpad:assess-coverage`
   backfills, report-first). The Candidates card shows the pill + twin + standing; a plain Promote is HELD on
   refresh/covered ("Promote anyway" overrides; `launchpad:generate-post --force` likewise). **"Refresh
   existing post"** → `RefreshPostForNewsAngle` → `NewsAngleRefresher`: ONE model call → a dated

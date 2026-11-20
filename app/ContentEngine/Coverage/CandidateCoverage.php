@@ -24,9 +24,11 @@ use Illuminate\Support\Collection;
  *     to its own floor (`coverage.twin_semantic`, `coverage.twin_overlap`), never the blend. A twin the funnel
  *     already named (`near_dup_of_content_id`, when it is a live post) counts when neither text pairs.
  *  2. Standing — the twin's Search Console impressions / clicks / position over `coverage.standing_days`.
- *  3. Verdict — no twin → Author. Twin near the top (position ≤ `covered_max_position`, impressions ≥
- *     `covered_min_impressions`) and the candidate carrying no topical hook → Covered. Any other twin →
- *     Refresh: fold the hook into the post that already earns, instead of a second URL that splits it.
+ *  3. Verdict — no twin → Author. A STRONG twin (`coverage.covered_semantic` / `covered_overlap`) near the top
+ *     (position ≤ `covered_max_position`, impressions ≥ `covered_min_impressions`) with the candidate carrying no
+ *     topical hook → Covered. Any other twin → Refresh: fold the hook into the post that already earns, instead
+ *     of a second URL that splits it. Refresh steers (Promote is held, "Promote anyway" overrides); Covered says
+ *     "nothing to add", so it needs the stricter pairing.
  *
  * `stamp()` writes the decision on `meta.coverage`; nothing else changes. Never automatic beyond the stamp —
  * the operator still promotes, refreshes or dismisses.
@@ -47,16 +49,18 @@ class CandidateCoverage
         if ($twin === null) {
             return CoverageDecision::author();
         }
-        [$post, $similarity, $matchedOn] = $twin;
+        ['post' => $post, 'signal' => $similarity, 'matched_on' => $matchedOn, 'semantic' => $semantic, 'overlap' => $overlap] = $twin;
 
         $days = (int) config('launchpad.coverage.standing_days', 90);
         $standing = $this->standing->for($site, $post, $days);
         $maxPosition = (float) config('launchpad.coverage.covered_max_position', 5);
         $minImpressions = (int) config('launchpad.coverage.covered_min_impressions', 30);
         $topical = ($candidate->meta['shelf_life'] ?? null) === 'topical';
+        $strong = $semantic >= (float) config('launchpad.coverage.covered_semantic', 0.85)
+            || $overlap >= (float) config('launchpad.coverage.covered_overlap', 0.6);
 
         $ranksNearTop = $standing['position'] !== null && $standing['position'] <= $maxPosition && $standing['impressions'] >= $minImpressions;
-        $verdict = $ranksNearTop && ! $topical ? CoverageVerdict::Covered : CoverageVerdict::Refresh;
+        $verdict = $ranksNearTop && ! $topical && $strong ? CoverageVerdict::Covered : CoverageVerdict::Refresh;
 
         $where = $standing['position'] !== null
             ? sprintf('position %.1f · %d impressions · %d clicks in %dd', $standing['position'], $standing['impressions'], $standing['clicks'], $days)
@@ -144,7 +148,10 @@ class CandidateCoverage
         return $posts->reject(fn (Content $p): bool => (string) $p->id === (string) $candidate->id)->values();
     }
 
-    /** @return array{0: Content, 1: float, 2: string}|null the post, the signal, and what matched: title | angle | link */
+    /**
+     * @return array{post: Content, signal: float, matched_on: string, semantic: float, overlap: float}|null
+     *                                                                                                       what matched: title | angle | link; the two raw signals
+     */
     private function twin(Site $site, Content $candidate): ?array
     {
         $posts = $this->livePosts($site, $candidate);
@@ -167,14 +174,14 @@ class CandidateCoverage
             if ($result->similarToContentId === null || ($result->semanticSimilarity < $semanticFloor && $result->keywordOverlap < $overlapFloor)) {
                 continue;
             }
-            if ($best === null || $result->signal() > $best[1]) {
-                $best = [$result->similarToContentId, $result->signal(), $label];
+            if ($best === null || $result->signal() > $best['signal']) {
+                $best = ['id' => $result->similarToContentId, 'signal' => $result->signal(), 'matched_on' => $label, 'semantic' => $result->semanticSimilarity, 'overlap' => $result->keywordOverlap];
             }
         }
         if ($best !== null) {
-            $post = $posts->firstWhere('id', $best[0]);
+            $post = $posts->firstWhere('id', $best['id']);
             if ($post !== null) {
-                return [$post, round($best[1], 3), $best[2]];
+                return ['post' => $post, 'signal' => round($best['signal'], 3), 'matched_on' => $best['matched_on'], 'semantic' => round($best['semantic'], 3), 'overlap' => round($best['overlap'], 3)];
             }
         }
 
@@ -183,8 +190,10 @@ class CandidateCoverage
             $linked = $posts->firstWhere('id', $candidate->near_dup_of_content_id);
             if ($linked !== null) {
                 $note = is_array($candidate->meta['near_dup'] ?? null) ? $candidate->meta['near_dup'] : [];
+                $sim = round((float) ($note['similarity'] ?? 0.0), 3);
 
-                return [$linked, round((float) ($note['similarity'] ?? 0.0), 3), 'link'];
+                // The funnel's link came from its refresh/flag tier on the blended signal — carried as the semantic side.
+                return ['post' => $linked, 'signal' => $sim, 'matched_on' => 'link', 'semantic' => $sim, 'overlap' => 0.0];
             }
         }
 
