@@ -103,7 +103,9 @@ class CandidateCoverage
      * The closest live post to a candidate REGARDLESS of the floors — both signals and the text that produced
      * them — so the floors can be set from what the data shows rather than guessed. Read-only, no stamp.
      *
-     * @return array{post: Content, semantic: float, overlap: float, text: string}|null text: title | angle
+     * @return array{post: ?Content, semantic: float, overlap: float, text: string}|null null when the site has no live
+     *                                                                                   posts; `post` null when nothing
+     *                                                                                   shares a signal (text: title | angle)
      */
     public function nearest(Site $site, Content $candidate): ?array
     {
@@ -112,17 +114,17 @@ class CandidateCoverage
             return null;
         }
         $titleOnly = $posts->map(fn (Content $p): Content => (new Content)->forceFill(['id' => $p->id, 'title' => $p->title]));
-        $best = null;
+        $best = ['post' => null, 'semantic' => 0.0, 'overlap' => 0.0, 'text' => 'none'];
         foreach (['title' => trim((string) $candidate->title), 'angle' => trim((string) ($candidate->angle_hint ?? ''))] as $label => $text) {
             if ($text === '') {
                 continue;
             }
             $result = $this->nearDup->detect($text, $titleOnly);
             if ($result->similarToContentId === null) {
-                continue;
+                continue;   // zero signal against every live post
             }
             $post = $posts->firstWhere('id', $result->similarToContentId);
-            if ($post !== null && ($best === null || $result->signal() > max($best['semantic'], $best['overlap']))) {
+            if ($post !== null && $result->signal() > max($best['semantic'], $best['overlap'])) {
                 $best = ['post' => $post, 'semantic' => round($result->semanticSimilarity, 3), 'overlap' => round($result->keywordOverlap, 3), 'text' => $label];
             }
         }

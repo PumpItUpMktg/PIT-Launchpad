@@ -118,13 +118,13 @@ class AssessCoverageCommand extends Command
             $lines[] = [
                 'score' => max($near['semantic'], $near['overlap']),
                 'text' => sprintf(
-                    '    <fg=%s>sem %.2f · ovl %.2f · via %-5s</>  %s  ~  “%s”',
+                    '    <fg=%s>sem %.2f · ovl %.2f · via %-5s</>  %s  ~  %s',
                     $passes ? 'green' : 'gray',
                     $near['semantic'],
                     $near['overlap'],
                     $near['text'],
                     $row->title,
-                    $near['post']->title,
+                    $near['post'] !== null ? '“'.$near['post']->title.'”' : '(nothing close)',
                 ),
             ];
         }

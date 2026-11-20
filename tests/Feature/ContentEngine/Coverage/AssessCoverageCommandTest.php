@@ -50,6 +50,7 @@ it('--nearest lists every candidate\'s closest live post with both scores and th
         ->toContain('via title  Sump Pump Maintenance Checklist for Homeowners This Fall  ~  “Sump Pump Maintenance Checklist for Homeowners”')
         ->toContain('via angle  Radon fan noise at night  ~  “Sump Pump Maintenance Checklist for Homeowners”')
         ->toContain('sem 1.00 · ovl 1.00 · via angle')
+        ->toContain('sem 0.00 · ovl 0.00 · via none   Township approves new sewer bond  ~  (nothing close)')
         ->toContain('nothing written');
     // Strongest first: the exact-angle match (1.00) is listed before the title match, and the unrelated one last.
     expect(strpos($out, 'Radon fan noise'))->toBeLessThan(strpos($out, 'This Fall  ~'))
