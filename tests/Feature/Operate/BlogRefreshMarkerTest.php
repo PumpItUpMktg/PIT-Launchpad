@@ -70,3 +70,26 @@ it('shows the refresh chip on the Approved card, the Publishing strip and the Pu
         ->assertSee('Live refreshed post')
         ->assertSee('↻ Refreshed ×2 · news hook · Nov 20');
 });
+
+it('the "Refreshed posts" choice narrows every tab to refreshed posts', function () {
+    $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Approved, 'title' => 'Approved refreshed post', 'slug' => 'approved-refreshed', 'body' => '<p>x</p>', 'refresh_count' => 1, 'meta' => ['news_refresh' => newsMark()]]);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Approved, 'title' => 'Approved plain post', 'slug' => 'approved-plain', 'body' => '<p>x</p>', 'refresh_count' => 0, 'meta' => []]);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::NeedsReview, 'title' => 'Reviewing refreshed post', 'slug' => 'review-refreshed', 'body' => '<p>x</p>', 'refresh_count' => 1, 'meta' => ['question_refresh' => questionMark()]]);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::NeedsReview, 'title' => 'Reviewing plain draft', 'slug' => 'review-plain', 'body' => '<p>x</p>', 'refresh_count' => 0, 'meta' => []]);
+    Content::factory()->post()->published()->create(['site_id' => $site->id, 'title' => 'Live refreshed post', 'slug' => 'live-refreshed', 'body' => '<p>x</p>', 'refresh_count' => 2, 'meta' => ['news_refresh' => newsMark()]]);
+    Content::factory()->post()->published()->create(['site_id' => $site->id, 'title' => 'Live plain post', 'slug' => 'live-plain', 'body' => '<p>x</p>', 'refresh_count' => 0, 'meta' => []]);
+
+    $filter = OperateBlog::REFRESHED_FILTER;
+    Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)->set('siloFilter', $filter)->set('tab', 'approved')
+        ->assertSee('Refreshed posts')
+        ->assertSee('Approved refreshed post')->assertDontSee('Approved plain post');
+    Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)->set('siloFilter', $filter)->set('tab', 'review')
+        ->assertSee('Reviewing refreshed post')->assertDontSee('Reviewing plain draft');
+    Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)->set('siloFilter', $filter)->set('tab', 'published')
+        ->assertSee('Live refreshed post')->assertDontSee('Live plain post');
+
+    // Without the choice every post shows (the filter is remembered across visits, so it is cleared explicitly).
+    Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)->set('siloFilter', '')->set('tab', 'published')
+        ->assertSee('Live refreshed post')->assertSee('Live plain post');
+});
