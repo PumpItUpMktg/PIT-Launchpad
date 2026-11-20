@@ -106,6 +106,10 @@ class OperateBlog extends OperatePage
     public function getCandidatesProperty(): array
     {
         $rows = app(BlogBoard::class)->candidates($this->siteFilter, $this->filterSilo());
+        if ($this->refreshedOnly()) {
+            // Candidates are never refreshed themselves — the refreshed view shows the ones that would refresh a live post.
+            return array_values(array_filter($rows, fn (array $r): bool => ! empty($r['coverage'])));
+        }
 
         return $this->questionsOnly() ? array_values(array_filter($rows, fn (array $r): bool => ($r['source'] ?? null) === 'questions')) : $rows;
     }
@@ -125,13 +129,18 @@ class OperateBlog extends OperatePage
 
     public function getPublishingProperty(): array
     {
-        return app(BlogBoard::class)->publishing($this->siteFilter, $this->filterSilo());
+        $rows = app(BlogBoard::class)->publishing($this->siteFilter, $this->filterSilo());
+
+        return $this->refreshedOnly() ? array_values(array_filter($rows, fn (array $r): bool => ! empty($r['refresh']))) : $rows;
     }
 
     /** @return list<array<string, mixed>> */
     public function getReviewProperty(): array
     {
         $rows = app(BlogBoard::class)->review($this->siteFilter, $this->filterSilo());
+        if ($this->refreshedOnly()) {
+            return array_values(array_filter($rows, fn (array $r): bool => ! empty($r['refresh'])));
+        }
 
         return $this->questionsOnly() ? array_values(array_filter($rows, fn (array $r): bool => ($r['source'] ?? null) === 'questions' || ! empty($r['refresh']))) : $rows;
     }
@@ -139,13 +148,28 @@ class OperateBlog extends OperatePage
     /** Approved posts queued to publish (approved → rendering → pushing), not yet live. @return list<array<string, mixed>> */
     public function getApprovedProperty(): array
     {
-        return app(BlogBoard::class)->approved($this->siteFilter, $this->filterSilo());
+        $rows = app(BlogBoard::class)->approved($this->siteFilter, $this->filterSilo());
+
+        return $this->refreshedOnly() ? array_values(array_filter($rows, fn (array $r): bool => ! empty($r['refresh']))) : $rows;
     }
 
     /** @return list<array<string, mixed>> */
     public function getPublishedProperty(): array
     {
-        return app(BlogBoard::class)->published($this->siteFilter, $this->filterSilo());
+        $groups = app(BlogBoard::class)->published($this->siteFilter, $this->filterSilo());
+        if (! $this->refreshedOnly()) {
+            return $groups;
+        }
+        // Refreshed view: only the live posts carrying a refresh, and only the groups that still hold one.
+        $out = [];
+        foreach ($groups as $g) {
+            $g['articles'] = array_values(array_filter((array) ($g['articles'] ?? []), fn (array $a): bool => ! empty($a['refreshed'])));
+            if ($g['articles'] !== []) {
+                $out[] = $g;
+            }
+        }
+
+        return $out;
     }
 
     /** @return list<array<string, mixed>> */
@@ -647,6 +671,14 @@ class OperateBlog extends OperatePage
     /** The filter's "Questions lane" choice: the lane's candidates and refreshes only, every silo. */
     public const QUESTIONS_FILTER = 'questions';
 
+    /** The dropdown's "Refreshed posts" choice: every tab narrows to posts a refresh has landed on (or will). */
+    public const REFRESHED_FILTER = 'refreshed';
+
+    private function refreshedOnly(): bool
+    {
+        return $this->siloFilter === self::REFRESHED_FILTER;
+    }
+
     private function questionsOnly(): bool
     {
         return $this->siloFilter === self::QUESTIONS_FILTER;
@@ -654,7 +686,7 @@ class OperateBlog extends OperatePage
 
     private function filterSilo(): ?string
     {
-        return $this->siloFilter !== null && $this->siloFilter !== '' && ! $this->questionsOnly() ? $this->siloFilter : null;
+        return $this->siloFilter !== null && $this->siloFilter !== '' && ! $this->questionsOnly() && ! $this->refreshedOnly() ? $this->siloFilter : null;
     }
 
     private function ownedPost(string $contentId): ?Content

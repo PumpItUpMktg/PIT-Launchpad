@@ -54,6 +54,7 @@
             <select class="ob-select" wire:model.live="siloFilter">
                 <option value="">All silos</option>
                 <option value="{{ \App\Filament\Pages\Operate\OperateBlog::QUESTIONS_FILTER }}">Questions lane</option>
+                <option value="{{ \App\Filament\Pages\Operate\OperateBlog::REFRESHED_FILTER }}">Refreshed posts</option>
                 @foreach ($this->siloOptions as $id => $label)
                     <option value="{{ $id }}">{{ $label }}</option>
                 @endforeach
