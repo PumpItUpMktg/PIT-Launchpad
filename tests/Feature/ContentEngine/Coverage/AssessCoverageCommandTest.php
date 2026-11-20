@@ -46,7 +46,7 @@ it('--nearest lists every candidate\'s closest live post with both scores and th
     Artisan::call('launchpad:assess-coverage', ['--site' => $site->id, '--nearest' => true]);
     $out = Artisan::output();
 
-    expect($out)->toContain('Nearest live post per candidate (floors: semantic ≥ 0.85 OR overlap ≥ 0.60')
+    expect($out)->toContain('Nearest live post per candidate (twin floors: semantic ≥ 0.70 OR overlap ≥ 0.60 → refresh; covered also needs semantic ≥ 0.85 OR overlap ≥ 0.60)')
         ->toContain('via title  Sump Pump Maintenance Checklist for Homeowners This Fall  ~  “Sump Pump Maintenance Checklist for Homeowners”')
         ->toContain('via angle  Radon fan noise at night  ~  “Sump Pump Maintenance Checklist for Homeowners”')
         ->toContain('sem 1.00 · ovl 1.00 · via angle')

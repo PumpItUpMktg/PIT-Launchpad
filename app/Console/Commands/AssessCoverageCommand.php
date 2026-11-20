@@ -105,7 +105,13 @@ class AssessCoverageCommand extends Command
     {
         $semanticFloor = (float) config('launchpad.coverage.twin_semantic', 0.85);
         $overlapFloor = (float) config('launchpad.coverage.twin_overlap', 0.6);
-        $this->line(sprintf('  Nearest live post per candidate (floors: semantic ≥ %.2f OR overlap ≥ %.2f; a line at or above either floor pairs):', $semanticFloor, $overlapFloor));
+        $this->line(sprintf(
+            '  Nearest live post per candidate (twin floors: semantic ≥ %.2f OR overlap ≥ %.2f → refresh; covered also needs semantic ≥ %.2f OR overlap ≥ %.2f):',
+            $semanticFloor,
+            $overlapFloor,
+            (float) config('launchpad.coverage.covered_semantic', 0.85),
+            (float) config('launchpad.coverage.covered_overlap', 0.6),
+        ));
         $lines = [];
         foreach ($rows as $row) {
             $near = $coverage->nearest($site, $row);

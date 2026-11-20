@@ -977,8 +977,14 @@ return [
     | operator still decides (Promote anyway / Refresh existing post / Dismiss).
     */
     'coverage' => [
-        'twin_semantic' => (float) env('LAUNCHPAD_COVERAGE_TWIN_SEMANTIC', 0.85),
+        // The twin floors (each signal to its own floor, never the blend). Read from a production --nearest pass:
+        // on the live embedding model a candidate's ANGLE against a same-topic live title scores 0.68–0.80, an
+        // unrelated neighbour 0.61–0.67, and token overlap never clears 0.31 for news. So the refresh band opens at
+        // 0.70 semantic; `covered` ("nothing to add") needs a STRONG twin on top of the standing: the stricter pair.
+        'twin_semantic' => (float) env('LAUNCHPAD_COVERAGE_TWIN_SEMANTIC', 0.70),
         'twin_overlap' => (float) env('LAUNCHPAD_COVERAGE_TWIN_OVERLAP', 0.6),
+        'covered_semantic' => (float) env('LAUNCHPAD_COVERAGE_COVERED_SEMANTIC', 0.85),
+        'covered_overlap' => (float) env('LAUNCHPAD_COVERAGE_COVERED_OVERLAP', 0.6),
         'standing_days' => (int) env('LAUNCHPAD_COVERAGE_STANDING_DAYS', 90),
         'covered_max_position' => (float) env('LAUNCHPAD_COVERAGE_COVERED_MAX_POSITION', 5),
         'covered_min_impressions' => (int) env('LAUNCHPAD_COVERAGE_COVERED_MIN_IMPRESSIONS', 30),

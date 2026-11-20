@@ -123,3 +123,25 @@ it('nearest() reports the closest live post with both scores and the text, even 
 
     expect(app(CandidateCoverage::class)->nearest(covSite(), covCandidate($site, 'Anything')))->toBeNull();
 });
+
+it('a twin that clears only the refresh floor steers to refresh even when it ranks near the top — covered needs the strong twin', function () {
+    $site = covSite();
+    covLive($site, 'Sump Pump Maintenance Checklist for Homeowners', 'sump-pump-maintenance-checklist');
+    covGsc($site, 'https://spg.example/sump-pump-maintenance-checklist/', 120, 9, 3.2);
+    // Five of eight tokens shared: semantic ≈ 0.72 (≥ 0.70 pairs), overlap 0.56 (< 0.60) — a moderate twin, not a strong one.
+    $moderate = covCandidate($site, 'Sump Pump Maintenance Checklist for Rainy Spring Weekends', ['shelf_life' => 'evergreen']);
+
+    $decision = app(CandidateCoverage::class)->decide($site, $moderate);
+    expect($decision->verdict)->toBe(CoverageVerdict::Refresh)
+        ->and($decision->matchedOn)->toBe('title')
+        ->and($decision->similarity)->toBeGreaterThanOrEqual(0.70)->and($decision->similarity)->toBeLessThan(0.85)
+        ->and($decision->reason)->toContain('ranks near the top')->toContain('fold the new development into it');
+
+    // Lowering the strong floor to the same band makes it covered — the knob is the only difference.
+    config(['launchpad.coverage.covered_semantic' => 0.70]);
+    expect(app(CandidateCoverage::class)->decide($site, $moderate)->verdict)->toBe(CoverageVerdict::Covered);
+
+    // Below the refresh floor altogether: author.
+    config(['launchpad.coverage.twin_semantic' => 0.85, 'launchpad.coverage.covered_semantic' => 0.85]);
+    expect(app(CandidateCoverage::class)->decide($site, $moderate)->verdict)->toBe(CoverageVerdict::Author);
+});
