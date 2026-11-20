@@ -59,13 +59,13 @@ class CandidateCoverage
         $where = $standing['position'] !== null
             ? sprintf('position %.1f · %d impressions · %d clicks in %dd', $standing['position'], $standing['impressions'], $standing['clicks'], $days)
             : sprintf('no Search Console standing in %dd', $days);
-        $reason = match ($verdict) {
-            CoverageVerdict::Covered => "“{$post->title}” already ranks near the top for this ({$where}) and the candidate adds no timely hook.",
-            CoverageVerdict::Refresh => $ranksNearTop
-                ? "“{$post->title}” ranks near the top for this ({$where}) — fold the new development into it rather than adding a second post."
-                : "“{$post->title}” already covers this ({$where}) — refresh it with the new angle rather than splitting the topic.",
-            CoverageVerdict::Author => '',
-        };
+        if ($verdict === CoverageVerdict::Covered) {
+            $reason = "“{$post->title}” already ranks near the top for this ({$where}) and the candidate adds no timely hook.";
+        } elseif ($ranksNearTop) {
+            $reason = "“{$post->title}” ranks near the top for this ({$where}) — fold the new development into it rather than adding a second post.";
+        } else {
+            $reason = "“{$post->title}” already covers this ({$where}) — refresh it with the new angle rather than splitting the topic.";
+        }
 
         return new CoverageDecision(
             $verdict,
