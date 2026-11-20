@@ -45,7 +45,8 @@ it('is covered when a live post with a near-identical title already ranks near t
         ->and($decision->twinUrl)->toContain('sump-pump-maintenance-checklist')
         ->and($decision->position)->toBe(3.2)->and($decision->impressions)->toBe(120)->and($decision->clicks)->toBe(9)
         ->and($decision->similarity)->toBeGreaterThanOrEqual(0.6)
-        ->and($decision->reason)->toContain('already ranks near the top')->toContain('position 3.2 · 120 impressions');
+        ->and($decision->reason)->toContain('already ranks near the top')->toContain('position 3.2 · 120 impressions')
+        ->and($decision->matchedOn)->toBe('title')->and($decision->reason)->not->toContain('matched on the candidate');
 
     $stamped = CoverageDecision::fromMeta($candidate->fresh()->meta['coverage']);
     expect($stamped)->not->toBeNull()->and($stamped->verdict)->toBe(CoverageVerdict::Covered)->and($stamped->twinTitle)->toBe($post->title)->and($stamped->checkedAt)->not->toBeNull();
@@ -81,9 +82,32 @@ it('is author when no live post reads as the topic, and takes the funnel\'s own 
 
     $linked = covCandidate($site, 'What to check before the spring thaw', ['near_dup' => ['similarity' => 0.91]], ['near_dup_of_content_id' => $post->id]);
     $viaLink = app(CandidateCoverage::class)->decide($site, $linked);
-    expect($viaLink->verdict)->toBe(CoverageVerdict::Refresh)->and($viaLink->twinId)->toBe($post->id)->and($viaLink->similarity)->toBe(0.91);
+    expect($viaLink->verdict)->toBe(CoverageVerdict::Refresh)->and($viaLink->twinId)->toBe($post->id)->and($viaLink->similarity)->toBe(0.91)
+        ->and($viaLink->matchedOn)->toBe('link')->and($viaLink->reason)->toContain('near-duplicate link');
 
     // A site with no live posts at all: author, no lookups.
     $empty = covSite();
     expect(app(CandidateCoverage::class)->decide($empty, covCandidate($empty, 'Anything'))->verdict)->toBe(CoverageVerdict::Author);
+});
+
+it('pairs a news headline with the live post through its advisory angle when the headline alone does not read as the topic', function () {
+    $site = covSite();
+    $post = covLive($site, 'Sump Pump Maintenance Checklist for Homeowners', 'sump-pump-maintenance-checklist');
+    covLive($site, 'Radon Fan Installation Explained', 'radon-fan-installation');
+
+    // The headline is a news story; the angle the scorer wrote is what the post would be about.
+    $news = covCandidate($site, 'Philly storms expose neglected basements across the region', ['shelf_life' => 'topical'], [
+        'angle_hint' => 'Sump pump maintenance checklist for homeowners before the storm',
+    ]);
+    $decision = app(CandidateCoverage::class)->stamp($site, $news);
+
+    expect($decision->verdict)->toBe(CoverageVerdict::Refresh)
+        ->and($decision->twinId)->toBe($post->id)
+        ->and($decision->matchedOn)->toBe('angle')
+        ->and($decision->reason)->toContain('matched on the candidate\'s angle')
+        ->and(CoverageDecision::fromMeta($news->fresh()->meta['coverage'])->matchedOn)->toBe('angle');
+
+    // An angle on a different topic adds nothing: the headline decides, and here neither pairs.
+    $other = covCandidate($site, 'Philly storms expose neglected basements across the region', [], ['angle_hint' => 'Why downspout extensions matter after heavy rain']);
+    expect(app(CandidateCoverage::class)->decide($site, $other)->verdict)->toBe(CoverageVerdict::Author);
 });

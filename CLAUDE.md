@@ -360,9 +360,11 @@ It lives under `app/ContentEngine/` and builds on §1 + §4.
   returns national noise. `markets` is the legacy keyword × "City ST" shape; an unknown footprint falls back
   to it; every-market-held still generates nothing.
 - **Coverage verdict** (`app/ContentEngine/Coverage/`): before any draft, `CandidateCoverage` checks every
-  candidate for a LIVE post whose title reads as its topic (title against title, each detector signal to its
-  own floor — `coverage.twin_semantic` / `twin_overlap`; the funnel's `near_dup_of_content_id` counts when
-  it points at a live post) and that post's Search Console standing (`PostStanding`, `gsc_url_daily` by path).
+  candidate for a LIVE post whose title reads as its topic (the candidate's headline AND its advisory angle
+  are each tried against the live titles, the stronger passing match wins — a news headline rarely reads like
+  an evergreen title, its angle usually does; each detector signal to its own floor — `coverage.twin_semantic`
+  / `twin_overlap`; the funnel's `near_dup_of_content_id` counts when neither pairs; `meta.coverage.matched_on`
+  records title | angle | link) and that post's Search Console standing (`PostStanding`, `gsc_url_daily` by path).
   No twin → `author`; twin near the top (`covered_max_position`, `covered_min_impressions`) and no topical hook
   → `covered`; any other twin → `refresh`. Stamped on `meta.coverage` at ingest (`launchpad:assess-coverage`
   backfills, report-first). The Candidates card shows the pill + twin + standing; a plain Promote is HELD on

@@ -16,11 +16,13 @@ use Illuminate\Support\Collection;
  * The coverage verdict on a blog candidate BEFORE any draft: is there already a live post on this topic,
  * and how is it doing? The questions lane's shape, applied to every candidate.
  *
- *  1. Twin — the live post whose TITLE reads as the candidate's (title against title: the intake detector
- *     compared a headline with full bodies and let twelve "Sump pump maintenance …" posts through). The
- *     detector's two signals are read separately, each to its own floor (`coverage.twin_semantic`,
- *     `coverage.twin_overlap`), never the blend. A twin the funnel already named (`near_dup_of_content_id`,
- *     when it is a live post) counts when the detector finds none.
+ *  1. Twin — the live post whose TITLE reads as the candidate's. Two texts are tried against the live titles:
+ *     the candidate's headline, and its advisory ANGLE (what the post would be about — a news headline rarely
+ *     reads like an evergreen title, the angle the scorer wrote for it usually does); the stronger passing
+ *     match wins. Title against title: the intake detector compared a headline with full bodies and let
+ *     twelve "Sump pump maintenance …" posts through. The detector's two signals are read separately, each
+ *     to its own floor (`coverage.twin_semantic`, `coverage.twin_overlap`), never the blend. A twin the funnel
+ *     already named (`near_dup_of_content_id`, when it is a live post) counts when neither text pairs.
  *  2. Standing — the twin's Search Console impressions / clicks / position over `coverage.standing_days`.
  *  3. Verdict — no twin → Author. Twin near the top (position ≤ `covered_max_position`, impressions ≥
  *     `covered_min_impressions`) and the candidate carrying no topical hook → Covered. Any other twin →
@@ -45,7 +47,7 @@ class CandidateCoverage
         if ($twin === null) {
             return CoverageDecision::author();
         }
-        [$post, $similarity] = $twin;
+        [$post, $similarity, $matchedOn] = $twin;
 
         $days = (int) config('launchpad.coverage.standing_days', 90);
         $standing = $this->standing->for($site, $post, $days);
@@ -59,6 +61,11 @@ class CandidateCoverage
         $where = $standing['position'] !== null
             ? sprintf('position %.1f · %d impressions · %d clicks in %dd', $standing['position'], $standing['impressions'], $standing['clicks'], $days)
             : sprintf('no Search Console standing in %dd', $days);
+        $where .= match ($matchedOn) {
+            'angle' => ' · matched on the candidate\'s angle',
+            'link' => ' · the funnel\'s own near-duplicate link',
+            default => '',
+        };
         if ($verdict === CoverageVerdict::Covered) {
             $reason = "“{$post->title}” already ranks near the top for this ({$where}) and the candidate adds no timely hook.";
         } elseif ($ranksNearTop) {
@@ -77,6 +84,7 @@ class CandidateCoverage
             $standing['clicks'],
             $standing['position'],
             $reason,
+            matchedOn: $matchedOn,
         );
     }
 
@@ -91,7 +99,7 @@ class CandidateCoverage
         return $decision;
     }
 
-    /** @return array{0: Content, 1: float}|null */
+    /** @return array{0: Content, 1: float, 2: string}|null the post, the signal, and what matched: title | angle | link */
     private function twin(Site $site, Content $candidate): ?array
     {
         $posts = $this->livePosts[(string) $site->id] ??= Content::withoutGlobalScope(SiteScope::class)
@@ -104,15 +112,29 @@ class CandidateCoverage
             return null;
         }
 
-        // Title against TITLE: the rows carry no body, so the detector reads title (+ slug) on both sides.
+        // Against TITLES only: the rows carry no body, so the detector reads title (+ slug) on both sides. The
+        // candidate is tried twice — its headline, then its advisory angle — and the stronger passing match wins.
         $titleOnly = $posts->map(fn (Content $p): Content => (new Content)->forceFill(['id' => $p->id, 'title' => $p->title]));
-        $result = $this->nearDup->detect(trim((string) $candidate->title), $titleOnly);
         $semanticFloor = (float) config('launchpad.coverage.twin_semantic', 0.85);
         $overlapFloor = (float) config('launchpad.coverage.twin_overlap', 0.6);
-        if ($result->similarToContentId !== null && ($result->semanticSimilarity >= $semanticFloor || $result->keywordOverlap >= $overlapFloor)) {
-            $post = $posts->firstWhere('id', $result->similarToContentId);
+        $texts = ['title' => trim((string) $candidate->title), 'angle' => trim((string) ($candidate->angle_hint ?? ''))];
+        $best = null;
+        foreach ($texts as $label => $text) {
+            if ($text === '') {
+                continue;
+            }
+            $result = $this->nearDup->detect($text, $titleOnly);
+            if ($result->similarToContentId === null || ($result->semanticSimilarity < $semanticFloor && $result->keywordOverlap < $overlapFloor)) {
+                continue;
+            }
+            if ($best === null || $result->signal() > $best[1]) {
+                $best = [$result->similarToContentId, $result->signal(), $label];
+            }
+        }
+        if ($best !== null) {
+            $post = $posts->firstWhere('id', $best[0]);
             if ($post !== null) {
-                return [$post, round($result->signal(), 3)];
+                return [$post, round($best[1], 3), $best[2]];
             }
         }
 
@@ -122,7 +144,7 @@ class CandidateCoverage
             if ($linked !== null) {
                 $note = is_array($candidate->meta['near_dup'] ?? null) ? $candidate->meta['near_dup'] : [];
 
-                return [$linked, round((float) ($note['similarity'] ?? 0.0), 3)];
+                return [$linked, round((float) ($note['similarity'] ?? 0.0), 3), 'link'];
             }
         }
 
