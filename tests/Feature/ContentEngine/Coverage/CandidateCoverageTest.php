@@ -111,3 +111,15 @@ it('pairs a news headline with the live post through its advisory angle when the
     $other = covCandidate($site, 'Philly storms expose neglected basements across the region', [], ['angle_hint' => 'Why downspout extensions matter after heavy rain']);
     expect(app(CandidateCoverage::class)->decide($site, $other)->verdict)->toBe(CoverageVerdict::Author);
 });
+
+it('nearest() reports the closest live post with both scores and the text, even far below the floors', function () {
+    $site = covSite();
+    $post = covLive($site, 'Sump Pump Maintenance Checklist for Homeowners', 'sump-pump-maintenance-checklist');
+    $far = covCandidate($site, 'Township approves new sewer bond for pump station', []);
+    $near = app(CandidateCoverage::class)->nearest($site, $far);
+    expect($near)->not->toBeNull()->and($near['post']->id)->toBe($post->id)->and($near['text'])->toBe('title')
+        ->and($near['overlap'])->toBeLessThan(0.6)->and($near['semantic'])->toBeLessThan(0.85);
+    expect(app(CandidateCoverage::class)->decide($site, $far)->verdict)->toBe(CoverageVerdict::Author);
+
+    expect(app(CandidateCoverage::class)->nearest(covSite(), covCandidate($site, 'Anything')))->toBeNull();
+});

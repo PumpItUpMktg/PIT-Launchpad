@@ -99,15 +99,55 @@ class CandidateCoverage
         return $decision;
     }
 
-    /** @return array{0: Content, 1: float, 2: string}|null the post, the signal, and what matched: title | angle | link */
-    private function twin(Site $site, Content $candidate): ?array
+    /**
+     * The closest live post to a candidate REGARDLESS of the floors — both signals and the text that produced
+     * them — so the floors can be set from what the data shows rather than guessed. Read-only, no stamp.
+     *
+     * @return array{post: ?Content, semantic: float, overlap: float, text: string}|null null when the site has no live
+     *                                                                                   posts; `post` null when nothing
+     *                                                                                   shares a signal (text: title | angle)
+     */
+    public function nearest(Site $site, Content $candidate): ?array
+    {
+        $posts = $this->livePosts($site, $candidate);
+        if ($posts->isEmpty()) {
+            return null;
+        }
+        $titleOnly = $posts->map(fn (Content $p): Content => (new Content)->forceFill(['id' => $p->id, 'title' => $p->title]));
+        $best = ['post' => null, 'semantic' => 0.0, 'overlap' => 0.0, 'text' => 'none'];
+        foreach (['title' => trim((string) $candidate->title), 'angle' => trim((string) ($candidate->angle_hint ?? ''))] as $label => $text) {
+            if ($text === '') {
+                continue;
+            }
+            $result = $this->nearDup->detect($text, $titleOnly);
+            if ($result->similarToContentId === null) {
+                continue;   // zero signal against every live post
+            }
+            $post = $posts->firstWhere('id', $result->similarToContentId);
+            if ($post !== null && $result->signal() > max($best['semantic'], $best['overlap'])) {
+                $best = ['post' => $post, 'semantic' => round($result->semanticSimilarity, 3), 'overlap' => round($result->keywordOverlap, 3), 'text' => $label];
+            }
+        }
+
+        return $best;
+    }
+
+    /** @return Collection<int, Content> the site's live posts, the candidate itself excluded (cached per site) */
+    private function livePosts(Site $site, Content $candidate): Collection
     {
         $posts = $this->livePosts[(string) $site->id] ??= Content::withoutGlobalScope(SiteScope::class)
             ->where('site_id', $site->id)
             ->where('kind', ContentKind::Post->value)
             ->where('status', ContentStatus::Published->value)
-            ->where('id', '!=', $candidate->id)
             ->get(['id', 'site_id', 'kind', 'page_type', 'slug', 'title', 'status']);
+
+        return $posts->reject(fn (Content $p): bool => (string) $p->id === (string) $candidate->id)->values();
+    }
+
+    /** @return array{0: Content, 1: float, 2: string}|null the post, the signal, and what matched: title | angle | link */
+    private function twin(Site $site, Content $candidate): ?array
+    {
+        $posts = $this->livePosts($site, $candidate);
         if ($posts->isEmpty()) {
             return null;
         }

@@ -11,6 +11,7 @@ use App\Models\Scopes\SiteScope;
 use App\Models\Scopes\VisibleSiteScope;
 use App\Models\Site;
 use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
 
 /**
  * The coverage verdict on the current candidate backlog — report-first; --execute stamps `meta.coverage` on each
@@ -22,6 +23,7 @@ class AssessCoverageCommand extends Command
     protected $signature = 'launchpad:assess-coverage
         {--site= : Limit to one site id or brand name}
         {--all : Re-check every open candidate, not only the un-stamped ones}
+        {--nearest : Also list every candidate\'s closest live post with both scores, floors ignored — to see where the pairs really sit}
         {--execute : Write the verdict on each candidate (meta.coverage); report-only by default}';
 
     protected $description = 'Check each open blog candidate for a live post that already covers its topic (and that post\'s Search Console standing): author / refresh / covered. Report-first; --execute stamps the board.';
@@ -57,6 +59,9 @@ class AssessCoverageCommand extends Command
             }
             $this->newLine();
             $this->line("<info>{$site->brand_name}</info> ({$site->id}) · {$rows->count()} candidate(s)");
+            if ($this->option('nearest')) {
+                $this->nearest($coverage, $site, $rows);
+            }
             foreach ($rows as $row) {
                 $decision = $execute ? $coverage->stamp($site, $row) : $coverage->decide($site, $row);
                 $totals[$decision->verdict->value]++;
@@ -88,5 +93,45 @@ class AssessCoverageCommand extends Command
         ));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Every candidate's closest live post, strongest first, with the semantic and overlap scores and the text
+     * (title | angle) that produced them — floors ignored, nothing written.
+     *
+     * @param  Collection<int, Content>  $rows
+     */
+    private function nearest(CandidateCoverage $coverage, Site $site, Collection $rows): void
+    {
+        $semanticFloor = (float) config('launchpad.coverage.twin_semantic', 0.85);
+        $overlapFloor = (float) config('launchpad.coverage.twin_overlap', 0.6);
+        $this->line(sprintf('  Nearest live post per candidate (floors: semantic ≥ %.2f OR overlap ≥ %.2f; a line at or above either floor pairs):', $semanticFloor, $overlapFloor));
+        $lines = [];
+        foreach ($rows as $row) {
+            $near = $coverage->nearest($site, $row);
+            if ($near === null) {
+                $lines[] = ['score' => -1.0, 'text' => sprintf('    %-30s %s', '— no live posts to compare', $row->title)];
+
+                continue;
+            }
+            $passes = $near['semantic'] >= $semanticFloor || $near['overlap'] >= $overlapFloor;
+            $lines[] = [
+                'score' => max($near['semantic'], $near['overlap']),
+                'text' => sprintf(
+                    '    <fg=%s>sem %.2f · ovl %.2f · via %-5s</>  %s  ~  %s',
+                    $passes ? 'green' : 'gray',
+                    $near['semantic'],
+                    $near['overlap'],
+                    $near['text'],
+                    $row->title,
+                    $near['post'] !== null ? '“'.$near['post']->title.'”' : '(nothing close)',
+                ),
+            ];
+        }
+        usort($lines, fn (array $a, array $b): int => $b['score'] <=> $a['score']);
+        foreach ($lines as $line) {
+            $this->line($line['text']);
+        }
+        $this->newLine();
     }
 }
