@@ -52,7 +52,7 @@ final class DuplicatePostMetrics
     public const TITLE_THRESHOLD = 0.75;
 
     /** Weighted title Jaccard a cannibalising pair must still clear — a sanity bar, not a match. */
-    public const TITLE_WITH_QUERIES_THRESHOLD = 0.3;
+    public const TITLE_WITH_QUERIES_THRESHOLD = 0.25;
 
     /** Shared Search Console queries (both posts with impressions) a cannibalising pair needs. */
     public const SHARED_QUERIES_MIN = 2;
