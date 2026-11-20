@@ -34,3 +34,24 @@ it('reports the verdicts without writing, then stamps them with --execute', func
     Artisan::call('launchpad:assess-coverage', ['--site' => $site->id, '--all' => true]);
     expect(Artisan::output())->toContain('1 new post · 1 refresh existing');
 });
+
+it('--nearest lists every candidate\'s closest live post with both scores and the text that produced them, floors ignored', function () {
+    app()->instance(EmbeddingProvider::class, new MockEmbeddingProvider);
+    $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'title' => 'Sump Pump Maintenance Checklist for Homeowners', 'slug' => 'checklist', 'body' => '<p>b</p>']);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Candidate, 'title' => 'Sump Pump Maintenance Checklist for Homeowners This Fall', 'body' => null, 'meta' => []]);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Candidate, 'title' => 'Radon fan noise at night', 'body' => null, 'angle_hint' => 'Sump pump maintenance checklist for homeowners', 'meta' => []]);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Candidate, 'title' => 'Township approves new sewer bond', 'body' => null, 'meta' => []]);
+
+    Artisan::call('launchpad:assess-coverage', ['--site' => $site->id, '--nearest' => true]);
+    $out = Artisan::output();
+
+    expect($out)->toContain('Nearest live post per candidate (floors: semantic ≥ 0.85 OR overlap ≥ 0.60')
+        ->toContain('via title  Sump Pump Maintenance Checklist for Homeowners This Fall  ~  “Sump Pump Maintenance Checklist for Homeowners”')
+        ->toContain('via angle  Radon fan noise at night  ~  “Sump Pump Maintenance Checklist for Homeowners”')
+        ->toContain('sem 1.00 · ovl 1.00 · via angle')
+        ->toContain('nothing written');
+    // Strongest first: the exact-angle match (1.00) is listed before the title match, and the unrelated one last.
+    expect(strpos($out, 'Radon fan noise'))->toBeLessThan(strpos($out, 'This Fall  ~'))
+        ->and(strpos($out, 'Township approves'))->toBeGreaterThan(strpos($out, 'This Fall  ~'));
+});
