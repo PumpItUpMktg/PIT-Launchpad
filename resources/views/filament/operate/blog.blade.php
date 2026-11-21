@@ -115,13 +115,22 @@
 
         {{-- ─── Candidates ─── --}}
         @if ($tab === 'candidates')
-            @php $marks = $this->questionRefreshMarks; $refreshing = collect($marks)->contains(fn ($m) => $m['state'] === 'refreshing'); @endphp
+            @php
+                $marks = $this->questionRefreshMarks;
+                $refreshing = collect($marks)->contains(fn ($m) => $m['state'] === 'refreshing');
+                // Done = refreshed and still inside the cooldown; everything else (idle / failed / again / refreshing / in review) is open work.
+                $doneMarks = array_values(array_filter($marks, fn ($m) => $m['state'] === 'refreshed'));
+                $openMarks = array_values(array_filter($marks, fn ($m) => $m['state'] !== 'refreshed'));
+            @endphp
             @if ($marks !== [])
                 {{-- The questions lane's refresh suggestions: posts that already answer a question searchers ask but
                      rank below the top slots. Refresh, not a second post. Polls while one is in flight. --}}
-                <div class="ob-card" style="margin-bottom:12px" @if ($refreshing) wire:poll.visible.10s @endif>
-                    <div class="ob-chips"><span class="ob-chip kw">Refresh suggested</span><span class="ob-muted">{{ count($marks) }} {{ \Illuminate\Support\Str::plural('post', count($marks)) }} · from the Search Console questions lane · Refresh adds a direct answer at the top, a Q&A section with FAQ schema at the end, and a title proposal — into Review, nothing publishes until approved</span></div>
-                    @foreach ($marks as $m)
+                <div class="ob-card" style="margin-bottom:12px" x-data="{ showDone: false }" @if ($refreshing) wire:poll.visible.10s @endif>
+                    <div class="ob-chips"><span class="ob-chip kw">Refresh suggested</span><span class="ob-muted">{{ count($openMarks) }} open · {{ count($doneMarks) }} done · from the Search Console questions lane · Refresh adds a direct answer at the top, a Q&A section with FAQ schema at the end, and a title proposal — into Review, nothing publishes until approved. A refreshed post waits {{ (int) config('launchpad.questions.refresh_cooldown_days', 30) }} days before it can be refreshed again.</span></div>
+                    @if ($openMarks === [])
+                        <div class="ob-muted" style="padding:8px 0">Nothing open — every suggested post has been refreshed. The dates below say when each can go again.</div>
+                    @endif
+                    @foreach ($openMarks as $m)
                         <div style="display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:8px 0;border-top:1px solid rgba(148,163,184,.25)" wire:key="obq-{{ $m['id'] }}">
                             <strong>“{{ $m['query'] }}”</strong>
                             <span class="ob-muted">asked {{ number_format($m['impressions']) }}×@if ($m['position'] !== null) · pos {{ number_format($m['position'], 1) }}@endif</span>
@@ -133,17 +142,34 @@
                                 <span class="ob-chip kw">{{ str_replace('_', ' ', $m['status']) }} — see the Review tab</span>
                             @elseif ($m['state'] === 'refreshing')
                                 <span class="ob-chip" style="background:rgba(79,70,229,.12);color:#6366f1">✍ refreshing…</span>
-                            @elseif ($m['state'] === 'refreshed')
-                                <span class="ob-chip">refreshed {{ $m['refreshed_at'] }}</span>
                             @else
                                 @if ($m['state'] === 'failed')<span class="ob-chip danger" title="{{ $m['error'] }}">refresh failed</span>@endif
+                                @if ($m['state'] === 'again')<span class="ob-chip" style="background:rgba(22,163,74,.12);color:#15803d;font-weight:600" title="Refreshed {{ $m['refreshed_at'] }} — the cooldown is over, a second pass can go now">Refreshed {{ $m['refreshed_label'] }} · ready again</span>@endif
                                 <button class="ob-btn primary" wire:click="refreshForQuestion('{{ $m['id'] }}')" wire:loading.attr="disabled" wire:target="refreshForQuestion('{{ $m['id'] }}')">
-                                    <span wire:loading.remove wire:target="refreshForQuestion('{{ $m['id'] }}')">{{ $m['state'] === 'failed' ? 'Retry refresh' : 'Refresh' }}</span>
+                                    <span wire:loading.remove wire:target="refreshForQuestion('{{ $m['id'] }}')">{{ $m['state'] === 'failed' ? 'Retry refresh' : ($m['state'] === 'again' ? 'Refresh again' : 'Refresh') }}</span>
                                     <span wire:loading wire:target="refreshForQuestion('{{ $m['id'] }}')"><span class="ob-spinner"></span> Queuing…</span>
                                 </button>
                             @endif
                         </div>
                     @endforeach
+                    @if ($doneMarks !== [])
+                        {{-- Done: refreshed inside the cooldown. Folded under a count; each row leads with the two dates. --}}
+                        <div style="padding:8px 0;border-top:1px solid rgba(148,163,184,.25)">
+                            <button type="button" class="ob-btn" style="font-size:12px" @click="showDone = !showDone"><span x-text="showDone ? 'Hide' : 'Show'"></span> {{ count($doneMarks) }} refreshed</button>
+                        </div>
+                        <div x-show="showDone" x-cloak>
+                            @foreach ($doneMarks as $m)
+                                <div style="display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:8px 0;border-top:1px solid rgba(148,163,184,.25)" wire:key="obqd-{{ $m['id'] }}">
+                                    <span class="ob-chip" style="background:rgba(79,70,229,.12);color:#6366f1;font-weight:700" title="Refreshed {{ $m['refreshed_at'] }}">✓ Refreshed {{ $m['refreshed_label'] }}</span>
+                                    <span class="ob-chip" style="background:rgba(217,119,6,.12);color:#b45309;font-weight:700" title="A refreshed post waits out the cooldown so Google can read the change; the button comes back on this date">Refresh again from {{ $m['again_label'] }} · in {{ $m['again_in_days'] }} {{ \Illuminate\Support\Str::plural('day', $m['again_in_days']) }}</span>
+                                    <strong>“{{ $m['query'] }}”</strong>
+                                    <span class="ob-muted">asked {{ number_format($m['impressions']) }}×@if ($m['position'] !== null) · pos {{ number_format($m['position'], 1) }}@endif</span>
+                                    <span class="ob-muted">→ @if ($m['url'])<a href="{{ $m['url'] }}" target="_blank" rel="noopener" style="text-decoration:underline">{{ $m['title'] }} ↗</a>@else{{ $m['title'] }}@endif</span>
+                                    @if ($m['silo'])<span class="ob-chip">{{ $m['silo'] }}</span>@endif
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
                 </div>
             @endif
             @php $cov = $this->coverageCheckState; $covBusy = in_array($cov['state'], ['queued', 'running'], true); @endphp

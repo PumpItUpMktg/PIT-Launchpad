@@ -26,6 +26,7 @@ use App\Operator\ActiveTenant;
 use App\Publishing\DeleteFromWordpress;
 use App\Publishing\PostPublisher;
 use App\Publishing\RepushPublished;
+use Carbon\Carbon;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Url;
@@ -268,6 +269,19 @@ class OperateBlog extends OperatePage
             Notification::make()->title('Already refreshing.')->send();
 
             return;
+        }
+        // The cooldown: a refreshed post is left alone so Google can read the change before a second pass.
+        $refreshedAt = $post->meta['question_refresh']['refreshed_at'] ?? null;
+        if (is_string($refreshedAt)) {
+            $againAt = Carbon::parse($refreshedAt)->addDays(max(0, (int) config('launchpad.questions.refresh_cooldown_days', 30)));
+            if ($againAt->isFuture()) {
+                Notification::make()->warning()
+                    ->title('Refreshed on '.Carbon::parse($refreshedAt)->format('M j').' — refresh again from '.$againAt->format('M j'))
+                    ->body('A refreshed post waits out the cooldown so Google can read the change before a second pass.')
+                    ->send();
+
+                return;
+            }
         }
 
         RefreshPostForQuestion::enqueue($post, actorId: Auth::id());

@@ -618,7 +618,10 @@ vendor call, no credit.
 - **`launchpad:mine-questions {site|--all} [--execute] [--window=] [--top=] [--dropped]`**
   is report-first; the schedule runs `--all --execute` monthly (4th, 04:30). The
   Candidates board shows question candidates cap-exempt with an "Asked N× · pos" tag and
-  a "Refresh suggested" panel of marked posts.
+  a "Refresh suggested" panel of marked posts: open rows (idle / failed / refreshing / in review) first; a
+  refreshed row inside the cooldown is folded under "N refreshed" leading with "✓ Refreshed Nov 7" and
+  "Refresh again from Dec 7 · in N days"; past the cooldown it returns to the open list with a **Refresh
+  again** button (the action refuses a second pass inside the cooldown).
 
 ## Operator-Admin Cockpit (§7b — surfaces)
 
