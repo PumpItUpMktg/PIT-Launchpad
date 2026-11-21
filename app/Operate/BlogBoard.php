@@ -746,6 +746,12 @@ class BlogBoard
             ->filter(fn (Content $c): bool => is_array($c->meta['question_refresh'] ?? null))
             ->map(function (Content $c): array {
                 $m = (array) $c->meta['question_refresh'];
+                // A refreshed post waits out the cooldown (`questions.refresh_cooldown_days`) so Google can read the
+                // change; once it is over the row offers "Refresh again" without waiting for the next mining run.
+                $cooldown = max(0, (int) config('launchpad.questions.refresh_cooldown_days', 30));
+                $refreshedAt = isset($m['refreshed_at']) && is_string($m['refreshed_at']) ? Carbon::parse($m['refreshed_at']) : null;
+                $againAt = $refreshedAt?->copy()->addDays($cooldown);
+                $againOpen = $againAt !== null && ! $againAt->isFuture();
 
                 return [
                     'id' => (string) $c->id,
@@ -766,12 +772,17 @@ class BlogBoard
                         $c->status !== ContentStatus::Published => 'in_review',
                         ($c->meta['generating_at'] ?? null) !== null => 'refreshing',
                         $c->draftError() !== null => 'failed',
-                        isset($m['refreshed_at']) => 'refreshed',
+                        $refreshedAt !== null && $againOpen => 'again',
+                        $refreshedAt !== null => 'refreshed',
                         default => 'idle',
                     },
                     'status' => $c->status->value,
                     'error' => $c->draftError(),
-                    'refreshed_at' => isset($m['refreshed_at']) ? substr((string) $m['refreshed_at'], 0, 10) : null,
+                    'refreshed_at' => $refreshedAt?->toDateString(),
+                    'refreshed_label' => $refreshedAt?->format('M j'),
+                    'again_at' => $againAt?->toDateString(),
+                    'again_label' => $againAt?->format('M j'),
+                    'again_in_days' => $againAt !== null && ! $againOpen ? (int) ceil(now()->diffInHours($againAt, false) / 24) : 0,
                 ];
             })
             ->sortByDesc('impressions')

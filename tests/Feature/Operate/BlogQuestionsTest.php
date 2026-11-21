@@ -82,3 +82,36 @@ it('the "Questions lane" filter choice narrows Candidates to the lane\'s candida
         ->set('tab', 'review')
         ->assertSee('Refreshed cost post')->assertDontSee('Ordinary news draft');
 });
+
+it('folds refreshed posts under a count with the refresh date and the refresh-again date, offers Refresh again once the cooldown is over, and refuses a second pass inside it', function () {
+    Queue::fake();
+    config(['launchpad.questions.refresh_cooldown_days' => 30]);
+    $site = Site::factory()->create(['brand_name' => 'SPG', 'domain_url' => 'https://spg.example']);
+    $base = ['query' => 'sump pump installation cost', 'phrasings' => [], 'impressions' => 340, 'clicks' => 0, 'position' => 58.4, 'reason' => 'r', 'mined_at' => '2026-11-06T23:07:00+00:00', 'also' => []];
+    $recent = Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'recent', 'title' => 'Recently refreshed', 'body' => '<p>x</p>',
+        'meta' => ['question_refresh' => [...$base, 'refreshed_at' => now()->subDays(14)->toIso8601String()]]]);
+    $overdue = Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'overdue', 'title' => 'Refreshed long ago', 'body' => '<p>x</p>',
+        'meta' => ['question_refresh' => [...$base, 'query' => 'how long do sump pumps last', 'impressions' => 142, 'refreshed_at' => now()->subDays(45)->toIso8601String()]]]);
+    Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'open', 'title' => 'Never refreshed', 'body' => '<p>x</p>',
+        'meta' => ['question_refresh' => [...$base, 'query' => 'radon testing cost', 'impressions' => 81]]]);
+
+    $page = Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)
+        ->assertSee('2 open · 1 done')
+        ->assertSee('Show')->assertSee('1 refreshed')
+        ->assertSee('✓ Refreshed '.now()->subDays(14)->format('M j'))
+        ->assertSee('Refresh again from '.now()->addDays(16)->format('M j').' · in 16 days')
+        ->assertSee('Refreshed '.now()->subDays(45)->format('M j').' · ready again')
+        ->assertSee('Refresh again')
+        ->assertSeeHtml("refreshForQuestion('".$overdue->id."')")
+        ->assertDontSeeHtml("refreshForQuestion('".$recent->id."')");
+
+    // Inside the cooldown the action refuses and nothing is queued.
+    $page->call('refreshForQuestion', (string) $recent->id);
+    Queue::assertNotPushed(RefreshPostForQuestion::class);
+    expect($recent->fresh()->meta)->not->toHaveKey('generating_at');
+
+    // Past the cooldown a second pass queues.
+    $page->call('refreshForQuestion', (string) $overdue->id);
+    Queue::assertPushed(RefreshPostForQuestion::class, fn (RefreshPostForQuestion $j) => $j->contentId === (string) $overdue->id);
+    expect($overdue->fresh()->meta['generating_at'])->not->toBeNull();
+});
