@@ -50,7 +50,7 @@ it('says crawled since refresh when Google\'s last crawl is after the republish,
     expect($stale['state'])->toBe('unchecked')->and($stale['label'])->toBe('Not checked since refresh')->and($stale['detail'])->toContain('predates the refresh');
 
     // Nothing cached: the stored row counts (and the freshest of the two wins).
-    PageIndexState::create(['site_id' => $site->id, 'content_id' => $post->id, 'origin' => 'content', 'url' => 'https://spg.example/cost/', 'url_normalized' => 'spg.example/cost',
+    PageIndexState::create(['site_id' => $site->id, 'content_id' => $post->id, 'origin' => 'content', 'url' => 'https://spg.example/cost/', 'url_normalized' => 'https://spg.example/cost',
         'coverage_state' => 'Submitted and indexed', 'index_verdict' => 'PASS', 'last_crawled_at' => '2026-11-15 02:00:00', 'last_inspected_at' => '2026-11-20 05:00:00']);
     $fromRow = (new RefreshCrawlCheck(inspectorWith(null)))->for($site, $post, $now);
     expect($fromRow['state'])->toBe('crawled')->and($fromRow['last_crawled_at'])->toBe('2026-11-15')->and($fromRow['last_inspected_at'])->toBe('2026-11-20');
@@ -77,7 +77,7 @@ it('reinspect() asks Google again, writes the verdict and crawl time to the inde
 
     $row = PageIndexState::withoutGlobalScopes()->where('content_id', $post->id)->sole();
     expect($row->index_verdict)->toBe('PASS')->and($row->last_crawled_at->toIso8601String())->toBe('2026-11-14T06:00:00+00:00')
-        ->and($row->last_inspected_at->toIso8601String())->toBe('2026-11-21T08:00:00+00:00')->and($row->url_normalized)->toBe('spg.example/cost');
+        ->and($row->last_inspected_at->toIso8601String())->toBe('2026-11-21T08:00:00+00:00')->and($row->url_normalized)->toBe('https://spg.example/cost');
     expect($post->fresh()->meta['refresh_crawl']['checked_at'])->not->toBeNull();
     $after = $check->for($site, $post->fresh());
     expect($after['state'])->toBe('crawled')->and($after['checking'])->toBeFalse();   // the inspection landed after the request
