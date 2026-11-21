@@ -68,6 +68,7 @@
             <button class="ob-btn" wire:click="toggleTargets">
                 {{ $showTargets ? 'Hide' : 'Show' }} blog targets
             </button>
+            <a class="ob-btn" href="{{ \App\Filament\Pages\Operate\OperateShares::getUrl() }}" wire:navigate title="Social shares — the suggestion board, GBP offices, the planner and the schedule">Shares / GBP →</a>
         </div>
 
         <div wire:poll.5s>
@@ -413,6 +414,8 @@
                                 <x-lp.content-card :row="$a" wire:key="oba-{{ $a['id'] }}">
                                     <x-slot:actions>
                                         @if ($a['url'])<a class="ob-btn" href="{{ $a['url'] }}" target="_blank" rel="noopener">View live ↗</a>@endif
+                                        <button class="ob-btn" wire:click="shareOnBoard('{{ $a['id'] }}')" wire:loading.attr="disabled" wire:target="shareOnBoard('{{ $a['id'] }}')"
+                                            title="Put this post on the Shares board as your pick (Facebook / Instagram / GBP offices) and go there">Share →</button>
                                         <button class="ob-btn" wire:click="repushPost('{{ $a['id'] }}')"
                                             title="Re-publish this post to WordPress on the same URL (re-syncs the body + silo category)">Re-push</button>
                                         <button class="ob-btn danger" wire:click="takeDownPost('{{ $a['id'] }}')"
