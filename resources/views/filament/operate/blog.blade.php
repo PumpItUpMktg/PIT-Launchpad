@@ -152,13 +152,23 @@
                                 </button>
                             @endif
                             @if (! empty($m['progress']))
-                                @php $pg = $m['progress']; $qb = $pg['question']['before']; $qa = $pg['question']['after']; $pb = $pg['page']['before']; $pa = $pg['page']['after'];
-                                      $pos = fn ($v) => $v === null ? '—' : number_format($v, 1);
-                                      $arrow = fn ($b, $a, $lowerBetter = false) => ($b === null || $a === null || $b == $a) ? '→' : ((($a < $b) xor ! $lowerBetter) ? '<span style="color:#15803d">▲</span>' : '<span style="color:#b45309">▼</span>'); @endphp
-                                <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;padding-left:2px" title="Search Console, {{ $pg['window_days'] }} days before the refresh against the {{ $pg['window_days'] }} days since (equal windows). Observed, not attributed.">
-                                    <span><span class="ob-muted">question</span> pos <b>{{ $pos($qb['position']) }}</b> {!! $arrow($qb['position'], $qa['position'], true) !!} <b>{{ $pos($qa['position']) }}</b> · impr <b>{{ number_format($qb['impressions']) }}</b> {!! $arrow($qb['impressions'], $qa['impressions']) !!} <b>{{ number_format($qa['impressions']) }}</b> · clicks <b>{{ $qb['clicks'] }}</b> {!! $arrow($qb['clicks'], $qa['clicks']) !!} <b>{{ $qa['clicks'] }}</b></span>
-                                    <span><span class="ob-muted">page</span> pos <b>{{ $pos($pb['position']) }}</b> {!! $arrow($pb['position'], $pa['position'], true) !!} <b>{{ $pos($pa['position']) }}</b> · impr <b>{{ number_format($pb['impressions']) }}</b> {!! $arrow($pb['impressions'], $pa['impressions']) !!} <b>{{ number_format($pa['impressions']) }}</b> · clicks <b>{{ $pb['clicks'] }}</b> {!! $arrow($pb['clicks'], $pa['clicks']) !!} <b>{{ $pa['clicks'] }}</b></span>
+                                @php $pg = $m['progress']; $sm = $pg['summary']; $tone = $sm['worse'] > $sm['better'] ? '#b45309' : ($sm['better'] > 0 ? '#15803d' : '#64748b'); @endphp
+                                <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12px;padding:6px 0 2px 10px;border-left:3px solid {{ $tone }}" title="Search Console, {{ $pg['window_days'] }} days before the refresh against the {{ $pg['window_days'] }} days since (equal windows). Observed, not attributed.">
+                                    <span class="ob-chip" style="background:{{ $tone }};color:#fff;font-weight:700">{{ $sm['better'] }} better · {{ $sm['worse'] }} worse{{ $sm['flat'] + $sm['none'] > 0 ? ' · '.($sm['flat'] + $sm['none']).' flat' : '' }}</span>
                                     <span class="ob-muted">{{ $pg['window_days'] }}d before → {{ $pg['window_days'] }}d since{{ $pg['thin'] ? ' · early read' : '' }}</span>
+                                    @foreach (['question' => 'Question', 'page' => 'Page'] as $scope => $scopeLabel)
+                                        <span style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center">
+                                            <span class="ob-muted" style="min-width:62px">{{ $scopeLabel }}</span>
+                                            @foreach (array_filter($pg['metrics'], fn ($x) => $x['scope'] === $scope) as $x)
+                                                @php $c = match ($x['direction']) { 'better' => ['#dcfce7', '#15803d'], 'worse' => ['#fee2e2', '#b91c1c'], default => ['#f1f5f9', '#64748b'] }; @endphp
+                                                <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:14px;background:{{ $c[0] }};color:{{ $c[1] }}">
+                                                    <span style="color:#475569">{{ $x['label'] }}</span>
+                                                    <span>{{ $x['before'] === null ? '—' : ($x['key'] === 'position' ? number_format($x['before'], 1) : number_format($x['before'])) }} → <b>{{ $x['after'] === null ? '—' : ($x['key'] === 'position' ? number_format($x['after'], 1) : number_format($x['after'])) }}</b></span>
+                                                    <b>{{ $x['text'] }}</b>
+                                                </span>
+                                            @endforeach
+                                        </span>
+                                    @endforeach
                                 </div>
                             @endif
                         </div>
@@ -178,13 +188,23 @@
                                     <span class="ob-muted">→ @if ($m['url'])<a href="{{ $m['url'] }}" target="_blank" rel="noopener" style="text-decoration:underline">{{ $m['title'] }} ↗</a>@else{{ $m['title'] }}@endif</span>
                                     @if ($m['silo'])<span class="ob-chip">{{ $m['silo'] }}</span>@endif
                                     @if (! empty($m['progress']))
-                                        @php $pg = $m['progress']; $qb = $pg['question']['before']; $qa = $pg['question']['after']; $pb = $pg['page']['before']; $pa = $pg['page']['after'];
-                                              $pos = fn ($v) => $v === null ? '—' : number_format($v, 1);
-                                              $arrow = fn ($b, $a, $lowerBetter = false) => ($b === null || $a === null || $b == $a) ? '→' : ((($a < $b) xor ! $lowerBetter) ? '<span style="color:#15803d">▲</span>' : '<span style="color:#b45309">▼</span>'); @endphp
-                                        <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;padding-left:2px" title="Search Console, {{ $pg['window_days'] }} days before the refresh against the {{ $pg['window_days'] }} days since (equal windows). Observed, not attributed.">
-                                            <span><span class="ob-muted">question</span> pos <b>{{ $pos($qb['position']) }}</b> {!! $arrow($qb['position'], $qa['position'], true) !!} <b>{{ $pos($qa['position']) }}</b> · impr <b>{{ number_format($qb['impressions']) }}</b> {!! $arrow($qb['impressions'], $qa['impressions']) !!} <b>{{ number_format($qa['impressions']) }}</b> · clicks <b>{{ $qb['clicks'] }}</b> {!! $arrow($qb['clicks'], $qa['clicks']) !!} <b>{{ $qa['clicks'] }}</b></span>
-                                            <span><span class="ob-muted">page</span> pos <b>{{ $pos($pb['position']) }}</b> {!! $arrow($pb['position'], $pa['position'], true) !!} <b>{{ $pos($pa['position']) }}</b> · impr <b>{{ number_format($pb['impressions']) }}</b> {!! $arrow($pb['impressions'], $pa['impressions']) !!} <b>{{ number_format($pa['impressions']) }}</b> · clicks <b>{{ $pb['clicks'] }}</b> {!! $arrow($pb['clicks'], $pa['clicks']) !!} <b>{{ $pa['clicks'] }}</b></span>
+                                        @php $pg = $m['progress']; $sm = $pg['summary']; $tone = $sm['worse'] > $sm['better'] ? '#b45309' : ($sm['better'] > 0 ? '#15803d' : '#64748b'); @endphp
+                                        <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12px;padding:6px 0 2px 10px;border-left:3px solid {{ $tone }}" title="Search Console, {{ $pg['window_days'] }} days before the refresh against the {{ $pg['window_days'] }} days since (equal windows). Observed, not attributed.">
+                                            <span class="ob-chip" style="background:{{ $tone }};color:#fff;font-weight:700">{{ $sm['better'] }} better · {{ $sm['worse'] }} worse{{ $sm['flat'] + $sm['none'] > 0 ? ' · '.($sm['flat'] + $sm['none']).' flat' : '' }}</span>
                                             <span class="ob-muted">{{ $pg['window_days'] }}d before → {{ $pg['window_days'] }}d since{{ $pg['thin'] ? ' · early read' : '' }}</span>
+                                            @foreach (['question' => 'Question', 'page' => 'Page'] as $scope => $scopeLabel)
+                                                <span style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center">
+                                                    <span class="ob-muted" style="min-width:62px">{{ $scopeLabel }}</span>
+                                                    @foreach (array_filter($pg['metrics'], fn ($x) => $x['scope'] === $scope) as $x)
+                                                        @php $c = match ($x['direction']) { 'better' => ['#dcfce7', '#15803d'], 'worse' => ['#fee2e2', '#b91c1c'], default => ['#f1f5f9', '#64748b'] }; @endphp
+                                                        <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:14px;background:{{ $c[0] }};color:{{ $c[1] }}">
+                                                            <span style="color:#475569">{{ $x['label'] }}</span>
+                                                            <span>{{ $x['before'] === null ? '—' : ($x['key'] === 'position' ? number_format($x['before'], 1) : number_format($x['before'])) }} → <b>{{ $x['after'] === null ? '—' : ($x['key'] === 'position' ? number_format($x['after'], 1) : number_format($x['after'])) }}</b></span>
+                                                            <b>{{ $x['text'] }}</b>
+                                                        </span>
+                                                    @endforeach
+                                                </span>
+                                            @endforeach
                                         </div>
                                     @endif
                                 </div>

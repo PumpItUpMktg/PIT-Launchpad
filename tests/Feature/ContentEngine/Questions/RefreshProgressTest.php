@@ -45,6 +45,21 @@ it('reads the question and the page over equal windows either side of the refres
         ->and($p['question']['after'])->toBe(['impressions' => 190, 'clicks' => 3, 'position' => 41.3])
         ->and($p['page']['before'])->toBe(['impressions' => 400, 'clicks' => 4, 'position' => 26.3])
         ->and($p['page']['after'])->toBe(['impressions' => 600, 'clicks' => 8, 'position' => 25.0]);
+
+    $texts = collect($p['metrics'])->mapWithKeys(fn (array $m): array => [$m['scope'].'.'.$m['key'] => $m['text']])->all();
+    expect($texts)->toBe([
+        'question.position' => '▲ 16.7 better', 'question.impressions' => '▲ +90 (+90%)', 'question.clicks' => '▲ +3',
+        'page.position' => '▲ 1.3 better', 'page.impressions' => '▲ +200 (+50%)', 'page.clicks' => '▲ +4 (+100%)',
+    ])->and($p['summary'])->toBe(['better' => 6, 'worse' => 0, 'flat' => 0, 'none' => 0])
+        ->and(collect($p['metrics'])->firstWhere('key', 'impressions')['label'])->toBe('Asked');
+});
+
+it('describes each metric: a lower position is better, counts grow, flat and no-data are named, a loss reads worse', function () {
+    expect(RefreshProgress::metric('q', 'position', 'Position', 41.2, 58.4, lowerBetter: true))->toMatchArray(['direction' => 'worse', 'delta' => 17.2, 'text' => '▼ 17.2 worse'])
+        ->and(RefreshProgress::metric('q', 'impressions', 'Asked', 200, 140))->toMatchArray(['direction' => 'worse', 'delta' => -60.0, 'pct' => -30, 'text' => '▼ −60 (−30%)'])
+        ->and(RefreshProgress::metric('q', 'clicks', 'Clicks', 3, 3))->toMatchArray(['direction' => 'flat', 'text' => 'no change'])
+        ->and(RefreshProgress::metric('q', 'position', 'Position', null, 12.0, lowerBetter: true))->toMatchArray(['direction' => 'none', 'text' => 'no data'])
+        ->and(RefreshProgress::metric('q', 'clicks', 'Clicks', 0, 5))->toMatchArray(['direction' => 'better', 'pct' => null, 'text' => '▲ +5']);
 });
 
 it('caps the window at 28 days, flags a read under a week as early, and is null before a day has passed or without a mark', function () {
