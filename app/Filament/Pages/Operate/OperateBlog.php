@@ -9,6 +9,8 @@ use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
 use App\Enums\CoverageVerdict;
+use App\Enums\SocialSuggestionStatus;
+use App\Enums\SocialTrigger;
 use App\Filament\Resources\ContentReviewResource;
 use App\Jobs\GeneratePost;
 use App\Jobs\PopulateBlog;
@@ -20,12 +22,14 @@ use App\Models\BlogTarget;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
 use App\Models\Site;
+use App\Models\SocialSuggestion;
 use App\Operate\BlogBoard;
 use App\Operate\QueueHealth;
 use App\Operator\ActiveTenant;
 use App\Publishing\DeleteFromWordpress;
 use App\Publishing\PostPublisher;
 use App\Publishing\RepushPublished;
+use App\Social\SuggestionBoard;
 use Carbon\Carbon;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
@@ -289,6 +293,37 @@ class OperateBlog extends OperatePage
             ->title("Refreshing '{$post->title}'")
             ->body('A direct answer, a Q&A section and a title proposal are being written — it lands on the Review tab.')
             ->send();
+    }
+
+    /**
+     * Put a live post on the Shares board as the operator's own pick (a Manual suggestion — no cooldown) and go
+     * there. A post that already has an open suggestion is not doubled; the board is opened either way.
+     */
+    public function shareOnBoard(string $contentId): void
+    {
+        $post = $this->ownedPost($contentId);
+        if ($post === null) {
+            return;
+        }
+        if ($post->status !== ContentStatus::Published) {
+            Notification::make()->warning()->title('Only a live post can be shared.')->send();
+
+            return;
+        }
+        $open = SocialSuggestion::withoutGlobalScope(SiteScope::class)
+            ->where('content_id', $post->id)->where('status', SocialSuggestionStatus::Open->value)->exists();
+        if (! $open) {
+            $made = app(SuggestionBoard::class)->suggest($post->loadMissing('site'), SocialTrigger::Manual, 'Picked from the blog board');
+            if ($made === null) {
+                Notification::make()->warning()->title('Not added to the Shares board')
+                    ->body('The site has no social channels yet — connect a profile under Connections, then Sync now on Shares.')->send();
+
+                return;
+            }
+            Notification::make()->success()->title("'{$post->title}' is on the Shares board")->body('Tick the networks and GBP offices there, then Approve to send.')->send();
+        }
+
+        $this->redirect(OperateShares::getUrl(), navigate: true);
     }
 
     /** Dismiss at triage — recorded as a rejection so the pipeline never resurfaces it. */
