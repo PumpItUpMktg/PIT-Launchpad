@@ -71,7 +71,7 @@ it('reinspect() asks Google again, writes the verdict and crawl time to the inde
     ReinspectRefreshedPost::enqueue($post);
     Queue::assertPushed(ReinspectRefreshedPost::class, fn (ReinspectRefreshedPost $j) => $j->contentId === (string) $post->id);
     $check = new RefreshCrawlCheck($inspector);
-    expect($check->for($site, $post->fresh(), Carbon::parse('2026-11-21 08:30:00'))['checking'])->toBeTrue();
+    expect($check->for($site, $post->fresh())['checking'])->toBeTrue();   // requested just now, no inspection since
 
     (new ReinspectRefreshedPost($post->id))->handle($check);
 
@@ -79,8 +79,8 @@ it('reinspect() asks Google again, writes the verdict and crawl time to the inde
     expect($row->index_verdict)->toBe('PASS')->and($row->last_crawled_at->toIso8601String())->toBe('2026-11-14T06:00:00+00:00')
         ->and($row->last_inspected_at->toIso8601String())->toBe('2026-11-21T08:00:00+00:00')->and($row->url_normalized)->toBe('spg.example/cost');
     expect($post->fresh()->meta['refresh_crawl']['checked_at'])->not->toBeNull();
-    $after = $check->for($site, $post->fresh(), Carbon::parse('2026-11-21 09:00:00'));
-    expect($after['state'])->toBe('crawled')->and($after['checking'])->toBeFalse();
+    $after = $check->for($site, $post->fresh());
+    expect($after['state'])->toBe('crawled')->and($after['checking'])->toBeFalse();   // the inspection landed after the request
 
     // Not connected: nothing asked, nothing written.
     $offline = crawlPost($site, extra: ['slug' => 'offline']);

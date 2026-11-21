@@ -24,7 +24,10 @@ it('queues a re-inspection at the 3- and 10-day checkpoints after the republish,
     Artisan::call('launchpad:reinspect-refreshed', ['--site' => 'SPG']);
     $out = Artisan::output();
     expect($out)->toContain('Read-only')->toContain('day-3 check due')->toContain('day-10 check due')->toContain('Done day 3')->toContain('nothing due')
-        ->toContain('2 inspection(s) due — nothing queued')->not->toContain('Too fresh');
+        ->toContain('2 inspection(s) due — nothing queued')
+        ->toContain('Too fresh')              // inside the window, listed as nothing due
+        ->not->toContain('Long ago')          // past the window — not listed
+        ->not->toContain('Never refreshed');
     Queue::assertNothingPushed();
 
     Artisan::call('launchpad:reinspect-refreshed', ['--site' => $site->id, '--execute' => true]);
