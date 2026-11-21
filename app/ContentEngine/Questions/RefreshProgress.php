@@ -106,7 +106,7 @@ class RefreshProgress
             $improved = $lowerBetter ? $delta < 0 : $delta > 0;
             $direction = $improved ? 'better' : 'worse';
             $magnitude = $lowerBetter ? number_format(abs($delta), 1) : number_format(abs($delta));
-            $text = ($improved ? '▲ ' : '▼ ').($lowerBetter ? $magnitude.' '.($improved ? 'better' : 'worse') : ($delta > 0 ? '+' : '−').$magnitude.($pct !== null ? ' ('.($pct > 0 ? '+' : '').$pct.'%)' : ''));
+            $text = ($improved ? '▲ ' : '▼ ').($lowerBetter ? $magnitude.' '.($improved ? 'better' : 'worse') : ($delta > 0 ? '+' : '−').$magnitude.($pct !== null ? ' ('.($pct > 0 ? '+' : ($pct < 0 ? '−' : '')).abs($pct).'%)' : ''));
         }
 
         return ['scope' => $scope, 'key' => $key, 'label' => $label, 'before' => $before, 'after' => $after, 'delta' => $delta, 'pct' => $pct, 'direction' => $direction, 'text' => $text];
