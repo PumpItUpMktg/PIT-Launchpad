@@ -624,7 +624,10 @@ vendor call, no credit.
   again** button (the action refuses a second pass inside the cooldown). Every refreshed row carries
   **progress** (`RefreshProgress`): the question (impressions / clicks / impression-weighted position on this
   URL) and the page, over EQUAL windows — the days since the refresh (≤ 28) against the same days before —
-  from `gsc_url_query_daily` / `gsc_url_daily` by path; "early read" under a week; observed, never attributed.
+  from `gsc_url_query_daily` / `gsc_url_daily` by path; each metric as a signed delta with direction
+  (`RefreshProgress::metric`: position lower-is-better "▲ 17.2 better", counts "▲ +90 (+90%)", flat / no data
+  named) and a per-row summary "N better · M worse" that colours the row; "early read" under a week;
+  observed, never attributed.
 
 ## Operator-Admin Cockpit (§7b — surfaces)
 
