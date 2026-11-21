@@ -6,6 +6,7 @@ use App\Enums\DraftTrigger;
 use App\Enums\UserRole;
 use App\Filament\Pages\Operate\OperateBlog;
 use App\Jobs\RefreshPostForQuestion;
+use App\Jobs\ReinspectRefreshedPost;
 use App\Models\Content;
 use App\Models\GscUrlDaily;
 use App\Models\GscUrlQueryDaily;
@@ -113,6 +114,7 @@ it('folds refreshed posts under a count with the refresh date and the refresh-ag
         ->assertSeeHtml('400 → <b>600</b>')->assertSee('▲ +200 (+50%)')
         ->assertSee('Asked')
         ->assertSee('14d before → 14d since')
+        ->assertSee('Google: Not checked yet')->assertSee('Check Google now')
         ->assertSee('Show')->assertSee('1 refreshed')
         ->assertSee('✓ Refreshed '.now()->subDays(14)->format('M j'))
         ->assertSee('Refresh again from '.now()->addDays(16)->format('M j').' · in 16 days')
@@ -125,6 +127,11 @@ it('folds refreshed posts under a count with the refresh date and the refresh-ag
     $page->call('refreshForQuestion', (string) $recent->id);
     Queue::assertNotPushed(RefreshPostForQuestion::class);
     expect($recent->fresh()->meta)->not->toHaveKey('generating_at');
+
+    // "Check Google now" queues one re-inspection for the row and the chip reads checking….
+    $page->call('checkGoogle', (string) $recent->id);
+    Queue::assertPushed(ReinspectRefreshedPost::class, fn ($j) => $j->contentId === (string) $recent->id);
+    Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)->assertSee('Google: checking…');
 
     // Past the cooldown a second pass queues.
     $page->call('refreshForQuestion', (string) $overdue->id);

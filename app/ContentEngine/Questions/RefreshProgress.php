@@ -35,7 +35,8 @@ class RefreshProgress
             return null;
         }
         $now ??= Carbon::now();
-        $refreshedAt = Carbon::parse($mark['refreshed_at'])->startOfDay();
+        // "Since" is the republish when the push has stamped it (the day Google could first see the change), else the refresh.
+        $refreshedAt = (RefreshMarks::since($post) ?? Carbon::parse($mark['refreshed_at']))->startOfDay();
         $daysSince = (int) $refreshedAt->diffInDays($now->copy()->startOfDay(), false);
         if ($daysSince < 1) {
             return null;

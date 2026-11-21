@@ -48,7 +48,7 @@ class IndexCoverage
      *   connected: bool,
      *   total: int, inspected: int, indexed: int, not_inspected: int, discovered: int,
      *   by_state: array<string, int>,
-     *   findings: list<array{content_id: string, kind: string, title: string, url: string, state: string, label: string, indexed: bool, coverage_state: string, canonical_mismatch: bool, google_canonical: ?string, inspected_at: ?string, inspection_link: ?string}>,
+     *   findings: list<array{content_id: string, kind: string, title: string, url: string, state: string, label: string, indexed: bool, coverage_state: string, canonical_mismatch: bool, google_canonical: ?string, inspected_at: ?string, inspection_link: ?string, last_crawled_at: ?string}>,
      * }
      */
     public function audit(Site $site, bool $live = true, ?float $liveBudgetSeconds = null): array
@@ -167,7 +167,7 @@ class IndexCoverage
      * One finding row. A null status is the honest "not inspected" (quota reached / never fetched) — never
      * a fabricated verdict.
      *
-     * @return array{content_id: string, kind: string, title: string, url: string, state: string, label: string, indexed: bool, coverage_state: string, canonical_mismatch: bool, google_canonical: ?string, inspected_at: ?string, inspection_link: ?string}
+     * @return array{content_id: string, kind: string, title: string, url: string, state: string, label: string, indexed: bool, coverage_state: string, canonical_mismatch: bool, google_canonical: ?string, inspected_at: ?string, inspection_link: ?string, last_crawled_at: ?string}
      */
     private function finding(string $id, string $kind, string $title, string $url, ?IndexStatus $status): array
     {
@@ -178,7 +178,7 @@ class IndexCoverage
                 'content_id' => $id, 'kind' => $kind, 'title' => $title, 'url' => $url,
                 'state' => $state->value, 'label' => $state->label(),
                 'indexed' => false, 'coverage_state' => '', 'canonical_mismatch' => false, 'google_canonical' => null,
-                'inspected_at' => null, 'inspection_link' => null,
+                'inspected_at' => null, 'inspection_link' => null, 'last_crawled_at' => null,
             ];
         }
 
@@ -189,6 +189,7 @@ class IndexCoverage
             'canonical_mismatch' => $status->canonicalMismatch(), 'google_canonical' => $status->googleCanonical,
             'inspected_at' => $status->inspectedAt?->toIso8601String(),
             'inspection_link' => $status->resultLink,
+            'last_crawled_at' => $status->lastCrawledAt?->toIso8601String(),
         ];
     }
 

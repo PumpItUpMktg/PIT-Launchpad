@@ -3,6 +3,7 @@
 namespace App\Publishing;
 
 use App\ContentEngine\BlogQueue\BlogTargetQueue;
+use App\ContentEngine\Questions\RefreshMarks;
 use App\ContentEngine\Reconcile\PostTownTagger;
 use App\Enums\AuditAction;
 use App\Enums\ContentKind;
@@ -231,6 +232,12 @@ class PublishContentService
         // Social: a POST's first publish shares on its own (the approval that got it here is the approval);
         // a re-push carrying a question refresh goes to the re-share board as a suggestion for the operator.
         // Never for a page; never for a plain re-push.
+        // A refreshed post's refresh is now LIVE: stamp the moment on its mark(s) — the crawl check and the
+        // progress windows key off when Google could first see the change, not when the refresh hit review.
+        if ($content->kind === ContentKind::Post) {
+            RefreshMarks::stampRepublished($content);
+        }
+
         if ($content->kind === ContentKind::Post && (bool) config('launchpad.social.enabled', true)) {
             $refreshed = is_array($content->meta['question_refresh'] ?? null) && isset($content->meta['question_refresh']['refreshed_at']);
             if ($firstPublish) {

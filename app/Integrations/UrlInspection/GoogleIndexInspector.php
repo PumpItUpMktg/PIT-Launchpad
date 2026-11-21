@@ -59,6 +59,14 @@ final class GoogleIndexInspector implements IndexInspector
         return is_array($data) ? IndexStatus::fromArray($data) : null;
     }
 
+    /** Drop the cached verdict for one URL, so the next inspect() goes to Google (a refreshed post's re-check). */
+    public function forget(Site $site, string $url): void
+    {
+        if (is_string($site->gsc_property) && $site->gsc_property !== '') {
+            $this->cache->forget($this->key((string) $site->gsc_property, $url));
+        }
+    }
+
     public function inspect(Site $site, string $url): ?IndexStatus
     {
         if (! $this->connected($site)) {
