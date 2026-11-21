@@ -140,6 +140,9 @@ Schedule::command('launchpad:audit-index')->weeklyOn(1, '02:00')->withoutOverlap
 // spread a large site's inspection across days). withoutOverlapping so a slow
 // multi-tenant sweep can't stack.
 Schedule::command('sandhog:sync-index')->daily()->withoutOverlapping()->onOneServer();
+// Refreshed posts: ask Google again at 3 and 10 days after the republish (cache bypassed, a few calls) so the
+// Refresh suggested panel's "crawled since refresh" reads a real inspection, not a stale cached verdict.
+Schedule::command('launchpad:reinspect-refreshed --execute')->dailyAt('05:20')->withoutOverlapping()->onOneServer();
 
 // Operator GEO board — measure AI-search visibility (Claude web-search) for each site's active,
 // operator-curated prompts into the durable geo_snapshots time-series. Weekly + budget-bounded +

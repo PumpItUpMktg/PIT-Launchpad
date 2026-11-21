@@ -627,7 +627,15 @@ vendor call, no credit.
   from `gsc_url_query_daily` / `gsc_url_daily` by path; each metric as a signed delta with direction
   (`RefreshProgress::metric`: position lower-is-better "▲ 17.2 better", counts "▲ +90 (+90%)", flat / no data
   named) and a per-row summary "N better · M worse" that colours the row; "early read" under a week;
-  observed, never attributed.
+  observed, never attributed. **Since** = `RefreshMarks::since`: the `republished_at` the publish path stamps
+  on the mark when the refreshed content goes live (`RefreshMarks::stampRepublished` in
+  `PublishContentService`), else the refresh itself. **Crawled since refresh** (`RefreshCrawlCheck`): Google's
+  URL Inspection last-crawl time (the inspector cache + `page_index_states.last_crawled_at`, which the index
+  sync now writes) against `since` → crawled / not_crawled / unchecked (inspection predates the refresh) /
+  none, a "Google: …" chip with detail on hover; **Check Google now** → `ReinspectRefreshedPost` (one
+  inspection, `GoogleIndexInspector::forget` bypasses the cache, verdict + crawl time written back);
+  `launchpad:reinspect-refreshed --execute` daily 05:20 re-asks at `questions.crawl_checkpoints` (3, 10 days
+  after the republish).
 
 ## Operator-Admin Cockpit (§7b — surfaces)
 

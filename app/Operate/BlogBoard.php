@@ -4,6 +4,7 @@ namespace App\Operate;
 
 use App\ContentEngine\Coverage\CoverageDecision;
 use App\ContentEngine\Questions\QuestionIntake;
+use App\ContentEngine\Questions\RefreshCrawlCheck;
 use App\ContentEngine\Questions\RefreshProgress;
 use App\Enums\BlogTargetStatus;
 use App\Enums\CandidateClassification;
@@ -782,6 +783,8 @@ class BlogBoard
                     'refreshed_at' => $refreshedAt?->toDateString(),
                     // Progress since the refresh: the question and the page either side of it, equal windows (null until a day has passed).
                     'progress' => $refreshedAt !== null && $c->site !== null ? app(RefreshProgress::class)->for($c->site, $c) : null,
+                    // Has Google crawled the URL since the refreshed content went live (URL Inspection's last-crawl time)?
+                    'google' => $refreshedAt !== null && $c->site !== null ? app(RefreshCrawlCheck::class)->for($c->site, $c) : null,
                     'refreshed_label' => $refreshedAt?->format('M j'),
                     'again_at' => $againAt?->toDateString(),
                     'again_label' => $againAt?->format('M j'),

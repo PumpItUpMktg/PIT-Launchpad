@@ -5,6 +5,7 @@ namespace App\Filament\Pages\Operate;
 use App\ContentEngine\BlogQueue\BlogTargetQueue;
 use App\ContentEngine\Coverage\CoverageDecision;
 use App\ContentEngine\Feeds\BlogPopulator;
+use App\ContentEngine\Questions\RefreshMarks;
 use App\ContentEngine\Review\ReviewActions;
 use App\Enums\ContentKind;
 use App\Enums\ContentStatus;
@@ -18,6 +19,7 @@ use App\Jobs\PublishContent;
 use App\Jobs\RecheckCandidateCoverage;
 use App\Jobs\RefreshPostForNewsAngle;
 use App\Jobs\RefreshPostForQuestion;
+use App\Jobs\ReinspectRefreshedPost;
 use App\Models\BlogTarget;
 use App\Models\Content;
 use App\Models\Scopes\SiteScope;
@@ -373,6 +375,24 @@ class OperateBlog extends OperatePage
 
             return ['state' => 'failed', 'at' => null, 'result' => null, 'error' => 'coverage state unreadable: '.get_class($e).': '.$e->getMessage()];
         }
+    }
+
+    /** Ask Google again whether it has crawled a refreshed post's URL (URL Inspection, cache bypassed) — on the worker. */
+    public function checkGoogle(string $contentId): void
+    {
+        $post = $this->ownedPost($contentId);
+        if ($post === null || RefreshMarks::since($post) === null) {
+            Notification::make()->warning()->title('That post carries no refresh to check.')->send();
+
+            return;
+        }
+        if ($post->status !== ContentStatus::Published) {
+            Notification::make()->warning()->title('Only a live post can be checked — this one is in the pipeline.')->send();
+
+            return;
+        }
+        ReinspectRefreshedPost::enqueue($post);
+        Notification::make()->success()->title('Asking Google')->body('One URL Inspection call on the worker — the row updates when the answer lands.')->send();
     }
 
     /**

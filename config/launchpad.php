@@ -1018,6 +1018,9 @@ return [
         // A post refreshed within this many days keeps its "refreshed" record when the next run re-marks
         // it — no second Refresh until the first has had time to be read by Google.
         'refresh_cooldown_days' => (int) env('LAUNCHPAD_QUESTIONS_REFRESH_COOLDOWN_DAYS', 30),
+        // Days after a refresh republishes at which Google is asked again (URL Inspection, cache bypassed) whether
+        // it has crawled the URL — the Refresh suggested panel's "crawled since refresh" read.
+        'crawl_checkpoints' => [3, 10],
         'covered_max_position' => (float) env('LAUNCHPAD_QUESTIONS_COVERED_MAX_POSITION', 5),
         'refresh_max_position' => (float) env('LAUNCHPAD_QUESTIONS_REFRESH_MAX_POSITION', 30),
         // A live post counts as the question's twin (→ refresh it, not a second post) only on a strong

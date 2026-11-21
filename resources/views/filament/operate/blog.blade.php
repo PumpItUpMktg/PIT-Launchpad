@@ -151,6 +151,13 @@
                                     <span wire:loading wire:target="refreshForQuestion('{{ $m['id'] }}')"><span class="ob-spinner"></span> Queuing…</span>
                                 </button>
                             @endif
+                            @if (! empty($m['google']))
+                                @php $g = $m['google']; $gc = match ($g['state']) { 'crawled' => ['rgba(22,163,74,.12)', '#15803d'], 'not_crawled' => ['rgba(217,119,6,.12)', '#b45309'], default => ['#f1f5f9', '#64748b'] }; @endphp
+                                <span class="ob-chip" style="background:{{ $gc[0] }};color:{{ $gc[1] }};font-weight:600" title="{{ $g['detail'] }}">Google: {{ $g['checking'] ? 'checking…' : $g['label'] }}</span>
+                                @if (! $g['checking'])
+                                    <button type="button" class="ob-btn" style="font-size:11px;padding:2px 8px" wire:click="checkGoogle('{{ $m['id'] }}')" wire:loading.attr="disabled" wire:target="checkGoogle('{{ $m['id'] }}')" title="Ask Google again now (one URL Inspection call)">Check Google now</button>
+                                @endif
+                            @endif
                             @if (! empty($m['progress']))
                                 @php $pg = $m['progress']; $sm = $pg['summary']; $tone = $sm['worse'] > $sm['better'] ? '#b45309' : ($sm['better'] > 0 ? '#15803d' : '#64748b'); @endphp
                                 <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12px;padding:6px 0 2px 10px;border-left:3px solid {{ $tone }}" title="Search Console, {{ $pg['window_days'] }} days before the refresh against the {{ $pg['window_days'] }} days since (equal windows). Observed, not attributed.">
@@ -187,6 +194,13 @@
                                     <span class="ob-muted">asked {{ number_format($m['impressions']) }}×@if ($m['position'] !== null) · pos {{ number_format($m['position'], 1) }}@endif</span>
                                     <span class="ob-muted">→ @if ($m['url'])<a href="{{ $m['url'] }}" target="_blank" rel="noopener" style="text-decoration:underline">{{ $m['title'] }} ↗</a>@else{{ $m['title'] }}@endif</span>
                                     @if ($m['silo'])<span class="ob-chip">{{ $m['silo'] }}</span>@endif
+                                    @if (! empty($m['google']))
+                                        @php $g = $m['google']; $gc = match ($g['state']) { 'crawled' => ['rgba(22,163,74,.12)', '#15803d'], 'not_crawled' => ['rgba(217,119,6,.12)', '#b45309'], default => ['#f1f5f9', '#64748b'] }; @endphp
+                                        <span class="ob-chip" style="background:{{ $gc[0] }};color:{{ $gc[1] }};font-weight:600" title="{{ $g['detail'] }}">Google: {{ $g['checking'] ? 'checking…' : $g['label'] }}</span>
+                                        @if (! $g['checking'])
+                                            <button type="button" class="ob-btn" style="font-size:11px;padding:2px 8px" wire:click="checkGoogle('{{ $m['id'] }}')" wire:loading.attr="disabled" wire:target="checkGoogle('{{ $m['id'] }}')" title="Ask Google again now (one URL Inspection call)">Check Google now</button>
+                                        @endif
+                                    @endif
                                     @if (! empty($m['progress']))
                                         @php $pg = $m['progress']; $sm = $pg['summary']; $tone = $sm['worse'] > $sm['better'] ? '#b45309' : ($sm['better'] > 0 ? '#15803d' : '#64748b'); @endphp
                                         <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12px;padding:6px 0 2px 10px;border-left:3px solid {{ $tone }}" title="Search Console, {{ $pg['window_days'] }} days before the refresh against the {{ $pg['window_days'] }} days since (equal windows). Observed, not attributed.">
