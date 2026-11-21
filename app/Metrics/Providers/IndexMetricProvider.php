@@ -95,7 +95,7 @@ class IndexMetricProvider implements MetricProvider
                 'inspection_link' => $f['inspection_link'] ?? null,
                 // When Google actually answered — a verdict served from the inspector's cache keeps the
                 // time it was fetched, so the board's "as of" never claims today for a two-week-old answer.
-                'last_crawled_at' => isset($f['last_crawled_at']) && is_string($f['last_crawled_at']) ? Carbon::parse($f['last_crawled_at']) : null,
+                'last_crawled_at' => $f['last_crawled_at'] !== null ? Carbon::parse($f['last_crawled_at']) : null,
                 'last_inspected_at' => $f['inspected_at'] !== null ? Carbon::parse($f['inspected_at']) : $now,
                 'created_at' => $now,
                 'updated_at' => $now,

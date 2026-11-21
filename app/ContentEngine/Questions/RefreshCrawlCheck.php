@@ -77,8 +77,8 @@ class RefreshCrawlCheck
             'label' => $label,
             'detail' => $detail,
             'checking' => $checking,
-            'verdict' => $cached?->verdict ?? $row?->index_verdict,
-            'inspection_link' => $cached?->resultLink ?? $row?->inspection_link,
+            'verdict' => $cached->verdict ?? $row?->index_verdict,
+            'inspection_link' => $cached->resultLink ?? $row?->inspection_link,
         ];
     }
 
