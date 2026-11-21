@@ -68,6 +68,7 @@
             <button class="ob-btn" wire:click="toggleTargets">
                 {{ $showTargets ? 'Hide' : 'Show' }} blog targets
             </button>
+            <a class="ob-btn" href="{{ \App\Filament\Pages\Operate\OperateShares::getUrl() }}" wire:navigate title="Social shares — the suggestion board, GBP offices, the planner and the schedule">Shares / GBP →</a>
         </div>
 
         <div wire:poll.5s>
@@ -150,6 +151,16 @@
                                     <span wire:loading wire:target="refreshForQuestion('{{ $m['id'] }}')"><span class="ob-spinner"></span> Queuing…</span>
                                 </button>
                             @endif
+                            @if (! empty($m['progress']))
+                                @php $pg = $m['progress']; $qb = $pg['question']['before']; $qa = $pg['question']['after']; $pb = $pg['page']['before']; $pa = $pg['page']['after'];
+                                      $pos = fn ($v) => $v === null ? '—' : number_format($v, 1);
+                                      $arrow = fn ($b, $a, $lowerBetter = false) => ($b === null || $a === null || $b == $a) ? '→' : ((($a < $b) xor ! $lowerBetter) ? '<span style="color:#15803d">▲</span>' : '<span style="color:#b45309">▼</span>'); @endphp
+                                <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;padding-left:2px" title="Search Console, {{ $pg['window_days'] }} days before the refresh against the {{ $pg['window_days'] }} days since (equal windows). Observed, not attributed.">
+                                    <span><span class="ob-muted">question</span> pos <b>{{ $pos($qb['position']) }}</b> {!! $arrow($qb['position'], $qa['position'], true) !!} <b>{{ $pos($qa['position']) }}</b> · impr <b>{{ number_format($qb['impressions']) }}</b> {!! $arrow($qb['impressions'], $qa['impressions']) !!} <b>{{ number_format($qa['impressions']) }}</b> · clicks <b>{{ $qb['clicks'] }}</b> {!! $arrow($qb['clicks'], $qa['clicks']) !!} <b>{{ $qa['clicks'] }}</b></span>
+                                    <span><span class="ob-muted">page</span> pos <b>{{ $pos($pb['position']) }}</b> {!! $arrow($pb['position'], $pa['position'], true) !!} <b>{{ $pos($pa['position']) }}</b> · impr <b>{{ number_format($pb['impressions']) }}</b> {!! $arrow($pb['impressions'], $pa['impressions']) !!} <b>{{ number_format($pa['impressions']) }}</b> · clicks <b>{{ $pb['clicks'] }}</b> {!! $arrow($pb['clicks'], $pa['clicks']) !!} <b>{{ $pa['clicks'] }}</b></span>
+                                    <span class="ob-muted">{{ $pg['window_days'] }}d before → {{ $pg['window_days'] }}d since{{ $pg['thin'] ? ' · early read' : '' }}</span>
+                                </div>
+                            @endif
                         </div>
                     @endforeach
                     @if ($doneMarks !== [])
@@ -166,6 +177,16 @@
                                     <span class="ob-muted">asked {{ number_format($m['impressions']) }}×@if ($m['position'] !== null) · pos {{ number_format($m['position'], 1) }}@endif</span>
                                     <span class="ob-muted">→ @if ($m['url'])<a href="{{ $m['url'] }}" target="_blank" rel="noopener" style="text-decoration:underline">{{ $m['title'] }} ↗</a>@else{{ $m['title'] }}@endif</span>
                                     @if ($m['silo'])<span class="ob-chip">{{ $m['silo'] }}</span>@endif
+                                    @if (! empty($m['progress']))
+                                        @php $pg = $m['progress']; $qb = $pg['question']['before']; $qa = $pg['question']['after']; $pb = $pg['page']['before']; $pa = $pg['page']['after'];
+                                              $pos = fn ($v) => $v === null ? '—' : number_format($v, 1);
+                                              $arrow = fn ($b, $a, $lowerBetter = false) => ($b === null || $a === null || $b == $a) ? '→' : ((($a < $b) xor ! $lowerBetter) ? '<span style="color:#15803d">▲</span>' : '<span style="color:#b45309">▼</span>'); @endphp
+                                        <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;padding-left:2px" title="Search Console, {{ $pg['window_days'] }} days before the refresh against the {{ $pg['window_days'] }} days since (equal windows). Observed, not attributed.">
+                                            <span><span class="ob-muted">question</span> pos <b>{{ $pos($qb['position']) }}</b> {!! $arrow($qb['position'], $qa['position'], true) !!} <b>{{ $pos($qa['position']) }}</b> · impr <b>{{ number_format($qb['impressions']) }}</b> {!! $arrow($qb['impressions'], $qa['impressions']) !!} <b>{{ number_format($qa['impressions']) }}</b> · clicks <b>{{ $qb['clicks'] }}</b> {!! $arrow($qb['clicks'], $qa['clicks']) !!} <b>{{ $qa['clicks'] }}</b></span>
+                                            <span><span class="ob-muted">page</span> pos <b>{{ $pos($pb['position']) }}</b> {!! $arrow($pb['position'], $pa['position'], true) !!} <b>{{ $pos($pa['position']) }}</b> · impr <b>{{ number_format($pb['impressions']) }}</b> {!! $arrow($pb['impressions'], $pa['impressions']) !!} <b>{{ number_format($pa['impressions']) }}</b> · clicks <b>{{ $pb['clicks'] }}</b> {!! $arrow($pb['clicks'], $pa['clicks']) !!} <b>{{ $pa['clicks'] }}</b></span>
+                                            <span class="ob-muted">{{ $pg['window_days'] }}d before → {{ $pg['window_days'] }}d since{{ $pg['thin'] ? ' · early read' : '' }}</span>
+                                        </div>
+                                    @endif
                                 </div>
                             @endforeach
                         </div>
@@ -413,6 +434,8 @@
                                 <x-lp.content-card :row="$a" wire:key="oba-{{ $a['id'] }}">
                                     <x-slot:actions>
                                         @if ($a['url'])<a class="ob-btn" href="{{ $a['url'] }}" target="_blank" rel="noopener">View live ↗</a>@endif
+                                        <button class="ob-btn" wire:click="shareOnBoard('{{ $a['id'] }}')" wire:loading.attr="disabled" wire:target="shareOnBoard('{{ $a['id'] }}')"
+                                            title="Put this post on the Shares board as your pick (Facebook / Instagram / GBP offices) and go there">Share →</button>
                                         <button class="ob-btn" wire:click="repushPost('{{ $a['id'] }}')"
                                             title="Re-publish this post to WordPress on the same URL (re-syncs the body + silo category)">Re-push</button>
                                         <button class="ob-btn danger" wire:click="takeDownPost('{{ $a['id'] }}')"

@@ -7,6 +7,8 @@ use App\Enums\UserRole;
 use App\Filament\Pages\Operate\OperateBlog;
 use App\Jobs\RefreshPostForQuestion;
 use App\Models\Content;
+use App\Models\GscUrlDaily;
+use App\Models\GscUrlQueryDaily;
 use App\Models\Site;
 use App\Models\User;
 use Filament\Facades\Filament;
@@ -95,8 +97,20 @@ it('folds refreshed posts under a count with the refresh date and the refresh-ag
     Content::factory()->post()->create(['site_id' => $site->id, 'status' => ContentStatus::Published, 'slug' => 'open', 'title' => 'Never refreshed', 'body' => '<p>x</p>',
         'meta' => ['question_refresh' => [...$base, 'query' => 'radon testing cost', 'impressions' => 81]]]);
 
+    // Search Console either side of the recent refresh — shown on the done row as progress.
+    $url = 'https://spg.example/recent/';
+    GscUrlQueryDaily::create(['site_id' => $site->id, 'grain_hash' => hash('sha256', 'b'), 'date' => now()->subDays(20)->toDateString(), 'url' => $url, 'query' => 'sump pump installation cost', 'country' => 'usa', 'device' => 'DESKTOP', 'impressions' => 100, 'clicks' => 0, 'ctr' => 0, 'position' => 58.4]);
+    GscUrlQueryDaily::create(['site_id' => $site->id, 'grain_hash' => hash('sha256', 'a'), 'date' => now()->subDays(5)->toDateString(), 'url' => $url, 'query' => 'sump pump installation cost', 'country' => 'usa', 'device' => 'DESKTOP', 'impressions' => 190, 'clicks' => 3, 'ctr' => 0, 'position' => 41.2]);
+    GscUrlDaily::create(['site_id' => $site->id, 'grain_hash' => hash('sha256', 'pb'), 'date' => now()->subDays(20)->toDateString(), 'url' => $url, 'impressions' => 400, 'clicks' => 4, 'ctr' => 0, 'position' => 30.0]);
+    GscUrlDaily::create(['site_id' => $site->id, 'grain_hash' => hash('sha256', 'pa'), 'date' => now()->subDays(5)->toDateString(), 'url' => $url, 'impressions' => 600, 'clicks' => 8, 'ctr' => 0, 'position' => 25.0]);
+
     $page = Livewire::test(OperateBlog::class)->set('siteFilter', $site->id)
         ->assertSee('2 open · 1 done')
+        ->assertSeeHtml('pos <b>58.4</b>')->assertSeeHtml('<b>41.2</b>')
+        ->assertSeeHtml('impr <b>100</b>')->assertSeeHtml('<b>190</b>')
+        ->assertSeeHtml('clicks <b>0</b>')->assertSeeHtml('<b>3</b>')
+        ->assertSeeHtml('impr <b>400</b>')->assertSeeHtml('<b>600</b>')
+        ->assertSee('14d before → 14d since')
         ->assertSee('Show')->assertSee('1 refreshed')
         ->assertSee('✓ Refreshed '.now()->subDays(14)->format('M j'))
         ->assertSee('Refresh again from '.now()->addDays(16)->format('M j').' · in 16 days')

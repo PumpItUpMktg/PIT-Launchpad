@@ -621,7 +621,10 @@ vendor call, no credit.
   a "Refresh suggested" panel of marked posts: open rows (idle / failed / refreshing / in review) first; a
   refreshed row inside the cooldown is folded under "N refreshed" leading with "✓ Refreshed Nov 7" and
   "Refresh again from Dec 7 · in N days"; past the cooldown it returns to the open list with a **Refresh
-  again** button (the action refuses a second pass inside the cooldown).
+  again** button (the action refuses a second pass inside the cooldown). Every refreshed row carries
+  **progress** (`RefreshProgress`): the question (impressions / clicks / impression-weighted position on this
+  URL) and the page, over EQUAL windows — the days since the refresh (≤ 28) against the same days before —
+  from `gsc_url_query_daily` / `gsc_url_daily` by path; "early read" under a week; observed, never attributed.
 
 ## Operator-Admin Cockpit (§7b — surfaces)
 

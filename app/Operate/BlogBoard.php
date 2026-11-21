@@ -4,6 +4,7 @@ namespace App\Operate;
 
 use App\ContentEngine\Coverage\CoverageDecision;
 use App\ContentEngine\Questions\QuestionIntake;
+use App\ContentEngine\Questions\RefreshProgress;
 use App\Enums\BlogTargetStatus;
 use App\Enums\CandidateClassification;
 use App\Enums\ContentKind;
@@ -779,6 +780,8 @@ class BlogBoard
                     'status' => $c->status->value,
                     'error' => $c->draftError(),
                     'refreshed_at' => $refreshedAt?->toDateString(),
+                    // Progress since the refresh: the question and the page either side of it, equal windows (null until a day has passed).
+                    'progress' => $refreshedAt !== null && $c->site !== null ? app(RefreshProgress::class)->for($c->site, $c) : null,
                     'refreshed_label' => $refreshedAt?->format('M j'),
                     'again_at' => $againAt?->toDateString(),
                     'again_label' => $againAt?->format('M j'),
